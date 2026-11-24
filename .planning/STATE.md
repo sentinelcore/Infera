@@ -13,8 +13,14 @@
 - Tray app (`infera tray`), used by `infera service install` on desktops.
 - Android: llama.cpp engine (tested on Linux), Kotlin core (tested against the server), app + CI APK build.
 
+- Automatic tests on every push: e2e with a real model (Ollama qwen3:0.6b) on Linux and macOS; live-site check once INFERA_PUBLIC_URL is set.
+- Reasoning models: reasoning text now flows through sealing, receipts and the API (bug found by the real-model e2e test).
+- Test builds: every push refreshes the "Infera test build" pre-release (APK + desktop nodes).
+- Railway: `control-plane/railway.json` + `docs/DEPLOY_RAILWAY.md`; server honours `$PORT`.
+
 ## Next
-- Run `scripts/local-test.sh` on the owner's Mac mini.
+- Owner: one-time Railway setup (docs/DEPLOY_RAILWAY.md), then set INFERA_PUBLIC_URL variable in GitHub.
+- macOS checks run on GitHub's Mac runners instead of the owner's Mac mini (cloud sessions can't use the Mac yet).
 - Install the CI-built APK on an Android phone and test with a small GGUF model.
 - Stripe test keys → live checkout test.
 - Then: privacy (attested sandbox).
