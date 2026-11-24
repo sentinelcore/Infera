@@ -74,11 +74,13 @@ One library, compiled for Windows, macOS, Linux, Android (JNI via `uniffi`) and 
 - Restarts after reboot via `BOOT_COMPLETED`, which keeps it install-and-forget.
 - Distributed through Google Play, plus a direct APK for beta testers.
 - Workloads: 1–3B LLMs, embeddings and Whisper-small transcription.
+- Job notifications with Approve / Reject buttons, or auto-approve (see §3.1).
 
 ### 2.4 iOS app
 - iOS blocks sustained background compute, so the app uses **Charge Mode**: it works while the phone is plugged in, either with the app open (screen dimmed, like a nightstand mode) or via `BGProcessingTask` with `requiresExternalPower = true`, which iOS schedules overnight.
 - Install-and-forget on iOS means work happens overnight while charging. Expect lower supply per device than Android.
 - Distributed via TestFlight for beta, then the App Store.
+- Job notifications with Approve / Reject actions, or auto-approve (see §3.1). Approved jobs run in the next Charge Mode window.
 
 ### 2.5 Control plane (Go services, one repo, deployed per region)
 
@@ -90,6 +92,7 @@ One library, compiled for Windows, macOS, Linux, Android (JNI via `uniffi`) and 
 | `verifier` | Canary jobs with known outputs (greedy decoding, fixed seed), re-runs 2–5% of jobs on a second node, and updates reputation. |
 | `ledger` | Stores signed receipts and computes points, operator earnings and payouts. Postgres is the source of truth; batches are anchored on-chain in a later phase. |
 | `dashboard-api` | Backend for the contributor and customer dashboards. |
+| `push` | Sends job-offer notifications to phones through FCM (Android) and APNs (iOS) when the app is not in the foreground, and relays the owner's Approve / Reject answer back to the scheduler. |
 
 **Infra:** Fly.io or Hetzner and AWS in 3 regions (US-East, EU-West, AP-Southeast), Cloudflare (DNS, WAF, R2 for models and updates), Postgres (Neon or RDS), Redis (Upstash or ElastiCache), and Grafana/Prometheus with Sentry.
 
@@ -117,14 +120,58 @@ Also built in:
 - No setup questions after pairing, with defaults chosen from the benchmark.
 - Silent updates and automatic recovery from crashes. The supervisor restarts the engine, and five crashes in an hour disables the device's GPU path and reports it.
 
+## 3.1 Job approval on phones
+
+On phones the owner chooses how jobs are accepted. Each job offer shows what the job is, how long it will take on this phone, and how much it will earn.
+
+**Approval modes (set in the app, per device)**
+
+| Mode | Behaviour |
+|---|---|
+| Auto-approve (default) | Every job that passes the governor rules runs without asking. A summary notification is shown at most once a day. |
+| Auto-approve with limits | Runs automatically only when the job is within the owner's limits: max duration (e.g. 15 min), min earnings (e.g. $0.02), only while charging, only on Wi-Fi. Jobs outside the limits fall back to "Ask me". |
+| Ask me each time | Every job arrives as a notification with Approve / Reject buttons. |
+
+**Notification content**
+
+```
+DePINClaw · New job
+Transcription · 12 min of audio
+Takes about 6 min on this phone · Earns $0.04
+Expires in 10 min
+[ Approve ]   [ Reject ]
+```
+
+**How the numbers are calculated**
+- **Time:** the job's expected size (tokens or audio minutes, from the offer) divided by this phone's benchmark speed for that model, plus model load time if the model is not already loaded. Shown rounded up, as "about N min".
+- **Earnings:** the job price × owner share (e.g. 70%), shown in the owner's currency. It is the amount credited if the job completes and passes verification.
+- The final amount credited is based on actual tokens used and can differ slightly. The receipt screen shows both the estimate and the final figure.
+
+**Rules**
+- Only latency-tolerant jobs go to devices in "Ask me" mode: batch chat, embeddings and transcription. Real-time chat never waits on a human.
+- An offer expires after 10 minutes by default. No answer counts as a reject.
+- Rejecting or ignoring a job carries no penalty and does not affect reputation. The scheduler offers it to the next device.
+- An approved job still runs only when the governor allows it (charging, Wi-Fi, cool). On iPhone it runs in the next Charge Mode window.
+- When the app is open, the offer appears as an in-app card instead of a system notification.
+- Notification actions: Android `NotificationCompat` action buttons; iOS `UNNotificationCategory` with Approve and Reject actions.
+
+```
+scheduler ──job_offer──► push service ──FCM / APNs──► phone notification
+                                                         │
+                         ◄──── job_accept / job_decline ─┘   (or expires → next device)
+approved → job queued on device → runs when governor allows → tokens → receipt → earnings
+```
+
 ## 4. Node ↔ control-plane protocol (JSON over WSS, protobuf later)
 
 ```
 node → hub   hello        {node_id, pubkey, platform, hw, bench, models_cached, agent_version, attestation?}
 hub  → node  config       {models_to_fetch, caps, region}
 node → hub   state        {status: idle|busy|paused|offline_soon, loaded_model, temps, battery}   (every 15s)
-hub  → node  job_offer    {job_id, model, params, input, deadline_ms}
-node → hub   job_accept | job_decline {reason}
+node → hub   approval_mode {mode: auto|auto_limits|ask, limits:{max_minutes, min_earnings, charging_only, wifi_only}}
+hub  → node  job_offer    {job_id, job_type, model, params, input, est_size, price, owner_share, deadline_ms, expires_at}
+node         (computes est_minutes from benchmark and est_earnings = price × owner_share; shows notification in ask mode)
+node → hub   job_accept | job_decline {reason: user_rejected|expired|limits|governor}
 node → hub   tokens       {job_id, seq, delta}            (streamed)
 node → hub   job_done     {job_id, usage:{in,out}, latency, receipt_sig}
 hub  → node  job_cancel   {job_id}

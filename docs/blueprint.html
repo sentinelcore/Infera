@@ -196,6 +196,7 @@ html { scroll-behavior: smooth; }
   <a href="#architecture">Architecture</a>
   <a href="#device">Inside a device</a>
   <a href="#install-forget">Install and forget</a>
+  <a href="#approval">Job approval on phones</a>
   <a href="#request">Life of a request</a>
   <a href="#money">Money flow</a>
   <a href="#trust">Trust and privacy</a>
@@ -362,6 +363,7 @@ html { scroll-behavior: smooth; }
         <tr><td><b>Node hub</b></td><td>Holds the open connection to every device and tracks its state: idle, busy, paused, model loaded, speed.</td></tr>
         <tr><td><b>Verifier</b></td><td>Sends test prompts with known answers and re-runs a few percent of jobs on a second device to catch bad results.</td></tr>
         <tr><td><b>Ledger</b></td><td>Stores each job's signed receipt and turns it into points, earnings and payouts.</td></tr>
+        <tr><td><b>Push service</b></td><td>Sends job-offer notifications to phones (Firebase for Android, Apple Push for iPhone) and passes the owner's Approve or Reject back to the scheduler.</td></tr>
         <tr><td><b>Model CDN and update server</b></td><td>Serve signed model files and signed app updates, so devices only ever run what we published.</td></tr>
       </tbody>
     </table>
@@ -432,6 +434,7 @@ html { scroll-behavior: smooth; }
         <li>Stops when the phone gets warm</li>
         <li>Restarts by itself after a reboot</li>
         <li>Serves embeddings, transcription, small models</li>
+        <li>Job notifications: approve, reject or auto-approve</li>
       </ul>
     </div>
     <div class="card">
@@ -442,6 +445,7 @@ html { scroll-behavior: smooth; }
         <li>Works while plugged in, mostly overnight</li>
         <li>Or with the app open on a nightstand</li>
         <li>Lower output per phone than Android</li>
+        <li>Job notifications: approve, reject or auto-approve</li>
       </ul>
     </div>
   </div>
@@ -500,10 +504,130 @@ html { scroll-behavior: smooth; }
   </div>
 </section>
 
+<!-- 5. Job approval on phones -->
+<section id="approval">
+  <div class="head">
+    <span class="label">05 · Phones</span>
+    <h2>Job approval on phones</h2>
+    <p class="intro">Phone owners choose how jobs are accepted. Each offer shows what the job is, how long it will take on that phone, and how much it will earn. The owner taps Approve or Reject, or leaves the phone on auto-approve and never sees a prompt.</p>
+  </div>
+  <div class="figure">
+    <svg viewBox="0 0 900 430" role="img" aria-label="Phone notification showing a transcription job that takes about 6 minutes and earns 4 cents, with Approve and Reject buttons. Flow: approved jobs are queued and run when charging, then earnings are credited; rejected or expired jobs go to the next device with no penalty. Auto-approve skips the prompt.">
+      <defs>
+        <marker id="a5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head-acc"/></marker>
+        <marker id="r5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head-alert"/></marker>
+        <marker id="g5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head-mut"/></marker>
+        <marker id="m5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head-money"/></marker>
+      </defs>
+      <!-- phone -->
+      <rect x="40" y="10" width="260" height="410" rx="34" class="box-2"/>
+      <rect x="135" y="22" width="70" height="8" rx="4" class="box"/>
+      <text x="64" y="54" class="t-mono">9:41</text>
+      <text x="276" y="54" text-anchor="end" class="t-mono">⚡ 82%</text>
+      <!-- notification -->
+      <rect x="56" y="70" width="228" height="190" rx="14" class="box"/>
+      <text x="72" y="94" class="t-mono" font-size="11">DEPINCLAW · NOW</text>
+      <text x="72" y="118" class="t-title" font-size="14">New job: Transcription</text>
+      <text x="72" y="138" class="t-sub">12 min of audio</text>
+      <text x="72" y="164" class="t-mono" font-size="11">TIME</text>
+      <text x="72" y="186" class="t-title" font-size="16">~6 min</text>
+      <text x="176" y="164" class="t-mono" font-size="11">EARNS</text>
+      <text x="176" y="186" class="t-title t-money" font-size="16">$0.04</text>
+      <text x="72" y="210" class="t-sub" font-size="11.5">Expires in 10 min</text>
+      <rect x="68" y="222" width="98" height="28" rx="7" class="box-acc"/>
+      <text x="117" y="241" text-anchor="middle" class="t-acc" font-size="13">Approve</text>
+      <rect x="176" y="222" width="96" height="28" rx="7" class="box"/>
+      <text x="224" y="241" text-anchor="middle" class="t-sub" font-size="13">Reject</text>
+      <!-- settings -->
+      <text x="64" y="294" class="t-title" font-size="13">Approval mode</text>
+      <circle cx="74" cy="320" r="6" class="box"/><text x="88" y="324" class="t-sub">Auto-approve (default)</text>
+      <circle cx="74" cy="346" r="6" class="box"/><text x="88" y="350" class="t-sub">Auto-approve with limits</text>
+      <circle cx="74" cy="372" r="6" class="box-acc"/><circle cx="74" cy="372" r="3" class="dot"/><text x="88" y="376" class="t-sub">Ask me each time</text>
+      <text x="170" y="404" text-anchor="middle" class="t-mono" font-size="10.5">example values</text>
+
+      <!-- flow -->
+      <rect x="360" y="20" width="220" height="56" rx="10" class="box"/>
+      <text x="470" y="44" text-anchor="middle" class="t-title" font-size="14">Job offer arrives</text>
+      <text x="470" y="64" text-anchor="middle" class="t-sub" font-size="11.5">batch · embeddings · transcription</text>
+      <rect x="640" y="20" width="240" height="56" rx="10" class="box"/>
+      <text x="760" y="44" text-anchor="middle" class="t-title" font-size="14">Notification</text>
+      <text x="760" y="64" text-anchor="middle" class="t-sub" font-size="11.5">time + earnings shown</text>
+      <path d="M580,48 L638,48" class="ln" marker-end="url(#g5)"/>
+      <text x="609" y="40" text-anchor="middle" class="t-mono" font-size="10.5">ask me</text>
+
+      <rect x="360" y="140" width="220" height="56" rx="10" class="box-acc"/>
+      <text x="470" y="164" text-anchor="middle" class="t-title" font-size="14">Approved</text>
+      <text x="470" y="184" text-anchor="middle" class="t-sub" font-size="11.5">queued on the phone</text>
+      <path d="M470,76 L470,138" class="ln-acc" stroke-dasharray="6 4" marker-end="url(#a5)"/>
+      <text x="478" y="112" class="t-mono" font-size="11">auto-approve</text>
+      <path d="M655,76 L585,138" class="ln-acc" marker-end="url(#a5)"/>
+      <text x="628" y="122" class="t-mono" font-size="11">tap Approve</text>
+
+      <rect x="360" y="240" width="220" height="56" rx="10" class="box"/>
+      <text x="470" y="264" text-anchor="middle" class="t-title" font-size="14">Runs when allowed</text>
+      <text x="470" y="284" text-anchor="middle" class="t-sub" font-size="11.5">charging · Wi-Fi · cool</text>
+      <path d="M470,196 L470,238" class="ln-acc" marker-end="url(#a5)"/>
+
+      <rect x="360" y="340" width="220" height="56" rx="10" class="box-money"/>
+      <text x="470" y="364" text-anchor="middle" class="t-title" font-size="14">Earnings credited</text>
+      <text x="470" y="384" text-anchor="middle" class="t-sub" font-size="11.5">after verification</text>
+      <path d="M470,296 L470,338" class="ln-money" marker-end="url(#m5)"/>
+
+      <rect x="640" y="140" width="240" height="70" rx="10" class="box-alert"/>
+      <text x="760" y="166" text-anchor="middle" class="t-title" font-size="14">Rejected or expired</text>
+      <text x="760" y="188" text-anchor="middle" class="t-sub" font-size="11.5">no answer in 10 min = reject</text>
+      <path d="M760,76 L760,138" class="ln-alert" marker-end="url(#r5)"/>
+      <text x="768" y="112" class="t-mono" font-size="11">tap Reject</text>
+
+      <rect x="640" y="260" width="240" height="64" rx="10" class="box-2"/>
+      <text x="760" y="286" text-anchor="middle" class="t-title" font-size="14">Offered to next device</text>
+      <text x="760" y="308" text-anchor="middle" class="t-sub" font-size="11.5">no penalty, reputation unchanged</text>
+      <path d="M760,210 L760,258" class="ln" marker-end="url(#g5)"/>
+    </svg>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Approval mode</th><th>What happens</th></tr></thead>
+      <tbody>
+        <tr><td><b>Auto-approve</b> (default)</td><td>Every job that meets the idle rules runs without asking. One summary notification a day at most.</td></tr>
+        <tr><td><b>Auto-approve with limits</b></td><td>Runs automatically only inside the owner's limits: max duration, min earnings, only while charging, only on Wi-Fi. Anything outside the limits asks first.</td></tr>
+        <tr><td><b>Ask me each time</b></td><td>Every job arrives as a notification with Approve and Reject buttons.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="grid-3">
+    <div class="card"><span class="tag">TIME ESTIMATE</span><h3>How long it takes</h3>
+      <ul>
+        <li>Job size (tokens or audio minutes) ÷ this phone's benchmark speed</li>
+        <li>Plus model load time if the model isn't loaded yet</li>
+        <li>Shown rounded up: "about 6 min"</li>
+      </ul>
+    </div>
+    <div class="card"><span class="tag">EARNINGS ESTIMATE</span><h3>How much it pays</h3>
+      <ul>
+        <li>Job price × owner share (e.g. 70%)</li>
+        <li>Shown in the owner's currency</li>
+        <li>Final credit uses actual tokens; the receipt shows estimate and final side by side</li>
+      </ul>
+    </div>
+    <div class="card"><span class="tag">RULES</span><h3>Fair to owners and customers</h3>
+      <ul>
+        <li>Only batch, embeddings and transcription jobs wait for a tap; real-time chat never does</li>
+        <li>Rejecting carries no penalty</li>
+        <li>Approved jobs still run only when charging, on Wi-Fi and cool</li>
+        <li>With the app open, the offer shows as an in-app card</li>
+      </ul>
+    </div>
+  </div>
+  <p class="note">Notifications reach the phone through Firebase Cloud Messaging (Android) and Apple Push Notification service (iPhone), sent by a new push service in the control plane. On iPhone, approved jobs run in the next Charge Mode window.</p>
+</section>
+
 <!-- 5. Request lifecycle -->
 <section id="request">
   <div class="head">
-    <span class="label">05 · Runtime</span>
+    <span class="label">06 · Runtime</span>
     <h2>Life of a request</h2>
     <p class="intro">One customer request, start to finish. If the device drops part-way, the scheduler re-sends the job to another device or to rented GPUs, and the customer just sees the answer.</p>
   </div>
@@ -555,7 +679,7 @@ html { scroll-behavior: smooth; }
 <!-- 6. Money -->
 <section id="money">
   <div class="head">
-    <span class="label">06 · Payments</span>
+    <span class="label">07 · Payments</span>
     <h2>Money flow</h2>
     <p class="intro">Customers pay for what they use. Each completed job's revenue is split between the device owner and the protocol, and owners are paid weekly once they pass a minimum balance.</p>
   </div>
@@ -590,7 +714,7 @@ html { scroll-behavior: smooth; }
 <!-- 7. Trust -->
 <section id="trust">
   <div class="head">
-    <span class="label">07 · Safety</span>
+    <span class="label">08 · Safety</span>
     <h2>Trust and privacy</h2>
   </div>
   <div class="grid-3">
@@ -629,7 +753,7 @@ html { scroll-behavior: smooth; }
 <!-- 8. Models -->
 <section id="models">
   <div class="head">
-    <span class="label">08 · Workloads</span>
+    <span class="label">09 · Workloads</span>
     <h2>Models and job types</h2>
     <p class="intro">Each device keeps one or two models ready, chosen by its benchmark. Slow or unreliable devices still earn by serving batch, embedding and transcription jobs that don't need an instant answer.</p>
   </div>
@@ -659,7 +783,7 @@ html { scroll-behavior: smooth; }
 <!-- 9. Roadmap -->
 <section id="roadmap">
   <div class="head">
-    <span class="label">09 · Execution</span>
+    <span class="label">10 · Execution</span>
     <h2>Roadmap: build and revenue side by side</h2>
     <p class="intro">Green bars are what gets built. Amber bars are the revenue sources added in the same window. Revenue starts in week 2 on rented capacity and moves onto community devices as they come online.</p>
   </div>
@@ -744,7 +868,7 @@ html { scroll-behavior: smooth; }
 <!-- 10. Beta -->
 <section id="beta">
   <div class="head">
-    <span class="label">10 · Go to market</span>
+    <span class="label">11 · Go to market</span>
     <h2>Beta on X</h2>
     <p class="intro">Contributors and developers join through a waitlist linked from X. Each wave opens only when the previous one hits its quality targets. Bars are drawn to scale against the 2,000-person wave.</p>
   </div>
@@ -801,7 +925,7 @@ html { scroll-behavior: smooth; }
 <!-- 11. Week 1 -->
 <section id="week1">
   <div class="head">
-    <span class="label">11 · Start here</span>
+    <span class="label">12 · Start here</span>
     <h2>Week-1 checklist</h2>
     <p class="intro">Ticks are saved in your browser only.</p>
   </div>
