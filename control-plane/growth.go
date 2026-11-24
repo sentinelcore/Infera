@@ -106,8 +106,15 @@ func (a *API) JoinWaitlist(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	code := strings.ToUpper(randomHex(3))
+	// Join times are strictly increasing so two sign-ups in the same millisecond keep their order.
+	ts := time.Now().UnixMilli()
+	var last int64
+	a.st.queryRow(`SELECT CAST(COALESCE(MAX(created_at),0) AS BIGINT) FROM waitlist`).Scan(&last)
+	if ts <= last {
+		ts = last + 1
+	}
 	if _, err := a.st.exec(`INSERT INTO waitlist(code,email,x_handle,kind,device,referred_by,created_at) VALUES(?,?,?,?,?,?,?)`,
-		code, in.Email, in.XHandle, in.Kind, in.Device, ref, time.Now().UnixMilli()); err != nil {
+		code, in.Email, in.XHandle, in.Kind, in.Device, ref, ts); err != nil {
 		apiError(w, 500, "could not join the waitlist")
 		return
 	}
