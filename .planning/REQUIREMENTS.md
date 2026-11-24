@@ -21,6 +21,8 @@ Status: ✅ done · 🔨 in progress · ⬜ not started
 | CP-04 | Rented-capacity fallback | ✅ |
 | CP-05 | Ledger with holds, multipliers, debits, suspensions | ✅ |
 | CP-06 | Test prompts (canaries) that catch wrong answers | ✅ |
+| CP-10 | Embeddings API `/v1/embeddings` on devices | ✅ |
+| CP-11 | Re-run 3% of repeatable jobs (temperature 0, embeddings) on a second device; third device breaks ties | ✅ |
 | CP-07 | Penalty decay: half after 30 days, dropped after 90 | ✅ |
 | CP-08 | Stripe prepaid credits for developers | ✅ code done; needs Stripe test keys to verify live |
 | CP-09 | Postgres + multi-region | ✅ Postgres (Railway, private network); multi-region ⬜ |

@@ -57,6 +57,7 @@ func main() {
 		log.Fatal(err)
 	}
 	gw := &Gateway{st: st, hub: hub, dep: dep, cfg: cfg, canary: canaryAcct}
+	gw.rerun = &Rerun{gw: gw, rate: envFloat("INFERA_RERUN_RATE", 0.03)}
 	go NewCanary(gw, time.Duration(envFloat("INFERA_CANARY_MINUTES", 30)*float64(time.Minute))).Loop()
 	go dep.DecayLoop()
 	api := &API{st: st, hub: hub, cfg: cfg, inviteCode: os.Getenv("INFERA_INVITE_CODE"), adminToken: os.Getenv("INFERA_ADMIN_TOKEN"),

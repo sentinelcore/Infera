@@ -51,7 +51,8 @@ type Gateway struct {
 	hub    *Hub
 	dep    *Dependability
 	cfg    *Config
-	canary *Account // internal account that pays for test prompts
+	canary *Account // internal account that pays for test prompts and re-runs
+	rerun  *Rerun
 }
 
 type chatRequest struct {
@@ -63,6 +64,8 @@ type chatRequest struct {
 	InferaBatch bool              `json:"infera_batch"`
 	expect      string            // canary: answer the output must contain
 	jobType     string            // "" (chat) or "embeddings"
+	Temperature *float64          `json:"temperature"`
+	rerun       bool              // this job is a verification re-run
 }
 
 func apiError(w http.ResponseWriter, code int, msg string) {
@@ -291,6 +294,9 @@ wait:
 				g.dep.Reward(dev, jobID, time.Since(started))
 				if req.expect != "" {
 					g.judgeCanary(dev, jobID, output, req.expect, pay)
+				}
+				if g.rerun != nil && req.expect == "" && !req.rerun {
+					g.rerun.Maybe(dev, req, raw, output, pay)
 				}
 				g.hub.sendConfig(n)
 				sw.finish(tin, tout)

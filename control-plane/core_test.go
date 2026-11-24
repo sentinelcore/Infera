@@ -207,3 +207,35 @@ func mustStore(t *testing.T) *Store {
 	}
 	return st
 }
+
+func TestRerunComparison(t *testing.T) {
+	if !outputsAgree("", "The capital of France is Paris.", "The capital of France is Paris!") {
+		t.Fatal("same answer should agree")
+	}
+	if outputsAgree("", "The capital of France is Paris.", "Bananas are yellow and grow on trees.") {
+		t.Fatal("different answers should not agree")
+	}
+	a := `{"data":[{"embedding":[1,0,0]},{"embedding":[0,1,0]}]}`
+	b := `{"data":[{"embedding":[0.99,0.01,0]},{"embedding":[0,1,0.02]}]}`
+	c := `{"data":[{"embedding":[0,0,1]},{"embedding":[1,0,0]}]}`
+	if !outputsAgree("embeddings", a, b) || outputsAgree("embeddings", a, c) {
+		t.Fatal("embedding comparison wrong")
+	}
+}
+
+func TestRerunPenalty(t *testing.T) {
+	st := mustStore(t)
+	acct, _, _ := st.CreateAccount("o@x.dev", "owner", 0)
+	code, _ := st.CreatePairCode(acct.ID)
+	id, _, _ := st.ConsumePairCode(code, "box", "pk", "linux")
+	g := &Gateway{st: st, hub: NewHub(st), dep: &Dependability{st: st}}
+	r := &Rerun{gw: g}
+	r.mismatch(id, "disagreed", 0)
+	if d, _ := st.Device(id); d.Dependability != 70 {
+		t.Fatal("one mismatch should not penalize")
+	}
+	r.mismatch(id, "disagreed", 0)
+	if d, _ := st.Device(id); d.Dependability != 55 {
+		t.Fatalf("two mismatches in five should penalize: %v", d.Dependability)
+	}
+}

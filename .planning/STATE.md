@@ -23,7 +23,7 @@
 - **Database:** Railway Postgres service `postgres` (volume), server uses it via `INFERA_DATABASE_URL` over Railway's private network. SQLite still used for local tests. The few test accounts made on the earlier SQLite deploy were not migrated.
 
 ## Next
-- Embeddings API → re-runs of customer jobs → landing page and X beta tools.
+- Landing page and X beta tools (waitlist, referral codes, leaderboard). Embeddings and re-runs done.
 - macOS checks run on GitHub's Mac runners instead of the owner's Mac mini (cloud sessions can't use the Mac yet).
 - Install the CI-built APK on an Android phone and test with a small GGUF model.
 - Stripe test keys → live checkout test.
