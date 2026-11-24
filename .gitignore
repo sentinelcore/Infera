@@ -3,3 +3,4 @@ agent/target/
 *.db-wal
 *.db-shm
 .env
+/.local-test/

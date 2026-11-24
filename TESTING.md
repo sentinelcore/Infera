@@ -10,6 +10,18 @@ This beta covers **laptops and desktops** (Windows, macOS, Linux). Phones come i
 | Node | `agent/` (Rust, one binary `infera`) | Pairing, benchmark and class, idle rules, engine adapter, sealed-job decryption, streaming, signed receipts, offer cards, safe stop, local page at `http://127.0.0.1:7777` |
 | Stand-in engine | `tools/mock_engine.py` | Fake model for testing without downloading one |
 
+## 0. Test everything on one computer first (macOS or Linux)
+
+Needs Go 1.24+, Rust and Python 3. From the repository root:
+
+```sh
+./scripts/local-test.sh          # uses Ollama if it's running, otherwise a stand-in engine
+./scripts/local-test.sh --mock   # always use the stand-in engine
+./scripts/local-test.sh --stop   # stop everything
+```
+
+It builds the server and node, starts them on localhost, creates a contributor and a developer account, pairs the computer, sends a test request, and prints the dashboard link and keys.
+
 ## 1. Deploy the control plane (operator, ~15 minutes)
 
 You need a small VPS (1 vCPU, 1 GB RAM is enough for the beta) with Docker, and a domain.
