@@ -270,3 +270,36 @@ func TestWaitlistReferrals(t *testing.T) {
 		t.Fatalf("invite batch should be b: %s", w.Body.String())
 	}
 }
+
+func TestRateLimit(t *testing.T) {
+	l := NewLimiter(60, 2) // burst = 15
+	ok := 0
+	var releases []func()
+	for i := 0; i < 20; i++ {
+		w := httptest.NewRecorder()
+		if rel := l.Acquire(w, "k"); rel != nil {
+			ok++
+			releases = append(releases, rel)
+			if len(releases) == 2 { // stay under the in-flight cap
+				for _, r := range releases {
+					r()
+				}
+				releases = nil
+			}
+		} else if w.Code != 429 || w.Header().Get("Retry-After") == "" {
+			t.Fatal("expected 429 with Retry-After")
+		}
+	}
+	if ok != 15 {
+		t.Fatalf("burst should allow 15, got %d", ok)
+	}
+	l2 := NewLimiter(1000, 1)
+	r1 := l2.Acquire(httptest.NewRecorder(), "k")
+	if l2.Acquire(httptest.NewRecorder(), "k") != nil {
+		t.Fatal("second concurrent request should be refused")
+	}
+	r1()
+	if l2.Acquire(httptest.NewRecorder(), "k") == nil {
+		t.Fatal("after release a request should pass")
+	}
+}

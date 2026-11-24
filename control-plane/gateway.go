@@ -53,6 +53,7 @@ type Gateway struct {
 	cfg    *Config
 	canary *Account // internal account that pays for test prompts and re-runs
 	rerun  *Rerun
+	limit  *Limiter
 }
 
 type chatRequest struct {
@@ -98,6 +99,11 @@ func (g *Gateway) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 401, "missing or invalid API key; create one on the Developers tab of the dashboard")
 		return
 	}
+	release := g.limit.Acquire(w, acct.ID)
+	if release == nil {
+		return
+	}
+	defer release()
 	raw, err := io.ReadAll(io.LimitReader(r.Body, 8<<20))
 	if err != nil {
 		apiError(w, 400, "could not read request body")
@@ -564,6 +570,11 @@ func (g *Gateway) Embeddings(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 401, "missing or invalid API key; create one on the Developers tab of the dashboard")
 		return
 	}
+	release := g.limit.Acquire(w, acct.ID)
+	if release == nil {
+		return
+	}
+	defer release()
 	raw, err := io.ReadAll(io.LimitReader(r.Body, 8<<20))
 	if err != nil {
 		apiError(w, 400, "could not read request body")

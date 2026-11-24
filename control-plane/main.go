@@ -57,6 +57,7 @@ func main() {
 		log.Fatal(err)
 	}
 	gw := &Gateway{st: st, hub: hub, dep: dep, cfg: cfg, canary: canaryAcct}
+	gw.limit = NewLimiter(envFloat("INFERA_RATE_RPM", 120), int(envFloat("INFERA_MAX_IN_FLIGHT", 8)))
 	gw.rerun = &Rerun{gw: gw, rate: envFloat("INFERA_RERUN_RATE", 0.03)}
 	go NewCanary(gw, time.Duration(envFloat("INFERA_CANARY_MINUTES", 30)*float64(time.Minute))).Loop()
 	go dep.DecayLoop()
