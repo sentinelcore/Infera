@@ -87,6 +87,9 @@ func main() {
 	mux.Handle("GET /", http.FileServer(http.FS(sub)))
 
 	addr := env("INFERA_ADDR", ":8080")
+	if os.Getenv("INFERA_ADDR") == "" && os.Getenv("PORT") != "" { // Railway, Render, Fly set PORT
+		addr = ":" + os.Getenv("PORT")
+	}
 	log.Printf("Infera control plane on %s (owner share %.0f%%, fallback %v)", addr, cfg.OwnerShare*100, cfg.FallbackURL != "")
 	srv := &http.Server{Addr: addr, Handler: logRequests(mux), ReadHeaderTimeout: 15 * time.Second}
 	log.Fatal(srv.ListenAndServe())
