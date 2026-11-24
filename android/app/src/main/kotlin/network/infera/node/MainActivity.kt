@@ -44,9 +44,41 @@ class MainActivity : Activity() {
         setContentView(ScrollView(this).apply { addView(root) })
         NodeService.listeners.add(listener)
         render()
+        handlePairLink(intent)
         ui.post(object : Runnable {
             override fun run() { if (prefs.ready) { refreshRemote(); render() }; ui.postDelayed(this, 1000) }
         })
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        handlePairLink(intent)
+    }
+
+    /** infera://pair?server=…&code=… — pairs with no typing (dashboard "Pair this phone"). */
+    private fun handlePairLink(i: android.content.Intent?) {
+        val data = i?.data ?: return
+        if (data.scheme != "infera" || data.host != "pair") return
+        val server = data.getQueryParameter("server") ?: return
+        val code = data.getQueryParameter("code") ?: return
+        i.data = null
+        pairWith(server, code) { msg -> ui.post { android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_LONG).show() } }
+    }
+
+    private fun pairWith(server: String, code: String, say: (String) -> Unit) {
+        say("Pairing…")
+        Thread {
+            try {
+                if (prefs.paired) { // pairing again: stop the old link first
+                    startService(android.content.Intent(this, NodeService::class.java).setAction(NodeService.ACTION_STOP))
+                    prefs.enabled = false
+                }
+                val p = Api.pair(server, code, Build.MODEL, prefs.identity, "android ${Build.VERSION.RELEASE}")
+                prefs.server = p.server; prefs.deviceId = p.deviceId; prefs.token = p.token
+                say("Paired")
+                ui.post { render() }
+            } catch (e: Exception) { say(e.message ?: "Pairing failed") }
+        }.start()
     }
 
     override fun onDestroy() { NodeService.listeners.remove(listener); super.onDestroy() }
@@ -82,33 +114,75 @@ class MainActivity : Activity() {
     }
 
     private fun renderPair() {
-        val server = field("Server, e.g. https://beta.example.com", prefs.server)
+        val server = field("Server", prefs.server.ifEmpty { DEFAULT_SERVER })
         val code = field("6-digit code from the dashboard", number = true)
         val status = text("")
         root.addView(text("Earn by letting your phone serve AI jobs while it charges."))
-        root.addView(card(text("Pair this phone", 17f, true), server, code, status, button("Pair") {
-            status.text = "Pairing…"
-            Thread {
-                try {
-                    val p = Api.pair(server.text.toString(), code.text.toString(), Build.MODEL, prefs.identity, "android ${Build.VERSION.RELEASE}")
-                    prefs.server = p.server; prefs.deviceId = p.deviceId; prefs.token = p.token
-                    ui.post { render() }
-                } catch (e: Exception) { ui.post { status.text = e.message } }
-            }.start()
-        }))
+        root.addView(card(text("Pair this phone", 17f, true),
+            text("Easiest: on this phone open the dashboard, tap Get pairing code, then Pair this phone. Or type the code here:", 13f, color = Color.GRAY),
+            server, code, status, button("Pair") {
+                pairWith(server.text.toString().trim(), code.text.toString().trim()) { m -> ui.post { status.text = m } }
+            }))
     }
 
+    private fun phoneRamGb(): Double = (getSystemService(android.app.ActivityManager::class.java)).let {
+        val mi = android.app.ActivityManager.MemoryInfo(); it.getMemoryInfo(mi); mi.totalMem / 1e9
+    }
+
+    private var catalog: List<CatalogModel> = emptyList()
+    private var progress: android.widget.ProgressBar? = null
+
     private fun renderModel() {
-        val url = field("Model file URL (.gguf)", "")
+        val ram = phoneRamGb()
+        val status = text(if (prefs.klass == "unrated") "Too slow with that model (below 3 tokens/s). Pick a smaller one." else "")
+        val picker = android.widget.Spinner(this)
+        val go = button("Download and start") {}
+        progress = android.widget.ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 100; visibility = View.GONE }
+        root.addView(text("Pick the AI model this phone will run. We've chosen the best one for your %.0f GB of RAM.".format(ram)))
+        root.addView(card(text("Model", 17f, true), picker, go, progress, status))
+
+        fun fill(models: List<CatalogModel>) {
+            catalog = models
+            val labels = models.map { m ->
+                val fits = m.phoneMinRamGb <= ram
+                "${m.label} · ${m.ggufMb} MB" + if (fits) "" else " (needs ${m.phoneMinRamGb.toInt()} GB RAM)"
+            }
+            picker.adapter = android.widget.ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, labels)
+            Api.pickForPhone(models, ram)?.let { best -> picker.setSelection(models.indexOf(best)) }
+        }
+        if (catalog.isNotEmpty()) fill(catalog) else {
+            status.text = "Loading models…"
+            Thread {
+                val models = runCatching { Api.catalog(prefs.server) }.getOrDefault(emptyList())
+                ui.post {
+                    status.text = if (models.isEmpty()) "Couldn't load the model list. Check your connection and reopen the app." else ""
+                    fill(models)
+                }
+            }.start()
+        }
+        go.setOnClickListener {
+            val m = catalog.getOrNull(picker.selectedItemPosition) ?: return@setOnClickListener
+            go.isEnabled = false
+            go.text = "Working…"
+            status.text = "Starting download of ${m.ggufMb} MB… keep the app open"
+            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            Thread {
+                setupModel(m.ggufUrl, m.id, m.paramsB.toFloat()) { s -> ui.post { status.text = s } }
+                ui.post { go.isEnabled = true; go.text = "Download and start"; window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
+            }.start()
+        }
+
+        // Advanced: any GGUF link (most testers never need this)
+        val url = field("Model file URL (.gguf)")
         val id = field("Model name, e.g. qwen3-1.7b", prefs.modelId)
-        val params = field("Size in billions, e.g. 1.7", if (prefs.paramsB > 0) prefs.paramsB.toString() else "", number = true)
-        val status = text(if (prefs.klass == "unrated") "Too slow with that model (below 3 tokens/s). Try a smaller one." else "")
-        root.addView(text("Use the same model name as other testers so jobs can reach your phone."))
-        root.addView(card(text("Choose a model", 17f, true), url, id, params, status, button("Download and benchmark") {
-            val u = url.text.toString().trim(); val mid = id.text.toString().trim(); val pb = params.text.toString().toFloatOrNull() ?: 0f
-            if (mid.isEmpty() || pb <= 0f) { status.text = "Enter the model name and size."; return@button }
-            Thread { setupModel(u, mid, pb) { s -> ui.post { status.text = s } } }.start()
-        }))
+        val params = field("Size in billions, e.g. 1.7", number = true)
+        val adv = card(text("Advanced: use your own model", 15f, true), url, id, params, button("Use this model", primary = false) {
+            val pb = params.text.toString().toFloatOrNull() ?: 0f
+            if (id.text.isBlank() || pb <= 0f || url.text.isBlank()) { status.text = "Enter the link, name and size."; return@button }
+            Thread { setupModel(url.text.toString().trim(), id.text.toString().trim(), pb) { s -> ui.post { status.text = s } } }.start()
+        }).apply { visibility = View.GONE }
+        root.addView(button("Advanced: use my own model file", primary = false) { adv.visibility = View.VISIBLE })
+        root.addView(adv)
     }
 
     private fun setupModel(url: String, modelId: String, paramsB: Float, say: (String) -> Unit) {
@@ -125,13 +199,19 @@ class MainActivity : Activity() {
                         while (true) {
                             val n = input.read(buf); if (n < 0) break
                             out.write(buf, 0, n); done += n
-                            if (done - last > 20_000_000) { last = done; say("Downloading… ${done / 1_000_000} MB" + if (total > 0) " of ${total / 1_000_000} MB" else "") }
+                            if (done - last > 2_000_000) {
+                                last = done
+                                val pct = if (total > 0) (done * 100 / total).toInt() else 0
+                                ui.post { progress?.visibility = View.VISIBLE; progress?.isIndeterminate = total <= 0; progress?.progress = pct }
+                                say("Downloading… ${done / 1_000_000} MB" + if (total > 0) " of ${total / 1_000_000} MB ($pct%)" else "")
+                            }
                         }
                     } }
                     tmp.renameTo(file)
                 }
             }
             if (!file.exists()) throw IllegalStateException("enter a model URL to download")
+            ui.post { progress?.isIndeterminate = true }
             say("Loading the model…")
             NodeService.engine?.close()
             val eng = LlamaEngine(file.path, modelId)
@@ -147,8 +227,13 @@ class MainActivity : Activity() {
             prefs.modelPath = file.path; prefs.modelId = modelId; prefs.paramsB = paramsB; prefs.tps = tps.toFloat()
             prefs.klass = phoneClass(tps, ram)
             say("%.1f tokens/s · class %s".format(tps, prefs.klass))
+            if (prefs.klass != "unrated") { prefs.enabled = true; NodeService.start(this) }
             ui.post { render() }
-        } catch (e: Exception) { say("Problem: ${e.message}") }
+            ui.post { progress?.visibility = View.GONE }
+        } catch (e: Throwable) {
+            ui.post { progress?.visibility = View.GONE }
+            say("Problem: ${e.message ?: e.javaClass.simpleName}. Check Wi-Fi and storage space, then tap the button again.")
+        }
     }
 
     private fun refreshRemote() {
@@ -214,6 +299,11 @@ class MainActivity : Activity() {
         if (running) root.addView(button("Stop the Infera service", primary = false) {
             startService(android.content.Intent(this, NodeService::class.java).setAction(NodeService.ACTION_STOP))
             ui.postDelayed({ render() }, 800)
+        })
+        root.addView(button("Pair again / use another account", primary = false) {
+            startService(android.content.Intent(this, NodeService::class.java).setAction(NodeService.ACTION_STOP))
+            prefs.enabled = false; prefs.deviceId = ""; prefs.token = ""
+            render()
         })
         root.addView(card(text("Activity", 13f, true), text((s?.events ?: emptyList()).take(12).joinToString("\n"), 12f).apply { gravity = Gravity.START }))
     }

@@ -51,6 +51,7 @@ func main() {
 			log.Fatalf("INFERA_PRICES: %v", err)
 		}
 	}
+	st.PairReuse = os.Getenv("INFERA_PAIR_CODE_REUSE") == "1"
 	hub := NewHub(st)
 	dep := &Dependability{st: st}
 	canaryAcct, err := EnsureCanaryAccount(st)
@@ -88,12 +89,14 @@ func main() {
 	mux.HandleFunc("GET /api/customer", api.Customer)
 	mux.HandleFunc("GET /api/device/me", api.DeviceMe)
 	mux.HandleFunc("GET /api/network", api.Network)
+	mux.HandleFunc("GET /api/catalog", api.Catalog)
 	mux.HandleFunc("POST /api/waitlist", api.JoinWaitlist)
 	mux.HandleFunc("GET /api/waitlist/{code}", api.WaitlistStatus)
 	mux.HandleFunc("GET /api/leaderboard", api.Leaderboard)
 	mux.HandleFunc("GET /api/admin/waitlist", api.AdminWaitlist)
 	mux.HandleFunc("POST /api/admin/waitlist/invite", api.AdminWaitlist)
 	mux.HandleFunc("GET /s/{tag}", api.SharePage)
+	mux.HandleFunc("GET /pair/{code}", api.PairPage)
 	mux.HandleFunc("GET /install.sh", func(w http.ResponseWriter, r *http.Request) {
 		b, _ := webFS.ReadFile("web/install.sh")
 		w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")

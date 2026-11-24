@@ -19,6 +19,13 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- infera://pair?server=…&code=… from the dashboard's "Pair this phone" page -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="infera" android:host="pair" />
+            </intent-filter>
         </activity>
         <service android:name=".NodeService" android:exported="false" android:foregroundServiceType="dataSync" />
         <receiver android:name=".BootReceiver" android:exported="true">

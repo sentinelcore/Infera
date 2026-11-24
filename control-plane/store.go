@@ -21,6 +21,9 @@ const microUSD = 1_000_000
 type Store struct {
 	db *sql.DB
 	pg bool
+	// PairReuse lets one pairing code pair several devices until it expires (testing only:
+	// INFERA_PAIR_CODE_REUSE=1). Off = each code pairs exactly one device.
+	PairReuse bool
 }
 
 // rebind turns ? placeholders into $1, $2 … for Postgres.
@@ -300,7 +303,9 @@ func (s *Store) ConsumePairCode(code, name, pubkey, platform string) (string, st
 	if err != nil || exp < now() {
 		return "", "", errors.New("pairing code is wrong or expired; create a new one on the dashboard")
 	}
-	s.exec(`DELETE FROM pair_codes WHERE code=?`, code)
+	if !s.PairReuse {
+		s.exec(`DELETE FROM pair_codes WHERE code=?`, code)
+	}
 	id := "dev_" + randomHex(8)
 	token := "idt_" + randomHex(24)
 	_, err = s.exec(`INSERT INTO devices(id,owner_id,name,token_hash,pubkey,platform,created_at) VALUES(?,?,?,?,?,?,?)`,
