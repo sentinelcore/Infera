@@ -379,7 +379,7 @@ $("o-code").onclick = async () => {
     const r = await call("/api/pair-code", { method: "POST", key: ownerKey });
     $("pair-out").hidden = false; $("pair-code").textContent = r.code;
     $("pair-link").href = `/pair/${r.code}`;
-    $("pair-cmd").textContent = `Phone: open ${location.origin}/pair/${r.code} on the phone and tap "Open Infera and pair"\nComputer: infera pair ${r.code} --server ${location.origin}`;
+    $("pair-cmd").textContent = `Phone: open ${location.origin}/pair/${r.code} on the phone and tap "Open Infera and pair"\nComputer (with Ollama installed): infera setup ${r.code}`;
   } catch (e) { toast(e.message); }
 };
 $("p-save").onclick = async () => {

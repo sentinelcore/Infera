@@ -15,10 +15,20 @@ ANSWER = ("Idle laptops and desktops have spare compute most of the day, so they
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
     def do_GET(self):
+        if self.path.startswith("/api/tags"):  # imitate Ollama for `infera setup`
+            body = json.dumps({"models": []}).encode()
+            self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(body)
+            return
         body = json.dumps({"object": "list", "data": [{"id": "mock"}]}).encode()
         self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(body)
     def do_POST(self):
         req = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        if self.path.startswith("/api/pull"):
+            self.send_response(200); self.send_header("Content-Type", "application/x-ndjson"); self.end_headers()
+            for done in (0, 50, 100):
+                self.wfile.write((json.dumps({"status": "pulling", "completed": done * 10**6, "total": 100 * 10**6}) + "\n").encode()); self.wfile.flush()
+            self.wfile.write(b'{"status":"success"}\n')
+            return
         if self.path.endswith("/embeddings"):
             inputs = req.get("input")
             inputs = inputs if isinstance(inputs, list) else [inputs]

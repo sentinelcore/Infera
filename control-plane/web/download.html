@@ -35,7 +35,7 @@ code,pre{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.82rem}pre
   <div class="card" id="windows">
     <h2>Windows</h2>
     <a class="btn" href="https://github.com/sentinelcore/Infera/releases/download/test-build/infera-windows-x64.zip">Download for Windows</a>
-    <ol class="muted"><li>Unzip, open a terminal in that folder.</li><li><code>.\infera.exe pair CODE --server <span class="origin"></span></code></li><li>Pick a model (see below), then <code>.\infera.exe tray</code></li></ol>
+    <ol class="muted"><li>Unzip, open a terminal in that folder.</li><li>Install Ollama, then <code>.\infera.exe setup CODE</code></li></ol>
     <p class="note">First run: Windows shows a blue box. Click <b>More info → Run anyway</b> (the build isn't code-signed yet).</p>
   </div>
   <div class="card" id="mac">
@@ -46,13 +46,10 @@ code,pre{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.82rem}pre
   </div>
 </div>
 <div class="card" style="margin-top:14px">
-  <h2>Choose a model (desktops)</h2>
-  <p class="muted">Easiest with <a href="https://ollama.com">Ollama</a>. Everyone uses the same model names so jobs can reach every device:</p>
-  <pre>ollama pull qwen3:1.7b
-infera engine --url http://127.0.0.1:11434 --model qwen3-1.7b --engine-model qwen3:1.7b --params-b 1.7
-infera bench
-infera service install    # starts Infera (menu-bar / tray icon) every time you log in</pre>
-  <p class="muted">Bigger GPU? Use <code>qwen3:8b</code> as <code>qwen3-8b</code> (8 GB+ VRAM) or <code>qwen3:14b</code> as <code>qwen3-14b</code> (16 GB+). Add <code>--embed-model nomic-embed-text</code> after <code>ollama pull nomic-embed-text</code> to also earn from embeddings.</p>
+  <h2>Set up a computer in one command</h2>
+  <p class="muted">Install <a href="https://ollama.com/download">Ollama</a> first (it runs the AI models). Then, with the code from the dashboard:</p>
+  <pre>infera setup CODE</pre>
+  <p class="muted">It pairs this computer, picks the best model for your hardware, downloads it, benchmarks, and starts Infera in your menu bar / system tray at every login. On Windows use <code>.\infera.exe setup CODE</code>.</p>
 </div>
 </div>
 <script>document.querySelectorAll(".origin").forEach(e => e.textContent = location.origin);</script>

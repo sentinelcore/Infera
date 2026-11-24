@@ -6,6 +6,7 @@ mod limits;
 mod node;
 mod seal;
 mod service;
+mod setup;
 #[cfg(feature = "tray")]
 mod tray;
 mod ui;
@@ -24,6 +25,16 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
+    /// One command for everything: pair, pick and download the right model, benchmark, start at login
+    Setup {
+        /// 6-digit code from the dashboard (Contribute a device → Get pairing code)
+        code: String,
+        #[arg(long, default_value = setup::DEFAULT_SERVER)]
+        server: String,
+        /// Don't install the start-at-login service
+        #[arg(long)]
+        no_service: bool,
+    },
     /// Pair this device with your account using the 6-digit code from the dashboard
     Pair {
         code: String,
@@ -95,6 +106,7 @@ fn main() -> Result<()> {
 
 async fn async_main(cli: Cli) -> Result<()> {
     match cli.cmd {
+        Cmd::Setup { code, server, no_service } => setup::run(code, server, no_service).await,
         Cmd::Pair { code, server, name } => pair(code, server, name).await,
         Cmd::Engine { url, llama_server, gguf, model, engine_model, params_b, embed_model, embed_engine_model } => {
             let mut c = config::load()?;
@@ -138,7 +150,7 @@ async fn async_main(cli: Cli) -> Result<()> {
     }
 }
 
-async fn pair(code: String, server: String, name: String) -> Result<()> {
+pub async fn pair(code: String, server: String, name: String) -> Result<()> {
     let key = config::identity()?;
     let name = if name.is_empty() { hostname() } else { name };
     let platform = format!("{} {}", std::env::consts::OS, std::env::consts::ARCH);
