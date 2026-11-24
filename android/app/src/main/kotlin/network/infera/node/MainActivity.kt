@@ -137,9 +137,10 @@ class MainActivity : Activity() {
         val status = text(if (prefs.klass == "unrated") "Too slow with that model (below 3 tokens/s). Pick a smaller one." else "")
         val picker = android.widget.Spinner(this)
         val go = button("Download and start") {}
-        progress = android.widget.ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 100; visibility = View.GONE }
+        val bar = android.widget.ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 100; visibility = View.GONE }
+        progress = bar
         root.addView(text("Pick the AI model this phone will run. We've chosen the best one for your %.0f GB of RAM.".format(ram)))
-        root.addView(card(text("Model", 17f, true), picker, go, progress, status))
+        root.addView(card(text("Model", 17f, true), picker, go, bar, status))
 
         fun fill(models: List<CatalogModel>) {
             catalog = models
