@@ -170,19 +170,58 @@ pub fn save(c: &Config) -> Result<()> {
     Ok(())
 }
 
-/// Device identity: an Ed25519 key that signs every job receipt.
+/// Device identity: an Ed25519 key that signs every job receipt. Kept in the OS keychain on
+/// macOS (Keychain) and Windows (Credential Manager); on Linux, and wherever the keychain is
+/// unavailable, in an owner-only file in ~/.infera.
 pub fn identity() -> Result<SigningKey> {
     let p = dir().join("identity.key");
-    if let Ok(h) = std::fs::read_to_string(&p) {
+    let parse = |h: &str| -> Result<SigningKey> {
         let b = hex::decode(h.trim())?;
         let arr: [u8; 32] = b.try_into().map_err(|_| anyhow::anyhow!("bad identity key"))?;
-        return Ok(SigningKey::from_bytes(&arr));
+        Ok(SigningKey::from_bytes(&arr))
+    };
+    if let Some(h) = keychain::get() {
+        return parse(&h);
+    }
+    if let Ok(h) = std::fs::read_to_string(&p) {
+        let k = parse(&h)?;
+        // Move a key from an earlier build into the keychain, then remove the file.
+        if keychain::set(&hex::encode(k.to_bytes())) {
+            let _ = std::fs::remove_file(&p);
+        }
+        return Ok(k);
     }
     std::fs::create_dir_all(dir())?;
     let k = SigningKey::generate(&mut rand::rngs::OsRng);
-    std::fs::write(&p, hex::encode(k.to_bytes()))?;
-    restrict(&p);
+    if !keychain::set(&hex::encode(k.to_bytes())) {
+        std::fs::write(&p, hex::encode(k.to_bytes()))?;
+        restrict(&p);
+    }
     Ok(k)
+}
+
+#[cfg(any(target_os = "macos", windows))]
+mod keychain {
+    /// One entry per Infera home, so test setups with several nodes stay separate.
+    fn entry() -> Option<keyring::Entry> {
+        keyring::Entry::new("network.infera.node", &super::dir().display().to_string()).ok()
+    }
+    pub fn get() -> Option<String> {
+        entry()?.get_password().ok()
+    }
+    pub fn set(v: &str) -> bool {
+        entry().map(|e| e.set_password(v).is_ok()).unwrap_or(false)
+    }
+}
+
+#[cfg(not(any(target_os = "macos", windows)))]
+mod keychain {
+    pub fn get() -> Option<String> {
+        None
+    }
+    pub fn set(_v: &str) -> bool {
+        false
+    }
 }
 
 #[cfg(unix)]

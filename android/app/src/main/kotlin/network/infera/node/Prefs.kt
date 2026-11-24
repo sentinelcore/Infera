@@ -28,12 +28,54 @@ class Prefs(ctx: Context) {
     val ready: Boolean get() = paired && modelPath.isNotEmpty() && klass.isNotEmpty() && klass != "unrated"
     val pairing: Pairing get() = Pairing(server, deviceId, token)
 
+    /**
+     * Device identity (Ed25519 seed that signs every receipt). Stored encrypted with an AES key
+     * that lives in the Android Keystore (hardware-backed where available), so the seed never
+     * sits in plain text in the app's files.
+     */
     val identity: Identity
         get() {
-            val s = p.getString("identity", null)
-            if (s != null) return Identity(Base64.decode(s, Base64.NO_WRAP))
-            val id = Identity.generate()
-            p.edit().putString("identity", Base64.encodeToString(id.seed, Base64.NO_WRAP)).apply()
+            p.getString("identity_enc", null)?.let { enc ->
+                runCatching { return Identity(KeystoreBox.open(Base64.decode(enc, Base64.NO_WRAP))) }
+            }
+            // Migrate a plain seed from earlier builds, or create a new identity.
+            val plain = p.getString("identity", null)
+            val id = if (plain != null) Identity(Base64.decode(plain, Base64.NO_WRAP)) else Identity.generate()
+            val sealed = runCatching { KeystoreBox.seal(id.seed) }.getOrNull()
+            if (sealed != null) {
+                p.edit().putString("identity_enc", Base64.encodeToString(sealed, Base64.NO_WRAP)).remove("identity").apply()
+            } else if (plain == null) {
+                p.edit().putString("identity", Base64.encodeToString(id.seed, Base64.NO_WRAP)).apply() // no Keystore: app-private file
+            }
             return id
         }
+}
+
+/** AES-GCM with a non-exportable key in the Android Keystore. */
+object KeystoreBox {
+    private const val ALIAS = "infera_identity"
+
+    private fun key(): javax.crypto.SecretKey {
+        val ks = java.security.KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        (ks.getKey(ALIAS, null) as? javax.crypto.SecretKey)?.let { return it }
+        val gen = javax.crypto.KeyGenerator.getInstance(android.security.keystore.KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
+        gen.init(android.security.keystore.KeyGenParameterSpec.Builder(ALIAS,
+            android.security.keystore.KeyProperties.PURPOSE_ENCRYPT or android.security.keystore.KeyProperties.PURPOSE_DECRYPT)
+            .setBlockModes(android.security.keystore.KeyProperties.BLOCK_MODE_GCM)
+            .setEncryptionPaddings(android.security.keystore.KeyProperties.ENCRYPTION_PADDING_NONE)
+            .setKeySize(256).build())
+        return gen.generateKey()
+    }
+
+    fun seal(plain: ByteArray): ByteArray {
+        val c = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+        c.init(javax.crypto.Cipher.ENCRYPT_MODE, key())
+        return c.iv + c.doFinal(plain) // 12-byte IV, then ciphertext + tag
+    }
+
+    fun open(box: ByteArray): ByteArray {
+        val c = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+        c.init(javax.crypto.Cipher.DECRYPT_MODE, key(), javax.crypto.spec.GCMParameterSpec(128, box.copyOfRange(0, 12)))
+        return c.doFinal(box, 12, box.size - 12)
+    }
 }
