@@ -276,7 +276,7 @@ async fn session(ctx: Arc<Ctx>) -> Result<()> {
     send(&ctx.state, json!({
         "t": "hello", "agent_version": env!("CARGO_PKG_VERSION"),
         "platform": format!("{} {}", std::env::consts::OS, std::env::consts::ARCH),
-        "bench": bench, "class": bench.class, "privacy": "sandboxed", "models": [ctx.cfg.engine.model_id],
+        "bench": bench, "class": bench.class, "privacy": "sandboxed", "models": served_models(&ctx.cfg),
         "mode": mode, "tps": bench.tokens_per_s,
     }));
     push_state(&ctx.state);
@@ -318,6 +318,14 @@ async fn session(ctx: Arc<Ctx>) -> Result<()> {
     }
     writer.abort();
     Ok(())
+}
+
+fn served_models(cfg: &Config) -> Vec<String> {
+    let mut m = vec![cfg.engine.model_id.clone()];
+    if !cfg.engine.embed_model.is_empty() && !cfg.engine.url.is_empty() {
+        m.push(cfg.engine.embed_model.clone());
+    }
+    m
 }
 
 pub fn push_state(state: &State) {
@@ -399,6 +407,7 @@ async fn handle_offer(ctx: Arc<Ctx>, m: Value) {
     send(&ctx.state, json!({"t": "accept", "job_id": job_id, "sandbox_pub": sandbox.public_b64}));
 
     let result = match tokio::time::timeout(Duration::from_secs(20), prx).await {
+        Ok(Ok((epk, n, c))) if m["job_type"].as_str() == Some("embeddings") => run_embed(&ctx, &job_id, &model, sandbox, &epk, &n, &c).await,
         Ok(Ok((epk, n, c))) => run_job(&ctx, &job_id, &model, sandbox, &epk, &n, &c, cancel_rx).await,
         _ => Err(anyhow::anyhow!("job payload never arrived")),
     };
@@ -425,6 +434,30 @@ async fn handle_offer(ctx: Arc<Ctx>, m: Value) {
         tokio::time::sleep(Duration::from_millis(300)).await;
         let _ = ctx.quit.send(true);
     }
+}
+
+/// Embedding job: one sealed result, signed like any other job.
+#[allow(clippy::too_many_arguments)]
+async fn run_embed(ctx: &Arc<Ctx>, job_id: &str, model: &str, sandbox: SandboxKey, epk: &str, n: &str, c: &str) -> Result<()> {
+    let chan = sandbox.open(job_id, epk)?;
+    let request: Value = serde_json::from_slice(&chan.open_down(n, c)?)?;
+    ctx.state.lock().unwrap().log(format!("Running embeddings job {job_id} ({model}) in the sealed sandbox"));
+    let (result, tin) = match ctx.engine.embed(request).await {
+        Ok(r) => r,
+        Err(e) => {
+            send(&ctx.state, json!({"t": "abort", "job_id": job_id, "reason": "engine_error"}));
+            return Err(e);
+        }
+    };
+    let out = result.to_string();
+    let (nonce, ct) = chan.seal_up(out.as_bytes());
+    send(&ctx.state, json!({"t": "tok", "job_id": job_id, "seq": 1, "n": nonce, "c": ct}));
+    let hash = hex::encode(Sha256::digest(out.as_bytes()));
+    let receipt = format!("{job_id}|{model}|{hash}|{tin}|0|{}", unix());
+    let sig = B64.encode(ctx.key.sign(receipt.as_bytes()).to_bytes());
+    send(&ctx.state, json!({"t": "done", "job_id": job_id, "tokens_in": tin, "tokens_out": 0, "receipt": receipt, "sig": sig}));
+    ctx.state.lock().unwrap().log(format!("Embeddings job {job_id} done ({tin} tokens)"));
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]

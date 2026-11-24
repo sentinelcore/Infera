@@ -13,6 +13,7 @@ use tokio::sync::mpsc;
 pub struct Engine {
     pub url: String,
     pub model: String,
+    pub embed_model: String,
     child: Option<Child>,
     http: reqwest::Client,
 }
@@ -29,8 +30,9 @@ impl Engine {
     pub async fn start(cfg: &EngineConfig) -> Result<Engine> {
         let http = reqwest::Client::builder().connect_timeout(Duration::from_secs(5)).build()?;
         let model = if cfg.engine_model.is_empty() { cfg.model_id.clone() } else { cfg.engine_model.clone() };
+        let embed_model = if cfg.embed_engine_model.is_empty() { cfg.embed_model.clone() } else { cfg.embed_engine_model.clone() };
         if !cfg.url.is_empty() {
-            let e = Engine { url: cfg.url.trim_end_matches('/').to_string(), model, child: None, http };
+            let e = Engine { url: cfg.url.trim_end_matches('/').to_string(), model, embed_model, child: None, http };
             e.wait_ready(Duration::from_secs(10)).await?;
             return Ok(e);
         }
@@ -48,7 +50,7 @@ impl Engine {
             .stderr(Stdio::null())
             .kill_on_drop(true);
         let child = cmd.spawn().map_err(|e| anyhow!("could not start llama-server at {}: {e}", cfg.llama_server))?;
-        let e = Engine { url: format!("http://127.0.0.1:{port}"), model, child: Some(child), http };
+        let e = Engine { url: format!("http://127.0.0.1:{port}"), model, embed_model, child: Some(child), http };
         e.wait_ready(Duration::from_secs(180)).await?;
         Ok(e)
     }
@@ -120,6 +122,25 @@ impl Engine {
         }
         let _ = tx.send(Event::Done { tokens_in: tin, tokens_out: tout }).await;
         Ok(())
+    }
+
+    /// Embeddings: returns the result JSON ({"data": [...], "usage": ...}) and the prompt token count.
+    pub async fn embed(&self, mut request: serde_json::Value) -> Result<(serde_json::Value, u32)> {
+        if self.embed_model.is_empty() {
+            bail!("this device doesn't serve embeddings");
+        }
+        if let Some(o) = request.as_object_mut() {
+            o.insert("model".into(), self.embed_model.clone().into());
+            o.remove("privacy");
+            o.remove("infera_batch");
+        }
+        let resp = self.http.post(format!("{}/v1/embeddings", self.url)).json(&request).send().await?;
+        if !resp.status().is_success() {
+            bail!("engine returned {} for embeddings", resp.status());
+        }
+        let v: serde_json::Value = resp.json().await?;
+        let tin = v["usage"]["prompt_tokens"].as_u64().unwrap_or(0) as u32;
+        Ok((serde_json::json!({"data": v["data"], "usage": v["usage"]}), tin))
     }
 
     pub async fn stop(&mut self) {

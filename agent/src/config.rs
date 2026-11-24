@@ -45,6 +45,11 @@ pub struct EngineConfig {
     /// Model name to send to the engine (defaults to model_id).
     #[serde(default)]
     pub engine_model: String,
+    /// Optional embedding model served from the same engine (e.g. Ollama "nomic-embed-text").
+    #[serde(default)]
+    pub embed_model: String,
+    #[serde(default)]
+    pub embed_engine_model: String,
     /// Size in billions of parameters, used for the device class.
     #[serde(default)]
     pub params_b: f64,

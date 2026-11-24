@@ -50,6 +50,12 @@ enum Cmd {
         /// Model size in billions of parameters (used for the device class)
         #[arg(long)]
         params_b: f64,
+        /// Also serve embeddings with this model name (needs --url, e.g. Ollama with nomic-embed-text)
+        #[arg(long, default_value = "")]
+        embed_model: String,
+        /// Embedding model name to send to the engine, if different
+        #[arg(long, default_value = "")]
+        embed_engine_model: String,
     },
     /// Benchmark this device and show its class
     Bench,
@@ -89,7 +95,7 @@ fn main() -> Result<()> {
 async fn async_main(cli: Cli) -> Result<()> {
     match cli.cmd {
         Cmd::Pair { code, server, name } => pair(code, server, name).await,
-        Cmd::Engine { url, llama_server, gguf, model, engine_model, params_b } => {
+        Cmd::Engine { url, llama_server, gguf, model, engine_model, params_b, embed_model, embed_engine_model } => {
             let mut c = config::load()?;
             c.engine.url = url;
             c.engine.llama_server = llama_server;
@@ -97,6 +103,8 @@ async fn async_main(cli: Cli) -> Result<()> {
             c.engine.model_id = model;
             c.engine.engine_model = engine_model;
             c.engine.params_b = params_b;
+            c.engine.embed_model = embed_model;
+            c.engine.embed_engine_model = embed_engine_model;
             c.bench = None;
             config::save(&c)?;
             println!("Engine saved. Run `infera bench`, then `infera run`.");
