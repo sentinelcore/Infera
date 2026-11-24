@@ -118,6 +118,8 @@ Tested end to end with the stand-in engine (`tools/mock_engine.py`):
 - "Stop now" mid-job: customer stream ends with an error; job pay forfeited; 2× debit; −10 score; device dropped to the 50–69 band and then got batch jobs only, at 0.85× pay
 - "Finish this job, then go offline" and a single Ctrl-C: job completes, no penalty
 - Process killed mid-job: recorded as a device failure, −5, not debited
+- Real llama.cpp: the node started `llama-server` itself, benchmarked it, and served streamed and non-streamed jobs with llama.cpp's own token counts in the signed receipt (tested with a tiny random-weight model, since this test environment can't download real models)
+- USDT payouts: wallet address validation, 48-hour hold, batch CSV, "mark sent" lowers the owner's available balance; admin endpoints reject requests without the token
 - Unit tests: bands, sealing, receipts, penalties and suspension (`cd control-plane && go test ./...`)
 
 ## 6. Known limits of this beta

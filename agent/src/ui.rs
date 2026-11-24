@@ -163,7 +163,7 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--accent);outlin
 </div><script>
 const $=id=>document.getElementById(id);
 const post=(p,b)=>fetch(p,{method:"POST",headers:{"Content-Type":"application/json","X-Infera":"1"},body:JSON.stringify(b||{})});
-const usd=m=>"$"+(m/1e6).toFixed(m&&Math.abs(m)<1e4?4:2);
+const usd=m=>(m<0?"−$":"$")+(Math.abs(m)/1e6).toFixed(m&&Math.abs(m)<1e4?6:2);
 let S={};
 async function tick(){try{S=await (await fetch("/api/state")).json();}catch(e){return}
  $("online").textContent=S.online?"● Online":"Go online";$("online").className="pill"+(S.online?" on":"");
@@ -175,7 +175,7 @@ async function tick(){try{S=await (await fetch("/api/state")).json();}catch(e){r
  $("model").textContent=S.model_id||"–";
  if(document.activeElement!==$("mode"))$("mode").value=S.mode;
  const o=S.offer;$("offer").hidden=!o;
- if(o){$("secs").textContent=o.seconds_left+"s";$("opay").textContent="$"+o.est_pay_usd.toFixed(4);
+ if(o){$("secs").textContent=o.seconds_left+"s";$("opay").textContent="$"+o.est_pay_usd.toFixed(o.est_pay_usd<0.01?6:4);
   $("ohour").textContent="≈ $"+o.per_hour_usd.toFixed(2)+" per hour";$("otype").textContent=o.job_type.replace("_"," ")+" · "+o.model;
   $("otime").textContent="about "+Math.max(1,Math.ceil(o.est_minutes*60))+" s";}
  const j=S.job;$("jobcard").hidden=!j;
