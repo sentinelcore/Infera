@@ -45,6 +45,7 @@ func main() {
 		FallbackModel: os.Getenv("INFERA_FALLBACK_MODEL"),
 		FirstToken:    time.Duration(envFloat("INFERA_FIRST_TOKEN_S", 90)) * time.Second,
 		JobDeadline:   time.Duration(envFloat("INFERA_JOB_DEADLINE_S", 600)) * time.Second,
+		HedgeAfter:    time.Duration(envFloat("INFERA_HEDGE_MS", 2500)) * time.Millisecond,
 	}
 	if p := os.Getenv("INFERA_PRICES"); p != "" { // e.g. {"qwen3.5-2b":{"in":0.05,"out":0.15}}
 		if err := json.Unmarshal([]byte(p), &cfg.Prices); err != nil {

@@ -122,7 +122,7 @@ Any OpenAI SDK works with `base_url = https://<your domain>/v1`. Extra fields:
 - `"infera_batch": true` marks a job that can wait. Devices with lower dependability can take batch jobs.
 - `"privacy"` sets the minimum privacy level. Only `sandboxed` is available in this beta (see the privacy limits below).
 
-`GET /v1/models` lists the models currently online. When no device can take a request, the API returns 503. If `INFERA_FALLBACK_URL` is set, it sends the request to the rented provider instead.
+`GET /v1/models` lists the models currently online. Interactive requests are **hedged**: if the first device hasn't started answering within 2.5 s (`INFERA_HEDGE_MS`), a second device gets the request and the first to answer wins (you're billed once). When no device can take a request, the API returns 503. If `INFERA_FALLBACK_URL` is set, it sends the request to the rented provider instead.
 
 ## 4. Operator: weekly USDT payouts
 

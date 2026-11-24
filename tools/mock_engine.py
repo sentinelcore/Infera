@@ -1,12 +1,13 @@
 """A stand-in OpenAI-compatible engine for testing Infera without a model.
 Streams a fixed answer word by word, and answers Infera's test prompts correctly
-(or wrongly with "liar" mode). Usage: python3 tools/mock_engine.py [port] [delay_s] [honest|liar]"""
+(or wrongly with "liar" mode). Usage: python3 tools/mock_engine.py [port] [delay_s] [honest|liar] [first_token_delay_s]"""
 import json, sys, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 18090
 DELAY = float(sys.argv[2]) if len(sys.argv) > 2 else 0.02
 LIAR = len(sys.argv) > 3 and sys.argv[3] == "liar"
+FIRST = float(sys.argv[4]) if len(sys.argv) > 4 else 0.0  # slow device: wait before the first token
 KNOWN = {"17 + 25": "42", "9 times 8": "72", "100 minus 1": "99", "days are in a week": "7",
          "capital of France": "Paris", "capital of Japan": "Tokyo", "sky on a clear day": "Blue", "12 divided by 4": "3"}
 ANSWER = ("Idle laptops and desktops have spare compute most of the day, so they can run small "
@@ -43,6 +44,7 @@ class H(BaseHTTPRequestHandler):
                 words = ["I", "do", "not", "know."] if LIAR else [v]
         n = min(int(req.get("max_tokens") or 64), len(words))
         self.send_response(200); self.send_header("Content-Type", "text/event-stream"); self.end_headers()
+        time.sleep(FIRST)
         if "think" in prompt.lower():  # imitate a reasoning model (Qwen3 / Ollama "reasoning" field)
             for w in ["Let", "me", "think."]:
                 ch = {"choices": [{"index": 0, "delta": {"reasoning": w + " "}}]}

@@ -31,6 +31,7 @@ type Config struct {
 	EmbedPrice    float64 // USD per 1M input tokens for embeddings
 	BatchDiscount float64 // fraction off for queued batch jobs
 	FirstToken    time.Duration
+	HedgeAfter    time.Duration // 0 = no hedged requests
 	JobDeadline   time.Duration
 }
 
@@ -69,6 +70,7 @@ type chatRequest struct {
 	Temperature *float64          `json:"temperature"`
 	rerun       bool              // this job is a verification re-run
 	queued      bool              // came through the batch queue
+	race        *hedgeRace        // set when this run is one side of a hedged request
 }
 
 func apiError(w http.ResponseWriter, code int, msg string) {
@@ -137,7 +139,21 @@ func (g *Gateway) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 	sw := newStreamWriter(w, req.Stream, jobID, req.Model)
 
 	tried := 0
-	for _, n := range g.hub.CandidatesFor(req.Model, req.Privacy, req.InferaBatch, req.typeName()) {
+	cands := g.hub.CandidatesFor(req.Model, req.Privacy, req.InferaBatch, req.typeName())
+	if g.hedgeable(req, len(cands)) {
+		res := g.runHedged(r, cands[0], cands[1], acct, req, raw, estIn, sw)
+		if res == runDone || res == runClientGone {
+			return
+		}
+		if res == runAbortedAfterOutput && sw.committed() {
+			sw.fail("the device stopped midway; retry the request")
+			return
+		}
+		cands, tried = cands[2:], 2
+		jobID = "job_" + randomHex(10)
+		sw.reset(jobID)
+	}
+	for _, n := range cands {
 		if tried >= 5 {
 			break
 		}
@@ -210,6 +226,10 @@ wait:
 		select {
 		case <-ctx.Done():
 			n.Send(Msg{T: "cancel", JobID: jobID})
+			if req.race != nil && req.race.lost(jobID) {
+				n.Send(Msg{T: "offer_expired", JobID: jobID}) // close the offer card
+				return runNotAccepted                         // the other device of a hedged request answered first
+			}
 			return runClientGone
 		case <-timer.C:
 			n.Send(Msg{T: "offer_expired", JobID: jobID})
@@ -255,6 +275,10 @@ wait:
 		select {
 		case <-ctx.Done():
 			n.Send(Msg{T: "cancel", JobID: jobID})
+			if req.race != nil && req.race.lost(jobID) {
+				g.st.FinishJob(jobID, "aborted", 0, 0, 0, 0, CauseNoFault, "")
+				return runNotAccepted // hedged: the other device answered first; no charge, no penalty
+			}
 			g.settlePartial(acct, dev, jobID, req, estIn, pieces, band, "customer cancelled")
 			return runClientGone
 		case <-idle.C:
@@ -284,6 +308,9 @@ wait:
 					}
 					return runAbortedBeforeOutput
 				}
+				if !gotFirst && !g.hedgeClaim(req, n, jobID, sw) {
+					return runNotAccepted
+				}
 				gotFirst = true
 				pieces++
 				out.Write(plain)
@@ -294,6 +321,9 @@ wait:
 				}
 				idle.Reset(60 * time.Second)
 			case "done":
+				if !gotFirst && !g.hedgeClaim(req, n, jobID, sw) {
+					return runNotAccepted
+				}
 				output := out.String()
 				if !g.checkReceipt(dev, jobID, req.Model, output, m) {
 					g.abort(dev, jobID, CauseWrongResult, estPay, "receipt signature or output hash did not match")
@@ -344,6 +374,20 @@ wait:
 			}
 		}
 	}
+}
+
+// hedgeClaim: in a hedged request, only the first device to answer writes to the customer.
+func (g *Gateway) hedgeClaim(req chatRequest, n *Node, jobID string, sw *streamWriter) bool {
+	if req.race == nil {
+		return true
+	}
+	if !req.race.claim(jobID) {
+		n.Send(Msg{T: "cancel", JobID: jobID})
+		g.st.FinishJob(jobID, "aborted", 0, 0, 0, 0, CauseNoFault, "")
+		return false
+	}
+	sw.reset(jobID) // nothing written yet: the response carries the winner's job id
+	return true
 }
 
 func (g *Gateway) checkReceipt(dev *DeviceRow, jobID, model, output string, m Msg) bool {

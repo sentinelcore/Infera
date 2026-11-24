@@ -242,7 +242,10 @@ fn print_bench(b: &engine::BenchResult) {
 
 /// The OS's own ID for this machine (anti-sybil: one account per device). The server stores only a hash.
 fn machine_id() -> String {
-    let raw = if cfg!(target_os = "linux") {
+    // Local testing only: several nodes on one machine each need their own ID.
+    let raw = if let Ok(v) = std::env::var("INFERA_HW_ID") {
+        v
+    } else if cfg!(target_os = "linux") {
         std::fs::read_to_string("/etc/machine-id").or_else(|_| std::fs::read_to_string("/var/lib/dbus/machine-id")).unwrap_or_default()
     } else if cfg!(target_os = "macos") {
         std::process::Command::new("ioreg")
