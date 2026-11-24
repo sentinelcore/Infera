@@ -33,10 +33,12 @@ object Api {
     private val JSON = "application/json".toMediaType()
 
     /** Pairs this phone using the 6-digit code from the dashboard. */
-    fun pair(server: String, code: String, name: String, identity: Identity, platform: String): Pairing {
+    /** [hwId]: a hash of the phone's own ID (anti-sybil: one account per device). */
+    fun pair(server: String, code: String, name: String, identity: Identity, platform: String, hwId: String = ""): Pairing {
         val base = server.trimEnd('/')
         val body = buildJsonObject {
             put("code", code.trim()); put("name", name); put("pubkey", identity.publicKeyB64); put("platform", platform)
+            if (hwId.isNotEmpty()) put("hw_id", hwId)
         }.toString().toRequestBody(JSON)
         http.newCall(Request.Builder().url("$base/api/devices/pair").post(body).build()).execute().use { r ->
             val v = Json.parseToJsonElement(r.body?.string() ?: "{}").jsonObject

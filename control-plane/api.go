@@ -77,7 +77,10 @@ func (a *API) PairCode(w http.ResponseWriter, r *http.Request) {
 
 // POST /api/devices/pair {code, name, pubkey, platform} (called by the agent)
 func (a *API) PairDevice(w http.ResponseWriter, r *http.Request) {
-	var in struct{ Code, Name, Pubkey, Platform string }
+	var in struct {
+		Code, Name, Pubkey, Platform string
+		HwID                         string `json:"hw_id"`
+	}
 	if readJSON(r, &in) != nil || in.Code == "" || in.Pubkey == "" {
 		apiError(w, 400, "code and pubkey are required")
 		return
@@ -85,9 +88,17 @@ func (a *API) PairDevice(w http.ResponseWriter, r *http.Request) {
 	if in.Name == "" {
 		in.Name = "My device"
 	}
-	id, token, err := a.st.ConsumePairCode(strings.TrimSpace(in.Code), in.Name, in.Pubkey, in.Platform)
+	hw := ""
+	if in.HwID != "" {
+		hw = hashSecret("hw|" + in.HwID) // store only a hash of the machine ID
+	}
+	id, token, err := a.st.ConsumePairCode(strings.TrimSpace(in.Code), in.Name, in.Pubkey, in.Platform, hw)
 	if err != nil {
-		apiError(w, 400, err.Error())
+		code := 400
+		if err == ErrPairedElsewhere {
+			code = 409
+		}
+		apiError(w, code, err.Error())
 		return
 	}
 	writeJSON(w, map[string]any{"device_id": id, "token": token})

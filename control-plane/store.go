@@ -169,6 +169,7 @@ func OpenStore(path string) (*Store, error) {
 		db.Exec(`ALTER TABLE score_events ADD COLUMN IF NOT EXISTS decayed_90 BIGINT NOT NULL DEFAULT 0`)
 		db.Exec(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS live_tps DOUBLE PRECISION NOT NULL DEFAULT 0`)
 		db.Exec(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS live_n BIGINT NOT NULL DEFAULT 0`)
+		db.Exec(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS hw_id TEXT NOT NULL DEFAULT ''`)
 		st := &Store{db: db, pg: true}
 		if err := st.MigrateBatch(); err != nil {
 			return nil, err
@@ -191,6 +192,7 @@ func OpenStore(path string) (*Store, error) {
 	db.Exec(`ALTER TABLE score_events ADD COLUMN decayed_90 INTEGER NOT NULL DEFAULT 0`)
 	db.Exec(`ALTER TABLE devices ADD COLUMN live_tps REAL NOT NULL DEFAULT 0`)
 	db.Exec(`ALTER TABLE devices ADD COLUMN live_n INTEGER NOT NULL DEFAULT 0`)
+	db.Exec(`ALTER TABLE devices ADD COLUMN hw_id TEXT NOT NULL DEFAULT ''`)
 	st := &Store{db: db}
 	if err := st.MigrateBatch(); err != nil {
 		return nil, err
@@ -302,20 +304,58 @@ func (s *Store) CreatePairCode(ownerID string) (string, error) {
 }
 
 // ConsumePairCode registers a new device for the code's owner and returns the device id and secret token.
-func (s *Store) ConsumePairCode(code, name, pubkey, platform string) (string, string, error) {
+// ErrPairedElsewhere: anti-sybil (G13) – one account per physical device.
+var ErrPairedElsewhere = errors.New("this device is already paired with another Infera account; each device can earn for one account only")
+
+// ConsumePairCode pairs a device. hwID is a hash of the machine's own ID (empty from old apps).
+// Re-pairing the same machine to the same account replaces the old record and keeps its
+// dependability, streak and any suspension (so re-pairing can't wipe a penalty); pairing it
+// to a second account is refused.
+func (s *Store) ConsumePairCode(code, name, pubkey, platform, hwID string) (string, string, error) {
 	var ownerID string
 	var exp int64
 	err := s.queryRow(`SELECT owner_id, expires_at FROM pair_codes WHERE code=?`, code).Scan(&ownerID, &exp)
 	if err != nil || exp < now() {
 		return "", "", errors.New("pairing code is wrong or expired; create a new one on the dashboard")
 	}
+	score, streak, until := 70.0, 0, int64(0)
+	var old []string
+	if hwID != "" {
+		rows, err := s.query(`SELECT id, owner_id, dependability, streak, suspended_until FROM devices WHERE hw_id=? AND token_hash<>''`, hwID)
+		if err == nil {
+			first := true
+			for rows.Next() {
+				var id, owner string
+				var sc float64
+				var st int
+				var su int64
+				rows.Scan(&id, &owner, &sc, &st, &su)
+				if owner != ownerID && !s.PairReuse { // test mode (reusable codes) lets a device move between accounts
+					rows.Close()
+					return "", "", ErrPairedElsewhere
+				}
+				if first || sc < score {
+					score, streak = sc, st
+				}
+				if su > until {
+					until = su
+				}
+				first = false
+				old = append(old, id)
+			}
+			rows.Close()
+		}
+	}
 	if !s.PairReuse {
 		s.exec(`DELETE FROM pair_codes WHERE code=?`, code)
 	}
+	for _, o := range old {
+		s.exec(`UPDATE devices SET token_hash='', name=name || ' (replaced)' WHERE id=?`, o)
+	}
 	id := "dev_" + randomHex(8)
 	token := "idt_" + randomHex(24)
-	_, err = s.exec(`INSERT INTO devices(id,owner_id,name,token_hash,pubkey,platform,created_at) VALUES(?,?,?,?,?,?,?)`,
-		id, ownerID, name, hashSecret(token), pubkey, platform, now())
+	_, err = s.exec(`INSERT INTO devices(id,owner_id,name,token_hash,pubkey,platform,created_at,hw_id,dependability,streak,suspended_until) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+		id, ownerID, name, hashSecret(token), pubkey, platform, now(), hwID, score, streak, until)
 	return id, token, err
 }
 
@@ -345,7 +385,7 @@ func (s *Store) Device(id string) (*DeviceRow, error) {
 }
 
 func (s *Store) DevicesByOwner(ownerID string) ([]*DeviceRow, error) {
-	rows, err := s.query(`SELECT `+deviceCols+` FROM devices WHERE owner_id=? ORDER BY created_at`, ownerID)
+	rows, err := s.query(`SELECT `+deviceCols+` FROM devices WHERE owner_id=? AND token_hash<>'' ORDER BY created_at`, ownerID)
 	if err != nil {
 		return nil, err
 	}

@@ -73,7 +73,7 @@ class MainActivity : Activity() {
                     startService(android.content.Intent(this, NodeService::class.java).setAction(NodeService.ACTION_STOP))
                     prefs.enabled = false
                 }
-                val p = Api.pair(server, code, Build.MODEL, prefs.identity, "android ${Build.VERSION.RELEASE}")
+                val p = Api.pair(server, code, Build.MODEL, prefs.identity, "android ${Build.VERSION.RELEASE}", hardwareId())
                 prefs.server = p.server; prefs.deviceId = p.deviceId; prefs.token = p.token
                 say("Paired")
                 ui.post { render() }
@@ -292,6 +292,13 @@ class MainActivity : Activity() {
             }
             if (total > 0 && tmp.length() < total) throw java.io.IOException("stream ended early")
         }
+    }
+
+    /** Hash of ANDROID_ID (stable across reinstalls of this app on this phone). */
+    private fun hardwareId(): String {
+        val raw = android.provider.Settings.Secure.getString(contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: return ""
+        val md = java.security.MessageDigest.getInstance("SHA-256")
+        return md.digest("infera|$raw|${Build.MANUFACTURER}|${Build.MODEL}".toByteArray()).joinToString("") { "%02x".format(it) }
     }
 
     private fun sha256Of(f: File): String {

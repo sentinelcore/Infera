@@ -159,7 +159,7 @@ pub async fn pair(code: String, server: String, name: String) -> Result<()> {
     let platform = format!("{} {}", std::env::consts::OS, std::env::consts::ARCH);
     let r = reqwest::Client::new()
         .post(format!("{}/api/devices/pair", server.trim_end_matches('/')))
-        .json(&serde_json::json!({"code": code, "name": name, "pubkey": B64.encode(key.verifying_key().to_bytes()), "platform": platform}))
+        .json(&serde_json::json!({"code": code, "name": name, "pubkey": B64.encode(key.verifying_key().to_bytes()), "platform": platform, "hw_id": machine_id()}))
         .send()
         .await?;
     let status = r.status();
@@ -238,6 +238,33 @@ fn print_bench(b: &engine::BenchResult) {
         "Build:    {}\nCPU:      {} ({} cores), {:.1} GB RAM\nGPU:      {} ({:.1} GB)\nSpeed:    {:.1} tokens/s on {} ({} B), first token {} ms\nClass:    {} – {}",
         if updater::build() > 0 { updater::build().to_string() } else { "dev".to_string() }, b.cpu, b.cores, b.ram_gb, b.gpu, b.vram_gb, b.tokens_per_s, b.model_id, b.params_b, b.first_token_ms, b.class, b.reason
     );
+}
+
+/// The OS's own ID for this machine (anti-sybil: one account per device). The server stores only a hash.
+fn machine_id() -> String {
+    let raw = if cfg!(target_os = "linux") {
+        std::fs::read_to_string("/etc/machine-id").or_else(|_| std::fs::read_to_string("/var/lib/dbus/machine-id")).unwrap_or_default()
+    } else if cfg!(target_os = "macos") {
+        std::process::Command::new("ioreg")
+            .args(["-rd1", "-c", "IOPlatformExpertDevice"])
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).lines().find(|l| l.contains("IOPlatformUUID")).and_then(|l| l.split('"').nth(3)).unwrap_or("").to_string())
+            .unwrap_or_default()
+    } else if cfg!(windows) {
+        std::process::Command::new("reg")
+            .args(["query", r"HKLM\SOFTWARE\Microsoft\Cryptography", "/v", "MachineGuid"])
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).split_whitespace().last().unwrap_or("").to_string())
+            .unwrap_or_default()
+    } else {
+        String::new()
+    };
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return String::new();
+    }
+    use sha2::Digest;
+    hex::encode(sha2::Sha256::digest(format!("infera|{raw}").as_bytes()))
 }
 
 fn hostname() -> String {

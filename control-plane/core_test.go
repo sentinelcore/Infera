@@ -64,7 +64,7 @@ func TestPenalties(t *testing.T) {
 	st := mustStore(t)
 	acct, _, _ := st.CreateAccount("o@x.dev", "owner", 0)
 	code, _ := st.CreatePairCode(acct.ID)
-	id, _, err := st.ConsumePairCode(code, "box", "pk", "linux")
+	id, _, err := st.ConsumePairCode(code, "box", "pk", "linux", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func TestDecay(t *testing.T) {
 	st := mustStore(t)
 	acct, _, _ := st.CreateAccount("o@x.dev", "owner", 0)
 	code, _ := st.CreatePairCode(acct.ID)
-	id, _, _ := st.ConsumePairCode(code, "box", "pk", "linux")
+	id, _, _ := st.ConsumePairCode(code, "box", "pk", "linux", "")
 	dep := &Dependability{st: st}
 	dev, _ := st.Device(id)
 	dep.Penalize(dev, "j1", CauseOwnerAction, 0, "quit") // 70 -> 60
@@ -129,7 +129,7 @@ func TestCanaryJudging(t *testing.T) {
 	st := mustStore(t)
 	acct, _, _ := st.CreateAccount("o@x.dev", "owner", 0)
 	code, _ := st.CreatePairCode(acct.ID)
-	id, _, _ := st.ConsumePairCode(code, "box", "pk", "linux")
+	id, _, _ := st.ConsumePairCode(code, "box", "pk", "linux", "")
 	g := &Gateway{st: st, hub: NewHub(st), dep: &Dependability{st: st}}
 	dev, _ := st.Device(id)
 	g.judgeCanary(dev, "c1", "The answer is 42.", "42", 0)
@@ -229,7 +229,7 @@ func TestRerunPenalty(t *testing.T) {
 	st := mustStore(t)
 	acct, _, _ := st.CreateAccount("o@x.dev", "owner", 0)
 	code, _ := st.CreatePairCode(acct.ID)
-	id, _, _ := st.ConsumePairCode(code, "box", "pk", "linux")
+	id, _, _ := st.ConsumePairCode(code, "box", "pk", "linux", "")
 	g := &Gateway{st: st, hub: NewHub(st), dep: &Dependability{st: st}}
 	r := &Rerun{gw: g}
 	r.mismatch(id, "disagreed", 0)
@@ -309,7 +309,7 @@ func TestClassDemotion(t *testing.T) {
 	st := mustStore(t)
 	acct, _, _ := st.CreateAccount("o@x.dev", "owner", 0)
 	code, _ := st.CreatePairCode(acct.ID)
-	id, _, _ := st.ConsumePairCode(code, "box", "pk", "linux")
+	id, _, _ := st.ConsumePairCode(code, "box", "pk", "linux", "")
 	st.UpdateDeviceProfile(id, "linux x86_64", "B", "sandboxed", `{"tokens_per_s":30,"params_b":8,"vram_gb":12,"ram_gb":32,"gpu":"RTX 4070"}`, "m")
 	g := &Gateway{st: st, hub: NewHub(st), dep: &Dependability{st: st}}
 	for i := 0; i < 6; i++ {
@@ -350,7 +350,7 @@ func TestAppealsAndRemoval(t *testing.T) {
 	acct, _, _ := st.CreateAccount("ap@x.dev", "owner", 0)
 	other, _, _ := st.CreateAccount("other@x.dev", "owner", 0)
 	code, _ := st.CreatePairCode(acct.ID)
-	id, _, _ := st.ConsumePairCode(code, "box", "pk", "linux")
+	id, _, _ := st.ConsumePairCode(code, "box", "pk", "linux", "")
 	dep := &Dependability{st: st}
 	dev, _ := st.Device(id)
 	dep.Penalize(dev, "j1", CauseOwnerAction, 1000, "quit") // 70 -> 60, debit 2000
@@ -399,5 +399,37 @@ func TestAppealsAndRemoval(t *testing.T) {
 	dev, _ = st.Device(id)
 	if dev.SuspendedUntil != removedUntil {
 		t.Fatalf("not removed after 3 suspensions: until %d", dev.SuspendedUntil)
+	}
+}
+
+func TestOneAccountPerDevice(t *testing.T) {
+	st := mustStore(t)
+	a, _, _ := st.CreateAccount("a@x.dev", "owner", 0)
+	b, _, _ := st.CreateAccount("b@x.dev", "owner", 0)
+	c1, _ := st.CreatePairCode(a.ID)
+	id1, _, err := st.ConsumePairCode(c1, "laptop", "pk", "linux", "hw1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.SetDeviceScore(id1, 42, 3, now()+3600) // penalised and suspended
+	c2, _ := st.CreatePairCode(b.ID)
+	if _, _, err := st.ConsumePairCode(c2, "laptop", "pk", "linux", "hw1"); err != ErrPairedElsewhere {
+		t.Fatalf("second account on the same machine: %v", err)
+	}
+	c3, _ := st.CreatePairCode(a.ID)
+	id2, _, err := st.ConsumePairCode(c3, "laptop", "pk2", "linux", "hw1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dev, _ := st.Device(id2)
+	if dev.Dependability != 42 || dev.SuspendedUntil <= now() {
+		t.Fatalf("re-pairing should keep score and suspension: %+v", dev)
+	}
+	if list, _ := st.DevicesByOwner(a.ID); len(list) != 1 || list[0].ID != id2 {
+		t.Fatalf("replaced device should be hidden: %d devices", len(list))
+	}
+	c4, _ := st.CreatePairCode(b.ID)
+	if _, _, err := st.ConsumePairCode(c4, "other", "pk", "linux", "hw2"); err != nil {
+		t.Fatal(err)
 	}
 }

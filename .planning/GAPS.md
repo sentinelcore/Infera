@@ -16,7 +16,7 @@ Audited 2026-11-24. ✅ built · 🟡 partial · ⬜ not built. Priority: P1 nex
 | G10 | Dependability | One-tap appeal; repeated suspensions within 30 days → removal; quit warning with exact cost in tray | ✅ Appeal button on each penalty (dashboard), admin appeals queue (uphold = points back, debit refunded, suspension/removal lifted); 3 suspensions in 30 days → removed; tray shows "Quit now: lose $X, $2X debited, −10" while a job runs; phone shows exact amounts and hides "Stop service" mid-job | P2 |
 | G11 | Jobs | **Transcription API** (`/v1/audio/transcriptions`, Whisper on phones and laptops) | ⬜ | P2 |
 | G12 | Scheduler | Hedged interactive requests (two devices, first answer wins) | ⬜ | P2 |
-| G13 | Trust | Anti-sybil: one pairing per device fingerprint | ⬜ | P2 |
+| G13 | Trust | Anti-sybil: one pairing per device fingerprint | ✅ nodes send a hash of the OS machine ID (Linux machine-id, macOS IOPlatformUUID, Windows MachineGuid, Android ANDROID_ID); server stores a hash, refuses a second account (409), and re-pairing to the same account keeps score/suspension. Relaxed while INFERA_PAIR_CODE_REUSE=1 (testing) | P2 |
 | G14 | Payouts | Wallet ownership proof (signed message or test transfer); identity check at threshold; sanctions screening before each batch | 🟡 (format check + 48 h hold) | P2 |
 | G15 | Ops | Metrics endpoint, error tracking, public status page | ✅ /metrics, /status, crash + starved-queue alerts (set INFERA_ALERT_WEBHOOK to a Slack/Discord webhook) | P2 |
 | G16 | Node | Identity key in OS keychain / Android Keystore | 🟡 (file with 0600 / app prefs) | P2 |
