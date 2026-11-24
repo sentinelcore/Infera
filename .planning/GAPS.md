@@ -30,3 +30,4 @@ Audited 2026-11-24. ✅ built · 🟡 partial · ⬜ not built. Priority: P1 nex
 | G24 | Ledger | On-chain anchoring of receipt batches; token | ⬜ | P3 (legal first) |
 | G25 | Installers | Signed `.dmg` / `.msi`, notarized | ⬜ | Owner: Apple/Windows certificates |
 | G26 | Payouts | Automated USDT sending | ⬜ | Manual by decision |
+| G27 | Android | Model downloads resume after drops (HTTP Range), auto-retry, skip if already downloaded | ✅ (owner report: a dropped download restarted from zero) | P1 |

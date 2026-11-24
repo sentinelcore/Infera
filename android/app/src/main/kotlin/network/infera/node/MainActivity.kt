@@ -191,26 +191,25 @@ class MainActivity : Activity() {
         try {
             val dir = File(filesDir, "models").apply { mkdirs() }
             val file = File(dir, "$modelId.gguf")
-            if (url.isNotEmpty()) {
-                Api.http.newCall(Request.Builder().url(url).build()).execute().use { r ->
-                    if (!r.isSuccessful) throw IllegalStateException("download failed (${r.code})")
-                    val total = r.body!!.contentLength()
-                    val tmp = File(dir, "$modelId.part")
-                    r.body!!.byteStream().use { input -> tmp.outputStream().use { out ->
-                        val buf = ByteArray(1 shl 16); var done = 0L; var last = 0L
-                        while (true) {
-                            val n = input.read(buf); if (n < 0) break
-                            out.write(buf, 0, n); done += n
-                            if (done - last > 2_000_000) {
-                                last = done
-                                val pct = if (total > 0) (done * 100 / total).toInt() else 0
-                                ui.post { progress?.visibility = View.VISIBLE; progress?.isIndeterminate = total <= 0; progress?.progress = pct }
-                                say("Downloading… ${done / 1_000_000} MB" + if (total > 0) " of ${total / 1_000_000} MB ($pct%)" else "")
-                            }
-                        }
-                    } }
-                    tmp.renameTo(file)
+            if (url.isNotEmpty() && !file.exists()) {
+                // Resumable: keep the partial file and ask only for the missing bytes (HTTP Range);
+                // retry by itself when the connection drops.
+                val tmp = File(dir, "$modelId.part")
+                var attempt = 0
+                while (true) {
+                    try {
+                        downloadResumable(url, tmp, say)
+                        break
+                    } catch (e: java.io.IOException) {
+                        attempt++
+                        if (attempt > 5) throw IllegalStateException("download keeps dropping (${e.message}); tap the button to continue from ${tmp.length() / 1_000_000} MB")
+                        say("Connection dropped at ${tmp.length() / 1_000_000} MB, retrying in ${attempt * 3} s…")
+                        Thread.sleep(attempt * 3000L)
+                    }
                 }
+                if (!tmp.renameTo(file)) throw IllegalStateException("couldn't save the model file")
+            } else if (file.exists()) {
+                say("Model already downloaded")
             }
             if (!file.exists()) throw IllegalStateException("enter a model URL to download")
             ui.post { progress?.isIndeterminate = true }
@@ -235,6 +234,36 @@ class MainActivity : Activity() {
         } catch (e: Throwable) {
             ui.post { progress?.visibility = View.GONE }
             say("Problem: ${e.message ?: e.javaClass.simpleName}. Check Wi-Fi and storage space, then tap the button again.")
+        }
+    }
+
+
+    /** Downloads into [tmp], continuing from its current size when the server supports ranges. */
+    private fun downloadResumable(url: String, tmp: File, say: (String) -> Unit) {
+        val have = if (tmp.exists()) tmp.length() else 0L
+        val req = Request.Builder().url(url).apply { if (have > 0) header("Range", "bytes=$have-") }.build()
+        Api.http.newCall(req).execute().use { r ->
+            if (!r.isSuccessful) throw IllegalStateException("download failed (${r.code})")
+            val resumed = r.code == 206 && have > 0
+            val start = if (resumed) have else 0L
+            val total = (r.body!!.contentLength().takeIf { it > 0 } ?: -1L).let { if (it > 0) it + start else -1L }
+            if (resumed) say("Continuing from ${start / 1_000_000} MB…")
+            r.body!!.byteStream().use { input ->
+                java.io.FileOutputStream(tmp, resumed).use { out ->
+                    val buf = ByteArray(1 shl 16); var done = start; var last = start
+                    while (true) {
+                        val n = input.read(buf); if (n < 0) break
+                        out.write(buf, 0, n); done += n
+                        if (done - last > 2_000_000) {
+                            last = done
+                            val pct = if (total > 0) (done * 100 / total).toInt() else 0
+                            ui.post { progress?.visibility = View.VISIBLE; progress?.isIndeterminate = total <= 0; progress?.progress = pct }
+                            say("Downloading… ${done / 1_000_000} MB" + if (total > 0) " of ${total / 1_000_000} MB ($pct%)" else "")
+                        }
+                    }
+                }
+            }
+            if (total > 0 && tmp.length() < total) throw java.io.IOException("stream ended early")
         }
     }
 
