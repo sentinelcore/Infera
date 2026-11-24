@@ -18,6 +18,8 @@ data class Pairing(val server: String, val deviceId: String, val token: String)
 data class CatalogModel(
     val id: String, val label: String, val kind: String, val paramsB: Double,
     val ggufUrl: String, val ggufMb: Int, val phoneMinRamGb: Double,
+    /** SHA-256 of the GGUF, if the server knows it. */
+    val sha256: String = "",
 )
 
 const val DEFAULT_SERVER = "https://control-plane-production-11856175.up.railway.app"
@@ -58,7 +60,7 @@ object Api {
                 fun d(k: String) = s(k).toDoubleOrNull() ?: 0.0
                 val url = s("gguf_url")
                 if (url.isEmpty() || s("kind") != "chat") null
-                else CatalogModel(s("id"), s("label"), s("kind"), d("params_b"), url, d("gguf_mb").toInt(), d("phone_min_ram_gb"))
+                else CatalogModel(s("id"), s("label"), s("kind"), d("params_b"), url, d("gguf_mb").toInt(), d("phone_min_ram_gb"), s("sha256").lowercase())
             }
         }
     }

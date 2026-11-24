@@ -12,13 +12,14 @@ import (
 // Model catalog: the models everyone serves under shared names, so apps can offer a one-tap
 // picker instead of asking for URLs. Override with INFERA_CATALOG (same JSON shape).
 type CatalogModel struct {
-	ID        string  `json:"id"`         // name customers request, e.g. qwen3-1.7b
-	Label     string  `json:"label"`      // shown in pickers
-	Kind      string  `json:"kind"`       // chat | embeddings
-	ParamsB   float64 `json:"params_b"`   // size, for device classes
-	GGUFURL   string  `json:"gguf_url"`   // phones (llama.cpp)
-	GGUFMB    int     `json:"gguf_mb"`    // download size
-	OllamaTag string  `json:"ollama_tag"` // desktops (Ollama)
+	ID        string  `json:"id"`               // name customers request, e.g. qwen3-1.7b
+	Label     string  `json:"label"`            // shown in pickers
+	Kind      string  `json:"kind"`             // chat | embeddings
+	ParamsB   float64 `json:"params_b"`         // size, for device classes
+	GGUFURL   string  `json:"gguf_url"`         // phones (llama.cpp)
+	GGUFMB    int     `json:"gguf_mb"`          // download size
+	SHA256    string  `json:"sha256,omitempty"` // of the GGUF; empty = apps use the host's X-Linked-Etag (Hugging Face)
+	OllamaTag string  `json:"ollama_tag"`       // desktops (Ollama)
 	PhoneRAM  float64 `json:"phone_min_ram_gb,omitempty"`
 	DeskRAM   float64 `json:"desktop_min_ram_gb,omitempty"`
 	DeskVRAM  float64 `json:"desktop_min_vram_gb,omitempty"`

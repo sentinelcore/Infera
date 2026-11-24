@@ -169,7 +169,7 @@ class MainActivity : Activity() {
             status.text = "Starting download of ${m.ggufMb} MB… keep the app open"
             window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             Thread {
-                setupModel(m.ggufUrl, m.id, m.paramsB.toFloat()) { s -> ui.post { status.text = s } }
+                setupModel(m.ggufUrl, m.id, m.paramsB.toFloat(), m.sha256, m.ggufMb.toLong()) { s -> ui.post { status.text = s } }
                 ui.post { go.isEnabled = true; go.text = "Download and start"; window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
             }.start()
         }
@@ -187,7 +187,7 @@ class MainActivity : Activity() {
         root.addView(adv)
     }
 
-    private fun setupModel(url: String, modelId: String, paramsB: Float, say: (String) -> Unit) {
+    private fun setupModel(url: String, modelId: String, paramsB: Float, sha256: String = "", sizeMb: Long = 0, say: (String) -> Unit) {
         try {
             val dir = File(filesDir, "models").apply { mkdirs() }
             val file = File(dir, "$modelId.gguf")
@@ -195,10 +195,17 @@ class MainActivity : Activity() {
                 // Resumable: keep the partial file and ask only for the missing bytes (HTTP Range);
                 // retry by itself when the connection drops.
                 val tmp = File(dir, "$modelId.part")
+                val shaFile = File(dir, "$modelId.sha256")
+                // Disk quota: one model at a time. Remove other models (and their partial files) first.
+                dir.listFiles()?.filter { !it.name.startsWith("$modelId.") }?.forEach { it.delete() }
+                val need = (sizeMb * 1_000_000L - tmp.length()).coerceAtLeast(0) + 500_000_000L
+                if (sizeMb > 0 && dir.usableSpace < need)
+                    throw IllegalStateException("not enough storage: needs ${need / 1_000_000} MB free, ${dir.usableSpace / 1_000_000} MB available")
+                if (sha256.isNotEmpty()) shaFile.writeText(sha256)
                 var attempt = 0
                 while (true) {
                     try {
-                        downloadResumable(url, tmp, say)
+                        downloadResumable(url, tmp, shaFile, say)
                         break
                     } catch (e: java.io.IOException) {
                         attempt++
@@ -207,7 +214,18 @@ class MainActivity : Activity() {
                         Thread.sleep(attempt * 3000L)
                     }
                 }
+                // Verified download: SHA-256 from the catalog, or the host's X-Linked-Etag.
+                val expect = if (shaFile.exists()) shaFile.readText().trim().lowercase() else ""
+                if (expect.length == 64) {
+                    say("Checking the file…")
+                    val got = sha256Of(tmp)
+                    if (got != expect) {
+                        tmp.delete(); shaFile.delete()
+                        throw IllegalStateException("the downloaded file is damaged (checksum mismatch); tap the button to download it again")
+                    }
+                }
                 if (!tmp.renameTo(file)) throw IllegalStateException("couldn't save the model file")
+                shaFile.delete()
             } else if (file.exists()) {
                 say("Model already downloaded")
             }
@@ -239,11 +257,20 @@ class MainActivity : Activity() {
 
 
     /** Downloads into [tmp], continuing from its current size when the server supports ranges. */
-    private fun downloadResumable(url: String, tmp: File, say: (String) -> Unit) {
+    private fun downloadResumable(url: String, tmp: File, shaFile: File, say: (String) -> Unit) {
         val have = if (tmp.exists()) tmp.length() else 0L
         val req = Request.Builder().url(url).apply { if (have > 0) header("Range", "bytes=$have-") }.build()
         Api.http.newCall(req).execute().use { r ->
             if (!r.isSuccessful) throw IllegalStateException("download failed (${r.code})")
+            if (!shaFile.exists()) {
+                // Hugging Face puts the file's SHA-256 in X-Linked-Etag on the redirect.
+                var p: okhttp3.Response? = r
+                while (p != null) {
+                    val tag = (p.header("X-Linked-Etag") ?: "").trim('"', ' ').lowercase()
+                    if (tag.length == 64 && tag.all { it in "0123456789abcdef" }) { shaFile.writeText(tag); break }
+                    p = p.priorResponse
+                }
+            }
             val resumed = r.code == 206 && have > 0
             val start = if (resumed) have else 0L
             val total = (r.body!!.contentLength().takeIf { it > 0 } ?: -1L).let { if (it > 0) it + start else -1L }
@@ -265,6 +292,12 @@ class MainActivity : Activity() {
             }
             if (total > 0 && tmp.length() < total) throw java.io.IOException("stream ended early")
         }
+    }
+
+    private fun sha256Of(f: File): String {
+        val md = java.security.MessageDigest.getInstance("SHA-256")
+        f.inputStream().use { i -> val b = ByteArray(1 shl 20); while (true) { val n = i.read(b); if (n < 0) break; md.update(b, 0, n) } }
+        return md.digest().joinToString("") { "%02x".format(it) }
     }
 
     private fun refreshRemote() {
