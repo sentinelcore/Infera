@@ -22,11 +22,11 @@ Status: ✅ done · 🔨 in progress · ⬜ not started
 | CP-05 | Ledger with holds, multipliers, debits, suspensions | ✅ |
 | CP-06 | Test prompts (canaries) that catch wrong answers | ✅ |
 | CP-07 | Penalty decay: half after 30 days, dropped after 90 | ✅ |
-| CP-08 | Stripe prepaid credits for developers | ⬜ Phase 2 |
+| CP-08 | Stripe prepaid credits for developers | ✅ code done; needs Stripe test keys to verify live |
 | CP-09 | Postgres + multi-region | ⬜ Phase 4 |
 | PAY-01 | USDT wallet with address checks and 48 h hold | ✅ |
 | PAY-02 | Weekly payout batch + mark sent | ✅ |
-| PAY-03 | Automated USDT sending (Fireblocks/BitGo or exchange API) | ⬜ Phase 2 |
+| PAY-03 | USDT sending via partners (manual batch for now) | ⬜ manual by decision |
 | OPS-01 | Docker + HTTPS deploy, CI, release builds | ✅ |
 | OPS-02 | Repo references point at the renamed repository (sentinelcore/Infera) | ✅ |
 

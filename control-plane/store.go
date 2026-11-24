@@ -99,6 +99,12 @@ CREATE TABLE IF NOT EXISTS payouts (
   tx_hash TEXT NOT NULL DEFAULT '',
   created_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS stripe_payments (
+  session_id TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL,
+  amount INTEGER NOT NULL,
+  created_at INTEGER NOT NULL
+);
 CREATE INDEX IF NOT EXISTS ledger_account ON ledger(account_id);
 CREATE INDEX IF NOT EXISTS score_device ON score_events(device_id);
 `
@@ -185,6 +191,24 @@ func (s *Store) AccountByID(id string) (*Account, error) {
 func (s *Store) AdjustCredits(accountID string, delta int64) error {
 	_, err := s.db.Exec(`UPDATE accounts SET credits=credits+? WHERE id=?`, delta, accountID)
 	return err
+}
+
+// CreditFromStripe adds paid credits once per Checkout Session (webhooks can be delivered twice).
+func (s *Store) CreditFromStripe(sessionID, accountID string, amount int64) error {
+	if _, err := s.AccountByID(accountID); err != nil {
+		return fmt.Errorf("unknown account %s", accountID)
+	}
+	res, err := s.db.Exec(`INSERT OR IGNORE INTO stripe_payments(session_id,account_id,amount,created_at) VALUES(?,?,?,?)`, sessionID, accountID, amount, now())
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return nil // already credited
+	}
+	if err := s.AdjustCredits(accountID, amount); err != nil {
+		return err
+	}
+	return s.AddLedger(accountID, "", "", "credit_purchase", amount, 0, "Stripe "+sessionID)
 }
 
 func (s *Store) SetPayoutAddress(accountID, network, address string) error {

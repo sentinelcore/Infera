@@ -164,6 +164,14 @@ td.num { font-variant-numeric: tabular-nums; font-family: var(--mono); }
       <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap">
         <h2>Credits: <span class="money" id="c-credits">$0.00</span></h2><button class="ghost" id="c-signout">Sign out</button>
       </div>
+      <div class="card" id="buy-card" hidden style="margin-bottom:14px">
+        <h3>Add credits</h3>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">
+          <div style="flex:1;min-width:140px"><label for="buy-usd">Amount (USD)</label><input id="buy-usd" type="number" min="5" max="5000" value="20"></div>
+          <button class="primary" id="buy-go">Pay with card</button>
+        </div>
+        <p class="muted">Secure checkout by Stripe. Credits appear here a few seconds after payment.</p>
+      </div>
       <div class="grid">
         <div class="card">
           <h3>Try it</h3>
@@ -343,6 +351,12 @@ $("t-run").onclick = async () => {
     showCust();
   } catch (e) { out.textContent = e.message; }
 };
+$("buy-go").onclick = async () => {
+  try { const r = await call("/api/billing/checkout", { method: "POST", key: custKey, body: JSON.stringify({ usd: +$("buy-usd").value }) }); location.href = r.url; }
+  catch (e) { toast(e.message); }
+};
+call("/api/billing").then(b => { $("buy-card").hidden = !b.card_payments; }).catch(() => {});
+if (new URLSearchParams(location.search).get("paid")) toast("Payment received. Your credits will appear in a few seconds.");
 if (custKey) showCust();
 
 // ---------- admin ----------

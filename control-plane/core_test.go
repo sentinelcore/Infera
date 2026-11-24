@@ -1,8 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"crypto/ed25519"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"net/http/httptest"
 	"path/filepath"
 	"testing"
 	"time"
@@ -134,5 +140,34 @@ func TestCanaryJudging(t *testing.T) {
 	dev, _ = st.Device(id)
 	if dev.Dependability != 55 {
 		t.Fatalf("two fails in three should penalize -15: %v", dev.Dependability)
+	}
+}
+
+func TestStripeWebhook(t *testing.T) {
+	st, _ := OpenStore(filepath.Join(t.TempDir(), "t.db"))
+	acct, _, _ := st.CreateAccount("d@x.dev", "customer", 0)
+	b := &Billing{st: st, secretKey: "sk_test", whSecret: "whsec_test"}
+	body := []byte(`{"id":"evt_1","type":"checkout.session.completed","data":{"object":{"id":"cs_1","payment_status":"paid","amount_total":2500,"currency":"usd","metadata":{"account_id":"` + acct.ID + `"}}}}`)
+	ts := time.Now().Unix()
+	mac := hmac.New(sha256.New, []byte("whsec_test"))
+	fmt.Fprintf(mac, "%d.", ts)
+	mac.Write(body)
+	good := fmt.Sprintf("t=%d,v1=%s", ts, hex.EncodeToString(mac.Sum(nil)))
+	send := func(sig string) int {
+		r := httptest.NewRequest("POST", "/api/stripe/webhook", bytes.NewReader(body))
+		r.Header.Set("Stripe-Signature", sig)
+		w := httptest.NewRecorder()
+		b.Webhook(w, r)
+		return w.Code
+	}
+	if send("t=1,v1=bad") != 400 {
+		t.Fatal("bad signature accepted")
+	}
+	if send(good) != 200 || send(good) != 200 { // delivered twice
+		t.Fatal("good webhook rejected")
+	}
+	a, _ := st.AccountByID(acct.ID)
+	if a.Credits != 25*microUSD {
+		t.Fatalf("credits %d, want $25 credited once", a.Credits)
 	}
 }

@@ -61,7 +61,13 @@ func main() {
 	api := &API{st: st, hub: hub, cfg: cfg, inviteCode: os.Getenv("INFERA_INVITE_CODE"), adminToken: os.Getenv("INFERA_ADMIN_TOKEN"),
 		starterCents: int64(envFloat("INFERA_STARTER_CREDITS_USD", 5) * 100)}
 
+	billing := NewBilling(st)
 	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/billing/checkout", billing.Checkout)
+	mux.HandleFunc("POST /api/stripe/webhook", billing.Webhook)
+	mux.HandleFunc("GET /api/billing", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]bool{"card_payments": billing.Enabled()})
+	})
 	mux.HandleFunc("POST /v1/chat/completions", gw.ChatCompletions)
 	mux.HandleFunc("GET /v1/models", gw.Models)
 	mux.HandleFunc("GET /ws/node", hub.ServeNode)
