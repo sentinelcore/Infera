@@ -11,6 +11,5 @@ USER infera
 COPY --from=build /infera-server /usr/local/bin/infera-server
 ENV INFERA_DB=/data/infera.db INFERA_ADDR=:8080
 EXPOSE 8080
-VOLUME /data
 HEALTHCHECK CMD wget -qO- http://127.0.0.1:8080/healthz || exit 1
 ENTRYPOINT ["infera-server"]
