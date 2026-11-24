@@ -10,7 +10,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-14]
+        os: [ubuntu-latest]  # GitHub macOS runners are not available to this repo
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
     steps:
