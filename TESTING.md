@@ -101,6 +101,13 @@ New jobs start only after 5 minutes without keyboard or mouse use (change `idle_
 
 **Get paid:** add a USDT wallet on the dashboard (Tron TRC-20 has the lowest fees). Earnings are held 3–14 days depending on dependability, then paid weekly once your available balance is $10 or more.
 
+## 2b. Contributors: share an Android phone
+
+1. Download the APK: GitHub → Actions → **android** workflow → latest run → artifact **infera-android-debug** (unzip it). Install it on the phone (allow installs from your browser or file manager).
+2. Open Infera, enter the server address and a pairing code from the dashboard.
+3. Paste a direct link to a small GGUF model (1–3B, e.g. a Qwen3-1.7B or Qwen3.5-2B Q4_K_M file), the shared model name (e.g. `qwen3-1.7b`) and its size, then tap **Download and benchmark**. Phones reaching 8+ tokens/s with 8 GB RAM are class M1; 3+ tokens/s is M2.
+4. Tap **Start earning**. Jobs run only while charging, on Wi-Fi, above 50% battery and not warm; with "Ask before every job" on, each offer arrives as a notification with Accept and Decline.
+
 ## 3. Developers: call the API
 
 Sign up on the **Developers** tab (beta accounts get $5 of credits), then:
