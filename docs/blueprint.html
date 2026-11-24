@@ -1,0 +1,838 @@
+<title>DePINClaw Blueprint</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: single reading column (~980px) with full-width diagram panels; sections flow top to bottom like a field manual. */
+:root {
+  --bg: #f4f6f4;
+  --surface: #ffffff;
+  --surface-2: #e9eeeb;
+  --fg: #14201b;
+  --muted: #56655e;
+  --line: #c9d3ce;
+  --accent: #17795a;
+  --accent-soft: #dcefe7;
+  --money: #a86a00;
+  --money-soft: #f6ead2;
+  --alert: #b3412e;
+  --alert-soft: #f6e0db;
+  --font-display: "Sora", "Segoe UI", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1412; --surface: #161f1b; --surface-2: #1d2924; --fg: #e3ebe7; --muted: #9aaba3;
+    --line: #2f3e37; --accent: #4cc398; --accent-soft: #173a2e; --money: #e6ae45; --money-soft: #3a2c10;
+    --alert: #ee8a75; --alert-soft: #3d1f19; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1412; --surface: #161f1b; --surface-2: #1d2924; --fg: #e3ebe7; --muted: #9aaba3;
+  --line: #2f3e37; --accent: #4cc398; --accent-soft: #173a2e; --money: #e6ae45; --money-soft: #3a2c10;
+  --alert: #ee8a75; --alert-soft: #3d1f19; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--font-body); font-size: 16px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 64px;
+}
+.wrap { max-width: 980px; margin: 0 auto; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h1 { font-size: clamp(2rem, 5vw, 3rem); font-weight: 700; letter-spacing: -0.02em; }
+h2 { font-size: clamp(1.4rem, 3vw, 1.85rem); font-weight: 600; letter-spacing: -0.01em; }
+h3 { font-size: 1.1rem; font-weight: 600; }
+p { margin: 0; max-width: 68ch; }
+a { color: var(--accent); }
+code, .mono { font-family: var(--font-mono); font-size: 0.88em; }
+.label {
+  font-family: var(--font-mono); font-size: 0.75rem; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--muted);
+}
+
+/* Header */
+header.top { padding-block: 48px 32px; display: grid; gap: 18px; border-bottom: 1px solid var(--line); }
+header.top .lede { font-size: 1.15rem; color: var(--muted); max-width: 60ch; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-top: 8px; }
+.fact { border-left: 3px solid var(--accent); padding: 4px 0 4px 14px; }
+.fact b { display: block; font-family: var(--font-display); font-size: 1.05rem; }
+.fact span { color: var(--muted); font-size: 0.92rem; }
+
+nav.toc { padding-block: 20px; display: flex; flex-wrap: wrap; gap: 8px; border-bottom: 1px solid var(--line); }
+nav.toc a {
+  text-decoration: none; color: var(--fg); font-size: 0.88rem; padding: 4px 10px;
+  border: 1px solid var(--line); border-radius: 999px; background: var(--surface);
+}
+nav.toc a:hover, nav.toc a:focus-visible { border-color: var(--accent); color: var(--accent); outline: none; }
+
+section { padding-block: 48px 8px; display: grid; gap: 18px; scroll-margin-top: 16px; }
+section > .head { display: grid; gap: 8px; }
+.intro { color: var(--muted); }
+
+/* Diagram panels */
+.figure {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  padding: 16px; overflow-x: auto;
+}
+.figure svg { display: block; width: 100%; height: auto; min-width: 720px; }
+.figure .caption { font-size: 0.85rem; color: var(--muted); margin-top: 10px; }
+.legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 0.85rem; color: var(--muted); margin-top: 10px; }
+.legend i { display: inline-block; width: 22px; height: 0; border-top: 2.5px solid var(--accent); vertical-align: middle; margin-right: 6px; }
+.legend i.money { border-top: 2.5px dashed var(--money); }
+.legend i.plain { border-top-color: var(--muted); }
+
+/* SVG styling via tokens */
+svg text { font-family: var(--font-body); fill: var(--fg); }
+svg .t-title { font-family: var(--font-display); font-weight: 600; font-size: 15px; }
+svg .t-sub { font-size: 12.5px; fill: var(--muted); }
+svg .t-mono { font-family: var(--font-mono); font-size: 12px; fill: var(--muted); }
+svg .t-acc { fill: var(--accent); font-weight: 600; }
+svg .t-money { fill: var(--money); font-weight: 600; }
+svg .box { fill: var(--surface); stroke: var(--line); stroke-width: 1.2; }
+svg .box-2 { fill: var(--surface-2); stroke: var(--line); stroke-width: 1.2; }
+svg .box-acc { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.4; }
+svg .box-money { fill: var(--money-soft); stroke: var(--money); stroke-width: 1.4; }
+svg .box-alert { fill: var(--alert-soft); stroke: var(--alert); stroke-width: 1.4; }
+svg .frame { fill: none; stroke: var(--accent); stroke-width: 1.4; stroke-dasharray: 6 5; }
+svg .ln { stroke: var(--muted); stroke-width: 1.6; fill: none; }
+svg .ln-acc { stroke: var(--accent); stroke-width: 2; fill: none; }
+svg .ln-money { stroke: var(--money); stroke-width: 2; fill: none; stroke-dasharray: 7 5; }
+svg .ln-alert { stroke: var(--alert); stroke-width: 1.8; fill: none; stroke-dasharray: 5 4; }
+svg .life { stroke: var(--line); stroke-width: 1.4; stroke-dasharray: 4 4; }
+svg .head-acc { fill: var(--accent); }
+svg .head-mut { fill: var(--muted); }
+svg .head-money { fill: var(--money); }
+svg .head-alert { fill: var(--alert); }
+svg .dot { fill: var(--accent); }
+
+/* Cards, tables */
+.grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.card ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 0.95rem; }
+.card .tag { font-family: var(--font-mono); font-size: 0.75rem; color: var(--accent); }
+.table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+table { width: 100%; border-collapse: collapse; font-size: 0.93rem; min-width: 640px; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--font-mono); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 500; background: var(--surface-2); }
+tr:last-child td { border-bottom: 0; }
+td.yes { color: var(--accent); font-weight: 500; }
+
+/* Money flow */
+.flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 10px; }
+.flow .step { flex: 1 1 150px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 4px; align-content: start; min-width: 0; }
+.flow .step b { font-family: var(--font-display); font-size: 0.98rem; }
+.flow .step span { color: var(--muted); font-size: 0.88rem; }
+.flow .arrow { align-self: center; color: var(--money); font-family: var(--font-mono); font-size: 1.2rem; }
+.split { display: flex; height: 46px; border-radius: 8px; overflow: hidden; font-family: var(--font-mono); font-size: 0.85rem; }
+.split div { display: flex; align-items: center; padding: 0 14px; }
+.split .op { width: 70%; background: var(--money-soft); color: var(--money); border: 1px solid var(--money); border-right: 0; border-radius: 8px 0 0 8px; }
+.split .pr { width: 30%; background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); border-radius: 0 8px 8px 0; }
+
+/* Roadmap */
+.roadmap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+.rm { display: grid; grid-template-columns: 150px repeat(24, minmax(24px, 1fr)); row-gap: 8px; min-width: 820px; align-items: center; }
+.rm .wk { font-family: var(--font-mono); font-size: 0.7rem; color: var(--muted); text-align: center; font-variant-numeric: tabular-nums; }
+.rm .rowlabel { font-size: 0.85rem; font-weight: 600; font-family: var(--font-display); padding-right: 8px; }
+.rm .bar { border-radius: 6px; padding: 6px 10px; font-size: 0.78rem; line-height: 1.3; min-width: 0; }
+.rm .bar.build { background: var(--accent-soft); border: 1px solid var(--accent); color: var(--fg); }
+.rm .bar.rev { background: var(--money-soft); border: 1px solid var(--money); color: var(--fg); }
+.rm .bar strong { display: block; font-size: 0.8rem; }
+.rm .sep { grid-column: 1 / -1; height: 1px; background: var(--line); }
+
+/* Waves */
+.waves { display: grid; gap: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; }
+.wave { display: grid; grid-template-columns: 130px 1fr; gap: 12px; align-items: center; }
+.wave .nm { font-size: 0.88rem; }
+.wave .nm small { display: block; color: var(--muted); font-family: var(--font-mono); font-size: 0.72rem; }
+.wave .track { background: var(--surface-2); border-radius: 6px; height: 30px; position: relative; }
+.wave .fill { position: absolute; inset: 0 auto 0 0; background: var(--accent); border-radius: 6px; min-width: 4px; }
+.wave .fill.open { background: repeating-linear-gradient(135deg, var(--accent-soft) 0 8px, var(--surface-2) 8px 16px); border: 1px dashed var(--accent); }
+.wave .val { position: absolute; top: 50%; transform: translateY(-50%); font-family: var(--font-mono); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+.wave .who { grid-column: 2; font-size: 0.82rem; color: var(--muted); margin-top: -4px; }
+
+/* Checklist */
+.check { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.check li { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; }
+.check label { display: flex; gap: 12px; align-items: flex-start; cursor: pointer; }
+.check input { margin-top: 5px; accent-color: var(--accent); width: 16px; height: 16px; flex: none; }
+.check input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.check input:checked + span { color: var(--muted); text-decoration: line-through; }
+
+.post { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: grid; gap: 10px; font-size: 0.95rem; }
+.post p { max-width: none; }
+.post .n { font-family: var(--font-mono); color: var(--accent); font-size: 0.8rem; }
+.note { font-size: 0.85rem; color: var(--muted); }
+footer { margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.85rem; }
+
+@media (max-width: 560px) {
+  .wave { grid-template-columns: 1fr; gap: 6px; }
+  .wave .who { grid-column: 1; }
+  .flow .arrow { transform: rotate(90deg); width: 100%; text-align: center; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+html { scroll-behavior: smooth; }
+</style>
+
+<div class="wrap">
+
+<header class="top">
+  <span class="label">Build blueprint · v1</span>
+  <h1>DePINClaw Blueprint</h1>
+  <p class="lede">Laptops, desktops and phones serve AI inference while their owners are away. Contributors install the app once and get paid for verified work. Developers call one OpenAI-compatible API.</p>
+  <div class="facts">
+    <div class="fact"><b>Install and forget</b><span>Runs only when the device is idle, plugged in and cool. Pauses within one second when you're back.</span></div>
+    <div class="fact"><b>Revenue from week 2</b><span>The paid API launches on rented GPUs, and traffic moves to community devices as they join.</span></div>
+    <div class="fact"><b>24 weeks to public launch</b><span>Desktops first, then Android, then iPhone. Beta users recruited on X in waves.</span></div>
+  </div>
+</header>
+
+<nav class="toc" aria-label="Sections">
+  <a href="#big-picture">Big picture</a>
+  <a href="#architecture">Architecture</a>
+  <a href="#device">Inside a device</a>
+  <a href="#install-forget">Install and forget</a>
+  <a href="#request">Life of a request</a>
+  <a href="#money">Money flow</a>
+  <a href="#trust">Trust and privacy</a>
+  <a href="#models">Models</a>
+  <a href="#roadmap">Roadmap</a>
+  <a href="#beta">Beta on X</a>
+  <a href="#week1">Week-1 checklist</a>
+</nav>
+
+<!-- 1. Big picture -->
+<section id="big-picture">
+  <div class="head">
+    <span class="label">01 · The idea</span>
+    <h2>The big picture</h2>
+    <p class="intro">Developers send AI requests to the DePINClaw cloud. The cloud picks an idle device that can answer, the device streams the answer back, and the device owner earns a share of what the developer paid. When no device fits, the request goes to rented GPUs so the customer is always served.</p>
+  </div>
+  <div class="figure">
+    <svg viewBox="0 0 900 300" role="img" aria-label="Developers send requests to the DePINClaw cloud, which routes them to idle desktops, laptops and phones, or to rented GPUs as fallback. Money flows from developers to device owners.">
+      <defs>
+        <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head-acc"/></marker>
+        <marker id="m1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head-money"/></marker>
+        <marker id="g1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head-mut"/></marker>
+      </defs>
+      <!-- developers -->
+      <rect x="20" y="95" width="180" height="90" rx="10" class="box"/>
+      <text x="110" y="132" text-anchor="middle" class="t-title">Developers</text>
+      <text x="110" y="154" text-anchor="middle" class="t-sub">apps, agents, OpenRouter</text>
+      <!-- cloud -->
+      <rect x="320" y="80" width="230" height="120" rx="12" class="box-acc"/>
+      <text x="435" y="118" text-anchor="middle" class="t-title">DePINClaw cloud</text>
+      <text x="435" y="142" text-anchor="middle" class="t-sub">API · scheduler · checks</text>
+      <text x="435" y="162" text-anchor="middle" class="t-sub">ledger · payouts</text>
+      <!-- devices -->
+      <rect x="690" y="20" width="190" height="62" rx="10" class="box"/>
+      <text x="785" y="47" text-anchor="middle" class="t-title">Desktops</text>
+      <text x="785" y="67" text-anchor="middle" class="t-sub">GPU · bigger models</text>
+      <rect x="690" y="109" width="190" height="62" rx="10" class="box"/>
+      <text x="785" y="136" text-anchor="middle" class="t-title">Laptops</text>
+      <text x="785" y="156" text-anchor="middle" class="t-sub">Mac / PC · mid models</text>
+      <rect x="690" y="198" width="190" height="62" rx="10" class="box"/>
+      <text x="785" y="225" text-anchor="middle" class="t-title">Phones</text>
+      <text x="785" y="245" text-anchor="middle" class="t-sub">small models · batch</text>
+      <!-- fallback -->
+      <rect x="345" y="240" width="180" height="50" rx="10" class="box-2"/>
+      <text x="435" y="270" text-anchor="middle" class="t-sub">Rented GPUs (fallback)</text>
+      <!-- request arrows -->
+      <path d="M200,125 L318,125" class="ln-acc" marker-end="url(#a1)"/>
+      <text x="259" y="115" text-anchor="middle" class="t-mono">request</text>
+      <path d="M550,120 L688,52" class="ln-acc" marker-end="url(#a1)"/>
+      <path d="M550,140 L688,140" class="ln-acc" marker-end="url(#a1)"/>
+      <path d="M550,160 L688,228" class="ln-acc" marker-end="url(#a1)"/>
+      <text x="612" y="132" text-anchor="middle" class="t-mono">job</text>
+      <path d="M435,200 L435,238" class="ln" marker-end="url(#g1)"/>
+      <!-- money -->
+      <path d="M200,160 L318,160" class="ln-money" marker-end="url(#m1)"/>
+      <text x="259" y="180" text-anchor="middle" class="t-money" font-size="12">$ pays</text>
+      <path d="M550,185 C610,290 700,295 760,262" class="ln-money" marker-end="url(#m1)"/>
+      <text x="640" y="292" text-anchor="middle" class="t-money" font-size="12">owners earn</text>
+    </svg>
+    <div class="legend"><span><i></i>Request and job</span><span><i class="money"></i>Money</span><span><i class="plain"></i>Fallback when no device fits</span></div>
+  </div>
+</section>
+
+<!-- 2. Architecture -->
+<section id="architecture">
+  <div class="head">
+    <span class="label">02 · System design</span>
+    <h2>Architecture</h2>
+    <p class="intro">Two halves: the control plane runs in the cloud in three regions, and the node app runs on each contributor's device. Devices always dial out to the cloud over a secure connection on port 443, so contributors never touch router or firewall settings.</p>
+  </div>
+  <div class="figure">
+    <svg viewBox="0 0 960 640" role="img" aria-label="Architecture: customers call the API gateway; scheduler and node hub route jobs; verifier, ledger, model CDN and update server support them; fallback goes to rented capacity; desktop, Android and iOS nodes connect outbound.">
+      <defs>
+        <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head-acc"/></marker>
+        <marker id="g2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head-mut"/></marker>
+      </defs>
+      <!-- customers -->
+      <rect x="250" y="14" width="420" height="56" rx="10" class="box"/>
+      <text x="460" y="38" text-anchor="middle" class="t-title">Customers</text>
+      <text x="460" y="58" text-anchor="middle" class="t-sub">apps · AI agents · OpenRouter · enterprise</text>
+      <path d="M460,70 L460,140" class="ln-acc" marker-end="url(#a2)"/>
+      <text x="470" y="112" class="t-mono">HTTPS · /v1/chat, /v1/embeddings, /v1/audio</text>
+
+      <!-- control plane frame -->
+      <rect x="20" y="100" width="700" height="330" rx="14" class="frame"/>
+      <text x="38" y="124" class="t-acc" font-size="13">CONTROL PLANE · cloud, 3 regions</text>
+
+      <rect x="50" y="142" width="640" height="58" rx="10" class="box-acc"/>
+      <text x="370" y="167" text-anchor="middle" class="t-title">API Gateway</text>
+      <text x="370" y="188" text-anchor="middle" class="t-sub">OpenAI-compatible API · API keys · rate limits · usage metering · Stripe billing</text>
+
+      <rect x="50" y="226" width="300" height="64" rx="10" class="box"/>
+      <text x="200" y="252" text-anchor="middle" class="t-title">Scheduler</text>
+      <text x="200" y="274" text-anchor="middle" class="t-sub">picks the best device · retries · hedging</text>
+      <rect x="390" y="226" width="300" height="64" rx="10" class="box"/>
+      <text x="540" y="252" text-anchor="middle" class="t-title">Node hub + registry</text>
+      <text x="540" y="274" text-anchor="middle" class="t-sub">live connections · device state (Redis)</text>
+      <path d="M200,200 L200,224" class="ln" marker-end="url(#g2)"/>
+      <path d="M350,258 L388,258" class="ln" marker-start="url(#g2)" marker-end="url(#g2)"/>
+
+      <rect x="50" y="318" width="145" height="84" rx="10" class="box"/>
+      <text x="122" y="350" text-anchor="middle" class="t-title">Verifier</text>
+      <text x="122" y="372" text-anchor="middle" class="t-sub">test prompts</text>
+      <text x="122" y="389" text-anchor="middle" class="t-sub">re-runs · reputation</text>
+      <rect x="215" y="318" width="145" height="84" rx="10" class="box"/>
+      <text x="287" y="350" text-anchor="middle" class="t-title">Ledger</text>
+      <text x="287" y="372" text-anchor="middle" class="t-sub">receipts → points</text>
+      <text x="287" y="389" text-anchor="middle" class="t-sub">→ payouts (Postgres)</text>
+      <rect x="380" y="318" width="145" height="84" rx="10" class="box"/>
+      <text x="452" y="350" text-anchor="middle" class="t-title">Model CDN</text>
+      <text x="452" y="372" text-anchor="middle" class="t-sub">signed models</text>
+      <text x="452" y="389" text-anchor="middle" class="t-sub">Cloudflare R2</text>
+      <rect x="545" y="318" width="145" height="84" rx="10" class="box"/>
+      <text x="617" y="350" text-anchor="middle" class="t-title">Update server</text>
+      <text x="617" y="372" text-anchor="middle" class="t-sub">signed app updates</text>
+      <text x="617" y="389" text-anchor="middle" class="t-sub">staged rollout</text>
+
+      <!-- fallback -->
+      <rect x="760" y="222" width="185" height="72" rx="10" class="box-2"/>
+      <text x="852" y="250" text-anchor="middle" class="t-title">Rented capacity</text>
+      <text x="852" y="272" text-anchor="middle" class="t-sub">Together · DeepInfra · Vast</text>
+      <path d="M720,258 L758,258" class="ln" marker-end="url(#g2)"/>
+      <text x="852" y="318" text-anchor="middle" class="t-mono">fallback when no</text>
+      <text x="852" y="334" text-anchor="middle" class="t-mono">device meets the SLA</text>
+
+      <!-- connection label -->
+      <text x="480" y="462" text-anchor="middle" class="t-mono">outbound secure WebSocket on :443 · no port forwarding · reconnects automatically</text>
+
+      <!-- devices -->
+      <rect x="20" y="490" width="290" height="132" rx="12" class="box"/>
+      <text x="40" y="518" class="t-title">Desktop &amp; laptop</text>
+      <text x="40" y="544" class="t-sub">Tray app · starts at login · auto-updates</text>
+      <text x="40" y="566" class="t-sub">Rust agent core</text>
+      <text x="40" y="588" class="t-sub">llama.cpp (CUDA / Vulkan / Metal), MLX</text>
+      <text x="40" y="610" class="t-mono">Windows · macOS · Linux</text>
+
+      <rect x="330" y="490" width="290" height="132" rx="12" class="box"/>
+      <text x="350" y="518" class="t-title">Android</text>
+      <text x="350" y="544" class="t-sub">Background service while charging</text>
+      <text x="350" y="566" class="t-sub">Rust agent core (shared)</text>
+      <text x="350" y="588" class="t-sub">llama.cpp · MLC LLM</text>
+      <text x="350" y="610" class="t-mono">Play Store + direct APK</text>
+
+      <rect x="640" y="490" width="300" height="132" rx="12" class="box"/>
+      <text x="660" y="518" class="t-title">iPhone</text>
+      <text x="660" y="544" class="t-sub">Charge Mode (plugged in, overnight)</text>
+      <text x="660" y="566" class="t-sub">Rust agent core (shared)</text>
+      <text x="660" y="588" class="t-sub">llama.cpp (Metal)</text>
+      <text x="660" y="610" class="t-mono">TestFlight → App Store</text>
+
+      <path d="M165,488 L165,432" class="ln-acc" marker-end="url(#a2)"/>
+      <path d="M475,488 L475,432" class="ln-acc" marker-end="url(#a2)"/>
+      <path d="M760,488 L690,432" class="ln-acc" marker-end="url(#a2)"/>
+    </svg>
+    <p class="caption">Control plane services are written in Go. Postgres holds accounts and the ledger, Redis holds live device state, and Cloudflare provides DNS, protection and file storage.</p>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Cloud service</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td><b>API Gateway</b></td><td>Takes customer requests in the OpenAI format, checks API keys and credits, counts tokens, and bills through Stripe.</td></tr>
+        <tr><td><b>Scheduler</b></td><td>Chooses a device that has the right model loaded, is fast enough and has good reputation. Retries elsewhere if a device drops. Sends to rented GPUs when no device fits.</td></tr>
+        <tr><td><b>Node hub</b></td><td>Holds the open connection to every device and tracks its state: idle, busy, paused, model loaded, speed.</td></tr>
+        <tr><td><b>Verifier</b></td><td>Sends test prompts with known answers and re-runs a few percent of jobs on a second device to catch bad results.</td></tr>
+        <tr><td><b>Ledger</b></td><td>Stores each job's signed receipt and turns it into points, earnings and payouts.</td></tr>
+        <tr><td><b>Model CDN and update server</b></td><td>Serve signed model files and signed app updates, so devices only ever run what we published.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- 3. Inside a device -->
+<section id="device">
+  <div class="head">
+    <span class="label">03 · Node app</span>
+    <h2>Inside a device</h2>
+    <p class="intro">Every platform runs the same Rust core, wrapped in a thin shell that fits the operating system. The core only ever starts our bundled inference engine with our signed models. It runs no containers and no customer code, which keeps it safe to install and simple to get through app-store review.</p>
+  </div>
+  <div class="figure">
+    <svg viewBox="0 0 900 400" role="img" aria-label="Layered node stack: platform shell, Rust agent core with eight modules, inference engine, and device hardware.">
+      <!-- shell -->
+      <rect x="20" y="16" width="860" height="70" rx="10" class="box-2"/>
+      <text x="40" y="44" class="t-title">Platform shell</text>
+      <text x="40" y="68" class="t-sub">What the user sees and how the OS keeps it running</text>
+      <rect x="400" y="30" width="150" height="42" rx="8" class="box"/>
+      <text x="475" y="56" text-anchor="middle" class="t-sub">Tray app (Tauri)</text>
+      <rect x="562" y="30" width="150" height="42" rx="8" class="box"/>
+      <text x="637" y="56" text-anchor="middle" class="t-sub">Android service</text>
+      <rect x="724" y="30" width="142" height="42" rx="8" class="box"/>
+      <text x="795" y="56" text-anchor="middle" class="t-sub">iOS Charge Mode</text>
+
+      <!-- core -->
+      <rect x="20" y="104" width="860" height="168" rx="12" class="box-acc"/>
+      <text x="40" y="132" class="t-title">Agent core (Rust, one codebase)</text>
+      <g>
+        <rect x="40" y="148" width="194" height="52" rx="8" class="box"/><text x="56" y="170" class="t-title" font-size="13">identity</text><text x="56" y="189" class="t-sub" font-size="11.5">device key, pairing code</text>
+        <rect x="248" y="148" width="194" height="52" rx="8" class="box"/><text x="264" y="170" class="t-title" font-size="13">transport</text><text x="264" y="189" class="t-sub" font-size="11.5">secure link to the cloud</text>
+        <rect x="456" y="148" width="194" height="52" rx="8" class="box"/><text x="472" y="170" class="t-title" font-size="13">probe</text><text x="472" y="189" class="t-sub" font-size="11.5">benchmarks the hardware</text>
+        <rect x="664" y="148" width="196" height="52" rx="8" class="box"/><text x="680" y="170" class="t-title" font-size="13">governor</text><text x="680" y="189" class="t-sub" font-size="11.5">idle rules, resource caps</text>
+        <rect x="40" y="208" width="194" height="52" rx="8" class="box"/><text x="56" y="230" class="t-title" font-size="13">engine</text><text x="56" y="249" class="t-sub" font-size="11.5">runs inference, streams</text>
+        <rect x="248" y="208" width="194" height="52" rx="8" class="box"/><text x="264" y="230" class="t-title" font-size="13">models</text><text x="264" y="249" class="t-sub" font-size="11.5">download on Wi-Fi, verify</text>
+        <rect x="456" y="208" width="194" height="52" rx="8" class="box"/><text x="472" y="230" class="t-title" font-size="13">jobs</text><text x="472" y="249" class="t-sub" font-size="11.5">accept, run, sign receipt</text>
+        <rect x="664" y="208" width="196" height="52" rx="8" class="box"/><text x="680" y="230" class="t-title" font-size="13">updater</text><text x="680" y="249" class="t-sub" font-size="11.5">silent signed updates</text>
+      </g>
+
+      <!-- engine -->
+      <rect x="20" y="290" width="860" height="48" rx="10" class="box"/>
+      <text x="40" y="320" class="t-title" font-size="14">Inference engine</text>
+      <text x="230" y="320" class="t-sub">llama.cpp (CUDA · Vulkan · Metal · CPU)   ·   MLX on Apple Silicon   ·   MLC LLM on Android</text>
+
+      <!-- hw -->
+      <rect x="20" y="348" width="860" height="40" rx="10" class="box-2"/>
+      <text x="40" y="373" class="t-title" font-size="14">Hardware</text>
+      <text x="230" y="373" class="t-sub">NVIDIA / AMD / Intel GPU   ·   Apple M-series   ·   laptop CPU   ·   phone GPU / NPU</text>
+    </svg>
+  </div>
+  <div class="grid-3">
+    <div class="card">
+      <span class="tag">DESKTOP &amp; LAPTOP</span>
+      <h3>Tray app</h3>
+      <ul>
+        <li>Signed installers: .msi, .dmg, .deb / AppImage</li>
+        <li>Starts at login, updates silently</li>
+        <li>One-line install for servers: <code>curl … | sh</code></li>
+        <li>Status, earnings and a pause button in the tray</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="tag">ANDROID</span>
+      <h3>Background service</h3>
+      <ul>
+        <li>Runs only while charging, on Wi-Fi, screen off</li>
+        <li>Stops when the phone gets warm</li>
+        <li>Restarts by itself after a reboot</li>
+        <li>Serves embeddings, transcription, small models</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="tag">IPHONE</span>
+      <h3>Charge Mode</h3>
+      <ul>
+        <li>iOS blocks constant background work</li>
+        <li>Works while plugged in, mostly overnight</li>
+        <li>Or with the app open on a nightstand</li>
+        <li>Lower output per phone than Android</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 4. Install and forget -->
+<section id="install-forget">
+  <div class="head">
+    <span class="label">04 · Contributor experience</span>
+    <h2>Install and forget</h2>
+    <p class="intro">After a one-time pairing code there is nothing to set up. The app picks its model from the benchmark, waits for the device to be free, works, and steps aside the moment the owner needs the device.</p>
+  </div>
+  <div class="figure">
+    <svg viewBox="0 0 900 320" role="img" aria-label="Lifecycle: install, pair with code, benchmark, download model on Wi-Fi, then a loop between waiting for idle, working, and paused. Updates install silently.">
+      <defs>
+        <marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head-acc"/></marker>
+        <marker id="r3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head-alert"/></marker>
+        <marker id="g3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head-mut"/></marker>
+      </defs>
+      <text x="20" y="24" class="t-mono">ONCE</text>
+      <rect x="20" y="36" width="180" height="62" rx="10" class="box"/><text x="110" y="63" text-anchor="middle" class="t-title">Install</text><text x="110" y="83" text-anchor="middle" class="t-sub">download, double-click</text>
+      <rect x="240" y="36" width="180" height="62" rx="10" class="box"/><text x="330" y="63" text-anchor="middle" class="t-title">Pair</text><text x="330" y="83" text-anchor="middle" class="t-sub">enter 6-digit code</text>
+      <rect x="460" y="36" width="180" height="62" rx="10" class="box"/><text x="550" y="63" text-anchor="middle" class="t-title">Benchmark</text><text x="550" y="83" text-anchor="middle" class="t-sub">picks the right tier</text>
+      <rect x="680" y="36" width="200" height="62" rx="10" class="box"/><text x="780" y="63" text-anchor="middle" class="t-title">Get model</text><text x="780" y="83" text-anchor="middle" class="t-sub">on Wi-Fi, verified</text>
+      <path d="M200,67 L238,67" class="ln" marker-end="url(#g3)"/>
+      <path d="M420,67 L458,67" class="ln" marker-end="url(#g3)"/>
+      <path d="M640,67 L678,67" class="ln" marker-end="url(#g3)"/>
+      <path d="M780,98 L780,120 L170,120 L170,168" class="ln" marker-end="url(#g3)"/>
+
+      <text x="20" y="150" class="t-mono">EVERY DAY, AUTOMATICALLY</text>
+      <rect x="60" y="170" width="220" height="70" rx="10" class="box"/><text x="170" y="199" text-anchor="middle" class="t-title">Waiting for idle</text><text x="170" y="221" text-anchor="middle" class="t-sub">connected, using nothing</text>
+      <rect x="360" y="170" width="220" height="70" rx="10" class="box-acc"/><text x="470" y="199" text-anchor="middle" class="t-title">Working</text><text x="470" y="221" text-anchor="middle" class="t-sub">serving jobs, earning</text>
+      <rect x="660" y="170" width="220" height="70" rx="10" class="box-alert"/><text x="770" y="199" text-anchor="middle" class="t-title">Paused</text><text x="770" y="221" text-anchor="middle" class="t-sub">owner needs the device</text>
+
+      <path d="M280,190 L358,190" class="ln-acc" marker-end="url(#a3)"/>
+      <text x="319" y="180" text-anchor="middle" class="t-mono" font-size="11">idle</text>
+      <path d="M580,190 L658,190" class="ln-alert" marker-end="url(#r3)"/>
+      <text x="619" y="180" text-anchor="middle" class="t-mono" font-size="11">&lt; 1 sec</text>
+      <path d="M770,240 C770,300 170,300 170,242" class="ln" marker-end="url(#g3)"/>
+      <text x="470" y="292" text-anchor="middle" class="t-mono" font-size="11">conditions clear again → back to waiting</text>
+      <text x="470" y="268" text-anchor="middle" class="t-sub" font-size="11.5">Triggers to pause: keyboard or mouse used · game or fullscreen app · unplugged · too hot · battery low</text>
+    </svg>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Rule</th><th>Desktop / laptop</th><th>Android</th><th>iPhone</th></tr></thead>
+      <tbody>
+        <tr><td><b>Power</b></td><td>On mains power (laptops); desktops always</td><td>Charging</td><td>Charging</td></tr>
+        <tr><td><b>Owner away</b></td><td>No input for 5 minutes (adjustable)</td><td>Screen off</td><td>Charge Mode or overnight task</td></tr>
+        <tr><td><b>Not in use</b></td><td>No game or fullscreen app; GPU free</td><td>–</td><td>–</td></tr>
+        <tr><td><b>Temperature</b></td><td>GPU under 80 °C, CPU not throttling</td><td>Below "moderate" heat level</td><td>Nominal or fair</td></tr>
+        <tr><td><b>Network</b></td><td>Any</td><td>Unmetered Wi-Fi</td><td>Wi-Fi</td></tr>
+        <tr><td><b>Limits</b></td><td>Max 80% GPU, 50% RAM</td><td>2 threads, battery above 50%</td><td>–</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- 5. Request lifecycle -->
+<section id="request">
+  <div class="head">
+    <span class="label">05 · Runtime</span>
+    <h2>Life of a request</h2>
+    <p class="intro">One customer request, start to finish. If the device drops part-way, the scheduler re-sends the job to another device or to rented GPUs, and the customer just sees the answer.</p>
+  </div>
+  <div class="figure">
+    <svg viewBox="0 0 900 470" role="img" aria-label="Sequence: customer sends request to gateway, gateway asks scheduler, scheduler offers job to device, device accepts and streams tokens back through gateway to customer, device sends signed receipt to ledger, ledger bills customer and credits owner.">
+      <defs>
+        <marker id="a4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head-acc"/></marker>
+        <marker id="m4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head-money"/></marker>
+        <marker id="g4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head-mut"/></marker>
+      </defs>
+      <!-- actors -->
+      <rect x="30" y="14" width="120" height="40" rx="8" class="box"/><text x="90" y="39" text-anchor="middle" class="t-title" font-size="14">Customer</text>
+      <rect x="210" y="14" width="120" height="40" rx="8" class="box-acc"/><text x="270" y="39" text-anchor="middle" class="t-title" font-size="14">Gateway</text>
+      <rect x="390" y="14" width="120" height="40" rx="8" class="box-acc"/><text x="450" y="39" text-anchor="middle" class="t-title" font-size="14">Scheduler</text>
+      <rect x="570" y="14" width="120" height="40" rx="8" class="box"/><text x="630" y="39" text-anchor="middle" class="t-title" font-size="14">Device</text>
+      <rect x="750" y="14" width="120" height="40" rx="8" class="box-money"/><text x="810" y="39" text-anchor="middle" class="t-title" font-size="14">Ledger</text>
+      <line x1="90" y1="54" x2="90" y2="455" class="life"/>
+      <line x1="270" y1="54" x2="270" y2="455" class="life"/>
+      <line x1="450" y1="54" x2="450" y2="455" class="life"/>
+      <line x1="630" y1="54" x2="630" y2="455" class="life"/>
+      <line x1="810" y1="54" x2="810" y2="455" class="life"/>
+
+      <!-- messages -->
+      <text x="180" y="86" text-anchor="middle" class="t-sub">1 · POST /v1/chat/completions</text>
+      <path d="M90,94 L268,94" class="ln-acc" marker-end="url(#a4)"/>
+      <text x="360" y="126" text-anchor="middle" class="t-sub">2 · key + credits OK, route it</text>
+      <path d="M270,134 L448,134" class="ln-acc" marker-end="url(#a4)"/>
+      <text x="540" y="166" text-anchor="middle" class="t-sub">3 · job offer (model, input)</text>
+      <path d="M450,174 L628,174" class="ln-acc" marker-end="url(#a4)"/>
+      <text x="540" y="206" text-anchor="middle" class="t-sub">4 · accept</text>
+      <path d="M630,214 L452,214" class="ln" marker-end="url(#g4)"/>
+      <text x="450" y="246" text-anchor="middle" class="t-sub">5 · answer streams back, token by token</text>
+      <path d="M630,254 L272,254" class="ln-acc" marker-end="url(#a4)"/>
+      <path d="M270,268 L92,268" class="ln-acc" marker-end="url(#a4)"/>
+      <text x="720" y="306" text-anchor="middle" class="t-sub">6 · done + signed receipt</text>
+      <path d="M630,314 L808,314" class="ln" marker-end="url(#g4)"/>
+      <text x="540" y="346" text-anchor="middle" class="t-sub">7 · tokens used → bill customer</text>
+      <path d="M270,354 L808,354" class="ln-money" marker-end="url(#m4)"/>
+      <text x="720" y="386" text-anchor="middle" class="t-sub">8 · credit owner's share</text>
+      <path d="M810,394 L632,394" class="ln-money" marker-end="url(#m4)"/>
+
+      <rect x="300" y="418" width="460" height="30" rx="6" class="box-alert"/>
+      <text x="530" y="438" text-anchor="middle" class="t-sub">Device drops? Retry on another device, else rented GPUs.</text>
+    </svg>
+  </div>
+  <p class="note">The receipt in step 6 is the device's digital signature over the job ID, model, a fingerprint of the output, token counts and time. It is what the device gets paid on.</p>
+</section>
+
+<!-- 6. Money -->
+<section id="money">
+  <div class="head">
+    <span class="label">06 · Payments</span>
+    <h2>Money flow</h2>
+    <p class="intro">Customers pay for what they use. Each completed job's revenue is split between the device owner and the protocol, and owners are paid weekly once they pass a minimum balance.</p>
+  </div>
+  <div class="flow">
+    <div class="step"><b>Customer pays</b><span>Card or prepaid credits via Stripe; later USDC per request (x402)</span></div>
+    <div class="arrow" aria-hidden="true">→</div>
+    <div class="step"><b>Gateway meters</b><span>Counts tokens in and out for every request</span></div>
+    <div class="arrow" aria-hidden="true">→</div>
+    <div class="step"><b>Device signs receipt</b><span>Proof of the work done</span></div>
+    <div class="arrow" aria-hidden="true">→</div>
+    <div class="step"><b>Ledger splits</b><span>Owner share and protocol share</span></div>
+    <div class="arrow" aria-hidden="true">→</div>
+    <div class="step"><b>Weekly payout</b><span>Bank (Stripe Connect) or USDC on Solana / Base</span></div>
+  </div>
+  <div class="split" role="img" aria-label="Revenue split: 70% to device owner, 30% to protocol">
+    <div class="op">70% device owner</div>
+    <div class="pr">30% protocol</div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Stage</th><th>How owners are paid</th></tr></thead>
+      <tbody>
+        <tr><td><b>Beta</b></td><td>Points plus a USD balance in our ledger, earned only from verified jobs</td></tr>
+        <tr><td><b>Phase 3 onward</b></td><td>Real weekly payouts in cash or USDC, with identity check at the payout threshold</td></tr>
+        <tr><td><b>Phase 5</b></td><td>Receipt batches recorded on-chain; token rewards top up earnings while demand grows</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">The 70/30 split is a setting in the ledger and can be changed.</p>
+</section>
+
+<!-- 7. Trust -->
+<section id="trust">
+  <div class="head">
+    <span class="label">07 · Safety</span>
+    <h2>Trust and privacy</h2>
+  </div>
+  <div class="grid-3">
+    <div class="card">
+      <span class="tag">CORRECT RESULTS</span>
+      <h3>Checking the work</h3>
+      <ul>
+        <li>Test prompts with known answers</li>
+        <li>2–5% of jobs re-run on a second device</li>
+        <li>Reputation score per device</li>
+        <li>New or low-score devices get batch work only, paid after 7 days</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="tag">REAL DEVICES</span>
+      <h3>Stopping fake nodes</h3>
+      <ul>
+        <li>One key per device, one pairing per device</li>
+        <li>Paid for verified work, never for just being online</li>
+        <li>Play Integrity on Android, App Attest on iPhone</li>
+        <li>Identity check at payout</li>
+      </ul>
+    </div>
+    <div class="card">
+      <span class="tag">CUSTOMER DATA</span>
+      <h3>Privacy</h3>
+      <ul>
+        <li>Encrypted connection end to end</li>
+        <li>Devices never write prompts to disk</li>
+        <li>"Private" requests go only to verified or partner devices, or rented GPUs</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 8. Models -->
+<section id="models">
+  <div class="head">
+    <span class="label">08 · Workloads</span>
+    <h2>Models and job types</h2>
+    <p class="intro">Each device keeps one or two models ready, chosen by its benchmark. Slow or unreliable devices still earn by serving batch, embedding and transcription jobs that don't need an instant answer.</p>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Tier</th><th>Devices</th><th>Models</th><th>Serves</th></tr></thead>
+      <tbody>
+        <tr><td><b>T1</b></td><td>GPU with 12 GB+ VRAM, Mac with 32 GB+</td><td>14B–32B chat models</td><td>Real-time chat</td></tr>
+        <tr><td><b>T2</b></td><td>GPU with 6–12 GB, Mac with 16 GB</td><td>7–9B chat models</td><td>Real-time and batch chat</td></tr>
+        <tr><td><b>T3</b></td><td>CPU laptops, phones</td><td>1–4B models, embeddings, Whisper small</td><td>Embeddings, transcription, batch</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Product</th><th>Speed needed</th><th>Price vs chat</th><th>Served by</th></tr></thead>
+      <tbody>
+        <tr><td><b>Real-time chat</b></td><td>First word in under 1.5 s</td><td>Standard</td><td>T1/T2 devices, else rented GPUs</td></tr>
+        <tr><td><b>Batch chat</b></td><td>Within 24 hours</td><td>50–80% cheaper</td><td>Any device, phones included</td></tr>
+        <tr><td><b>Embeddings</b></td><td>Seconds</td><td>Low per token</td><td>T3 and any idle device</td></tr>
+        <tr><td><b>Transcription</b></td><td>Minutes</td><td>Per audio minute</td><td>Phones and laptops</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- 9. Roadmap -->
+<section id="roadmap">
+  <div class="head">
+    <span class="label">09 · Execution</span>
+    <h2>Roadmap: build and revenue side by side</h2>
+    <p class="intro">Green bars are what gets built. Amber bars are the revenue sources added in the same window. Revenue starts in week 2 on rented capacity and moves onto community devices as they come online.</p>
+  </div>
+  <div class="roadmap">
+    <div class="rm">
+      <div class="label">Week</div>
+      <div class="wk">1</div><div class="wk">2</div><div class="wk">3</div><div class="wk">4</div><div class="wk">5</div><div class="wk">6</div><div class="wk">7</div><div class="wk">8</div><div class="wk">9</div><div class="wk">10</div><div class="wk">11</div><div class="wk">12</div><div class="wk">13</div><div class="wk">14</div><div class="wk">15</div><div class="wk">16</div><div class="wk">17</div><div class="wk">18</div><div class="wk">19</div><div class="wk">20</div><div class="wk">21</div><div class="wk">22</div><div class="wk">23</div><div class="wk">24</div>
+
+      <div class="sep" style="grid-row:2"></div>
+      <div class="rowlabel" style="grid-column:1;grid-row:3 / 5">Phase 0 · Foundations</div>
+      <div class="bar build" style="grid-row:3;grid-column: 2 / 4"><strong>Build</strong>API, billing, waitlist</div>
+      <div class="bar rev" style="grid-row:4;grid-column: 2 / 6"><strong>Revenue</strong>Paid API on rented GPUs · grants · own GPUs on Vast</div>
+      <div class="sep" style="grid-row:5"></div>
+      <div class="rowlabel" style="grid-column:1;grid-row:6 / 8">Phase 1 · Desktop alpha</div>
+      <div class="bar build" style="grid-row:6;grid-column: 4 / 8"><strong>Build</strong>Agent core, tray app, scheduler, ledger</div>
+      <div class="bar rev" style="grid-row:7;grid-column: 4 / 8"><strong>Revenue</strong>Batch API · Embeddings API · startup sales</div>
+      <div class="sep" style="grid-row:8"></div>
+      <div class="rowlabel" style="grid-column:1;grid-row:9 / 11">Phase 2 · Closed beta on X</div>
+      <div class="bar build" style="grid-row:9;grid-column: 8 / 12"><strong>Build</strong>Hardening, reputation, leaderboard</div>
+      <div class="bar rev" style="grid-row:10;grid-column: 8 / 12"><strong>Revenue</strong>OpenRouter application · paid pilots · prepaid deals</div>
+      <div class="sep" style="grid-row:11"></div>
+      <div class="rowlabel" style="grid-column:1;grid-row:12 / 14">Phase 3 · Android + payouts</div>
+      <div class="bar build" style="grid-row:12;grid-column: 12 / 17"><strong>Build</strong>Android app, real payouts, attestation</div>
+      <div class="bar rev" style="grid-row:13;grid-column: 12 / 17"><strong>Revenue</strong>Transcription API · paid private-assistant tier</div>
+      <div class="sep" style="grid-row:14"></div>
+      <div class="rowlabel" style="grid-column:1;grid-row:15 / 17">Phase 4 · iPhone + public beta</div>
+      <div class="bar build" style="grid-row:15;grid-column: 17 / 22"><strong>Build</strong>iOS Charge Mode, MLX, real-time routing</div>
+      <div class="bar rev" style="grid-row:16;grid-column: 17 / 22"><strong>Revenue</strong>Live on OpenRouter · volume plans · node licences*</div>
+      <div class="sep" style="grid-row:17"></div>
+      <div class="rowlabel" style="grid-column:1;grid-row:18 / 20">Phase 5 · Launch + on-chain</div>
+      <div class="bar build" style="grid-row:18;grid-column: 22 / 26"><strong>Build</strong>On-chain receipts, token</div>
+      <div class="bar rev" style="grid-row:19;grid-column: 22 / 26"><strong>Revenue</strong>Enterprise · chain partners</div>
+    </div>
+  </div>
+  <p class="note">* Node licences only if approved by legal counsel.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Phase</th><th>Done when</th></tr></thead>
+      <tbody>
+        <tr><td><b>0</b></td><td>First paid API call; waitlist live; grant applications submitted</td></tr>
+        <tr><td><b>1</b></td><td>20 internal machines online; 10% of batch traffic served by devices; test-prompt pass rate ≥ 99%</td></tr>
+        <tr><td><b>2</b></td><td>300+ weekly active devices; ≥ 40% of batch and embeddings on devices; 7-day retention ≥ 60%; first paid pilot</td></tr>
+        <tr><td><b>3</b></td><td>Android in Play Store testing; 1,000+ weekly active devices; first real payouts sent</td></tr>
+        <tr><td><b>4</b></td><td>Open beta; 5,000+ registered devices; devices serve ≥ 50% of paid tokens</td></tr>
+        <tr><td><b>5</b></td><td>Public launch; positive margin on device-served traffic; automatic monthly payouts</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="grid-3">
+    <div class="card"><span class="tag">TEAM</span><h3>Minimum crew</h3>
+      <ul>
+        <li>Rust engineer: agent core, desktop app</li>
+        <li>Go engineer: cloud services, infra</li>
+        <li>Mobile engineer: Android, then iOS</li>
+        <li>Full-stack: web, dashboards, Stripe</li>
+        <li>Founder / growth: X, sales, grants</li>
+      </ul>
+    </div>
+    <div class="card"><span class="tag">ACCOUNTS</span><h3>Open early</h3>
+      <ul>
+        <li>Apple Developer (organization)</li>
+        <li>Google Play Console</li>
+        <li>Windows code-signing certificate</li>
+        <li>Stripe + Stripe Connect</li>
+        <li>Domain, Cloudflare, X, Discord</li>
+      </ul>
+    </div>
+    <div class="card"><span class="tag">WEEKLY METRICS</span><h3>What to watch</h3>
+      <ul>
+        <li>Active devices and 7/30-day retention</li>
+        <li>Test-prompt pass rate, response speed</li>
+        <li>Tokens served: devices vs rented</li>
+        <li>Revenue, margin, payouts</li>
+        <li>Waitlist, referrals, X engagement</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 10. Beta -->
+<section id="beta">
+  <div class="head">
+    <span class="label">10 · Go to market</span>
+    <h2>Beta on X</h2>
+    <p class="intro">Contributors and developers join through a waitlist linked from X. Each wave opens only when the previous one hits its quality targets. Bars are drawn to scale against the 2,000-person wave.</p>
+  </div>
+  <div class="waves">
+    <div class="wave"><div class="nm">Alpha<small>Week 4</small></div><div class="track"><div class="fill" style="width:1%"></div><span class="val" style="left:calc(1% + 10px)">20</span></div><div class="who">Team and friends</div></div>
+    <div class="wave"><div class="nm">Wave 1<small>Week 6</small></div><div class="track"><div class="fill" style="width:5%"></div><span class="val" style="left:calc(5% + 10px)">100</span></div><div class="who">NVIDIA GPUs and M-series Macs with 16 GB+</div></div>
+    <div class="wave"><div class="nm">Wave 2<small>Week 8</small></div><div class="track"><div class="fill" style="width:25%"></div><span class="val" style="left:calc(25% + 10px)">500</span></div><div class="who">Adds AMD GPUs, Linux and CPU laptops</div></div>
+    <div class="wave"><div class="nm">Wave 3<small>Week 12</small></div><div class="track"><div class="fill" style="width:100%"></div><span class="val" style="right:10px;color:var(--bg)">2,000</span></div><div class="who">Adds Android</div></div>
+    <div class="wave"><div class="nm">Public beta<small>Week 16</small></div><div class="track"><div class="fill open" style="width:100%"></div><span class="val" style="left:10px">Open to all</span></div><div class="who">Adds iPhone via TestFlight</div></div>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Gate to open the next wave</th><th>Target</th></tr></thead>
+      <tbody>
+        <tr><td>Install success rate</td><td class="yes">≥ 95%</td></tr>
+        <tr><td>Devices with no crashes over 7 days</td><td class="yes">≥ 98%</td></tr>
+        <tr><td>Devices still active after 7 days</td><td class="yes">≥ 60%</td></tr>
+        <tr><td>Test-prompt pass rate</td><td class="yes">≥ 99%</td></tr>
+        <tr><td>Support tickets per 100 devices per week</td><td class="yes">≤ 5</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Launch thread</h3>
+  <div class="post">
+    <p><span class="n">1/</span> Your laptop, desktop and phone sit idle ~20 hours a day. We're building DePINClaw: a network where idle devices serve AI inference and their owners get paid. Install once. It runs when you're away, plugged in and idle. It pauses the moment you're back.</p>
+    <p><span class="n">2/</span> How it works: install the app (Windows / Mac / Linux, Android next, iPhone after). It benchmarks your device and picks the right model. Developers send AI requests through our API. Your device serves them and you earn for each verified job.</p>
+    <p><span class="n">3/</span> Safe by design: it only runs our signed inference engine and signed models. No arbitrary code, no mining.</p>
+    <p><span class="n">4/</span> Developers: OpenAI-compatible API, cheaper batch and embeddings pricing. Free beta credits.</p>
+    <p><span class="n">5/</span> Closed beta opens in waves. Early contributors get a points multiplier. Join the waitlist: [link]. Refer friends to move up.</p>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Day</th><th>Weekly post</th></tr></thead>
+      <tbody>
+        <tr><td><b>Mon</b></td><td>Build-in-public update: what shipped, with a screenshot or clip</td></tr>
+        <tr><td><b>Tue</b></td><td>Explainer on one part: idle rules, verification, routing</td></tr>
+        <tr><td><b>Wed</b></td><td>Network stats: devices online, tokens served, countries</td></tr>
+        <tr><td><b>Thu</b></td><td>Contributor spotlight or leaderboard top 10</td></tr>
+        <tr><td><b>Fri</b></td><td>Developer post: use case, code snippet, credits giveaway</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="grid-3">
+    <div class="card"><span class="tag">REFERRALS</span><h3>Reward active devices</h3><ul><li>Bonus points only when a referred device stays active 7 days</li><li>Limits fake sign-ups</li></ul></div>
+    <div class="card"><span class="tag">SHAREABLE</span><h3>Earnings card</h3><ul><li>"My device earned X this week" image</li><li>One-click post to X from the app</li><li>Public top-100 leaderboard</li></ul></div>
+    <div class="card"><span class="tag">COMMUNITIES</span><h3>Where to recruit</h3><ul><li>r/LocalLLaMA, r/homelab</li><li>Ollama and llama.cpp communities</li><li>DePIN accounts and grant-chain ecosystems on X</li></ul></div>
+  </div>
+</section>
+
+<!-- 11. Week 1 -->
+<section id="week1">
+  <div class="head">
+    <span class="label">11 · Start here</span>
+    <h2>Week-1 checklist</h2>
+    <p class="intro">Ticks are saved in your browser only.</p>
+  </div>
+  <ul class="check">
+    <li><label><input type="checkbox" id="c1"><span>Create the monorepo skeleton: agent, desktop, control-plane, web, infra</span></label></li>
+    <li><label><input type="checkbox" id="c2"><span>Register the domain, Cloudflare, and X, Discord and Telegram handles</span></label></li>
+    <li><label><input type="checkbox" id="c3"><span>Open Apple Developer, Google Play and Stripe accounts; order the code-signing certificate</span></label></li>
+    <li><label><input type="checkbox" id="c4"><span>Ship gateway v0 with one rented provider and Stripe credits</span></label></li>
+    <li><label><input type="checkbox" id="c5"><span>Launch the landing page with waitlist and referral codes</span></label></li>
+    <li><label><input type="checkbox" id="c6"><span>Submit grant and cloud-credit applications</span></label></li>
+    <li><label><input type="checkbox" id="c7"><span>Post the launch thread on X</span></label></li>
+  </ul>
+</section>
+
+<footer>
+  Source documents in the repository: <code>docs/ARCHITECTURE.md</code>, <code>docs/EXECUTION_PLAN.md</code>, <code>docs/BETA_LAUNCH_X.md</code>. The domain and X handle are placeholders until registered.
+</footer>
+
+</div>
+
+<script>
+(function () {
+  var boxes = document.querySelectorAll('.check input[type=checkbox]');
+  var saved = {};
+  try { saved = JSON.parse(localStorage.getItem('depinclaw-week1') || '{}') || {}; } catch (e) { saved = {}; }
+  boxes.forEach(function (b) {
+    if (saved[b.id]) b.checked = true;
+    b.addEventListener('change', function () {
+      saved[b.id] = b.checked;
+      try { localStorage.setItem('depinclaw-week1', JSON.stringify(saved)); } catch (e) {}
+    });
+  });
+})();
+</script>
