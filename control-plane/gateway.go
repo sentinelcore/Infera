@@ -300,6 +300,7 @@ wait:
 					fmt.Sprintf("%s · %d+%d tokens · %.2fx", req.Model, tin, tout, band.Multiplier))
 				g.st.FinishJob(jobID, "done", tin, tout, charge, pay, "", m.Receipt)
 				g.dep.Reward(dev, jobID, time.Since(started))
+				mon.Job("done", time.Since(started))
 				if req.jobType == "" {
 					g.RecordSpeed(dev, tout, time.Since(started))
 				}
@@ -349,6 +350,7 @@ func (g *Gateway) checkReceipt(dev *DeviceRow, jobID, model, output string, m Ms
 }
 
 func (g *Gateway) abort(dev *DeviceRow, jobID, cause string, estPay float64, evidence string) {
+	mon.Job("aborted:"+cause, 0)
 	log.Printf("job %s aborted on %s: %s (%s)", jobID, dev.ID, cause, evidence)
 	g.st.FinishJob(jobID, "aborted", 0, 0, 0, 0, cause, "")
 	g.dep.Penalize(dev, jobID, cause, int64(estPay*microUSD), evidence)

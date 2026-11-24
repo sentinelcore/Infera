@@ -18,7 +18,7 @@ Audited 2026-11-24. ✅ built · 🟡 partial · ⬜ not built. Priority: P1 nex
 | G12 | Scheduler | Hedged interactive requests (two devices, first answer wins) | ⬜ | P2 |
 | G13 | Trust | Anti-sybil: one pairing per device fingerprint | ⬜ | P2 |
 | G14 | Payouts | Wallet ownership proof (signed message or test transfer); identity check at threshold; sanctions screening before each batch | 🟡 (format check + 48 h hold) | P2 |
-| G15 | Ops | Metrics endpoint, error tracking, public status page | ⬜ | P2 |
+| G15 | Ops | Metrics endpoint, error tracking, public status page | ✅ /metrics, /status, crash + starved-queue alerts (set INFERA_ALERT_WEBHOOK to a Slack/Discord webhook) | P2 |
 | G16 | Node | Identity key in OS keychain / Android Keystore | 🟡 (file with 0600 / app prefs) | P2 |
 | G17 | Engines | smolmaxxing (MoE from flash on phones), MNN-LLM, LiteRT-LM/NPU, Genie, bitnet.cpp, vLLM, MLX native | 🟡 (llama.cpp + any OpenAI-compatible server) | P2 |
 | G18 | Benchmark | Heat test, network latency, RAM/flash bandwidth, several model sizes | 🟡 (speed on the chosen model) | P3 |

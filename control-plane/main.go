@@ -64,6 +64,7 @@ func main() {
 	go NewCanary(gw, time.Duration(envFloat("INFERA_CANARY_MINUTES", 30)*float64(time.Minute))).Loop()
 	go dep.DecayLoop()
 	go gw.BatchWorker()
+	go mon.Watch(gw)
 	api := &API{st: st, hub: hub, cfg: cfg, inviteCode: os.Getenv("INFERA_INVITE_CODE"), adminToken: os.Getenv("INFERA_ADMIN_TOKEN"),
 		starterCents: int64(envFloat("INFERA_STARTER_CREDITS_USD", 5) * 100)}
 
@@ -90,6 +91,9 @@ func main() {
 	mux.HandleFunc("GET /api/device/me", api.DeviceMe)
 	mux.HandleFunc("GET /api/network", api.Network)
 	mux.HandleFunc("GET /api/catalog", api.Catalog)
+	mux.HandleFunc("GET /metrics", mon.Metrics(gw))
+	mux.HandleFunc("GET /api/status", mon.StatusJSON(gw))
+	mux.HandleFunc("GET /status", mon.StatusPage(gw))
 	mux.HandleFunc("POST /api/waitlist", api.JoinWaitlist)
 	mux.HandleFunc("GET /api/waitlist/{code}", api.WaitlistStatus)
 	mux.HandleFunc("GET /api/leaderboard", api.Leaderboard)
@@ -119,7 +123,7 @@ func main() {
 		addr = ":" + os.Getenv("PORT")
 	}
 	log.Printf("Infera control plane on %s (owner share %.0f%%, fallback %v)", addr, cfg.OwnerShare*100, cfg.FallbackURL != "")
-	srv := &http.Server{Addr: addr, Handler: logRequests(mux), ReadHeaderTimeout: 15 * time.Second}
+	srv := &http.Server{Addr: addr, Handler: mon.Wrap(logRequests(mux)), ReadHeaderTimeout: 15 * time.Second}
 	log.Fatal(srv.ListenAndServe())
 }
 
