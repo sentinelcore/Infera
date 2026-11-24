@@ -1,0 +1,66 @@
+# Every push to the working branch refreshes one pre-release, "Infera test build",
+# with the Android APK and the desktop node for each platform — open it on any device to install.
+name: test-build
+on:
+  push:
+    branches: ["ccr-13fb360c-2cnfc4"]
+    paths: ["agent/**", "android/**", "control-plane/**", "third_party/**", ".github/workflows/test-build.yml"]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency: { group: test-build, cancel-in-progress: true }
+jobs:
+  node:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu, name: infera-linux-x64 }
+          - { os: macos-14,      target: aarch64-apple-darwin,     name: infera-macos-arm64 }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc,  name: infera-windows-x64 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { targets: "${{ matrix.target }}" }
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libxdo-dev libayatana-appindicator3-dev
+      - run: cargo build --release --target ${{ matrix.target }}
+        working-directory: agent
+      - if: runner.os != 'Windows'
+        run: tar -czf ${{ matrix.name }}.tar.gz -C agent/target/${{ matrix.target }}/release infera
+      - if: runner.os == 'Windows'
+        run: Compress-Archive -Path agent/target/${{ matrix.target }}/release/infera.exe -DestinationPath ${{ matrix.name }}.zip
+      - uses: actions/upload-artifact@v4
+        with: { name: "${{ matrix.name }}", path: "${{ matrix.name }}.*" }
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: true }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "17" }
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: "8.14.3" }
+      - run: gradle -p android :app:assembleDebug
+      - run: cp android/app/build/outputs/apk/debug/app-debug.apk infera-android.apk
+      - uses: actions/upload-artifact@v4
+        with: { name: infera-android, path: infera-android.apk }
+  publish:
+    needs: [node, android]
+    if: always() && needs.android.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: dist, merge-multiple: true }
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: test-build
+          name: Infera test build
+          prerelease: true
+          make_latest: false
+          body: |
+            Automatic test build from commit ${{ github.sha }} on ${{ github.ref_name }}.
+            - **Android:** download `infera-android.apk` on the phone and open it.
+            - **Desktop node:** download the file for your computer, unpack it, then run `infera pair <code> --server <url>` (see TESTING.md).
+          files: dist/*

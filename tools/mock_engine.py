@@ -26,6 +26,10 @@ class H(BaseHTTPRequestHandler):
                 words = ["I", "do", "not", "know."] if LIAR else [v]
         n = min(int(req.get("max_tokens") or 64), len(words))
         self.send_response(200); self.send_header("Content-Type", "text/event-stream"); self.end_headers()
+        if "think" in prompt.lower():  # imitate a reasoning model (Qwen3 / Ollama "reasoning" field)
+            for w in ["Let", "me", "think."]:
+                ch = {"choices": [{"index": 0, "delta": {"reasoning": w + " "}}]}
+                self.wfile.write(f"data: {json.dumps(ch)}\n\n".encode()); self.wfile.flush()
         for w in words[:n]:
             ch = {"choices": [{"index": 0, "delta": {"content": w + " "}}]}
             self.wfile.write(f"data: {json.dumps(ch)}\n\n".encode()); self.wfile.flush(); time.sleep(DELAY)

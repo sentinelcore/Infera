@@ -259,7 +259,11 @@ wait:
 				gotFirst = true
 				pieces++
 				out.Write(plain)
-				sw.delta(string(plain))
+				if m.R {
+					sw.reasoning(string(plain))
+				} else {
+					sw.delta(string(plain))
+				}
 				idle.Reset(60 * time.Second)
 			case "done":
 				output := out.String()
@@ -416,6 +420,7 @@ type streamWriter struct {
 	model   string
 	started bool
 	buf     strings.Builder
+	rbuf    strings.Builder
 }
 
 func newStreamWriter(w http.ResponseWriter, stream bool, jobID, model string) *streamWriter {
@@ -429,6 +434,7 @@ func (s *streamWriter) reset(jobID string) {
 	s.jobID = jobID
 	s.started = false
 	s.buf.Reset()
+	s.rbuf.Reset()
 }
 
 func (s *streamWriter) begin() {
@@ -452,6 +458,21 @@ func (s *streamWriter) chunk(delta map[string]any, finish any) {
 	if f, ok := s.w.(http.Flusher); ok {
 		f.Flush()
 	}
+}
+
+// reasoning streams "thinking" text in the OpenAI-style reasoning_content field.
+func (s *streamWriter) reasoning(text string) {
+	if s.stream {
+		first := !s.started
+		s.begin()
+		if first {
+			s.chunk(map[string]any{"role": "assistant", "content": ""}, nil)
+		}
+		s.chunk(map[string]any{"reasoning_content": text}, nil)
+		return
+	}
+	s.started = true
+	s.rbuf.WriteString(text)
 }
 
 func (s *streamWriter) delta(text string) {
@@ -482,8 +503,16 @@ func (s *streamWriter) finish(tin, tout int) {
 	s.begin()
 	s.w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(s.w).Encode(map[string]any{"id": s.jobID, "object": "chat.completion", "created": now(), "model": s.model,
-		"choices": []any{map[string]any{"index": 0, "message": map[string]string{"role": "assistant", "content": s.buf.String()}, "finish_reason": "stop"}},
+		"choices": []any{map[string]any{"index": 0, "message": s.message(), "finish_reason": "stop"}},
 		"usage":   usage})
+}
+
+func (s *streamWriter) message() map[string]string {
+	m := map[string]string{"role": "assistant", "content": s.buf.String()}
+	if s.rbuf.Len() > 0 {
+		m["reasoning_content"] = s.rbuf.String()
+	}
+	return m
 }
 
 func (s *streamWriter) fail(msg string) {

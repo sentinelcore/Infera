@@ -82,8 +82,8 @@ sleep 3
 
 echo "6/6 Sending a test request through your computer …"
 REPLY=$(curl -s "localhost:$PORT/v1/chat/completions" -H "Authorization: Bearer $CUST" \
-  -d "{\"model\":\"$MODEL\",\"max_tokens\":60,\"messages\":[{\"role\":\"user\",\"content\":\"Say hello in one sentence.\"}]}")
-if ! echo "$REPLY" | python3 -c "import sys,json;d=json.load(sys.stdin);c=d['choices'][0]['message']['content'];assert c.strip();print('   Reply:', c.strip()[:200])"; then
+  -d "{\"model\":\"$MODEL\",\"max_tokens\":400,\"messages\":[{\"role\":\"user\",\"content\":\"Say hello in one sentence.\"}]}")
+if ! echo "$REPLY" | python3 -c "import sys,json;d=json.load(sys.stdin);m=d['choices'][0]['message'];c=(m.get('content') or '').strip();r=(m.get('reasoning_content') or '').strip();assert c or r;print('   Reply:', (c or '[reasoning only] '+r)[:200])"; then
   echo "TEST FAILED: $REPLY"; echo "--- node log"; tail -20 "$WORK/node.log"; echo "--- server log"; tail -20 "$WORK/server.log"; exit 1
 fi
 echo "   Streaming check …"

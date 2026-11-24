@@ -18,7 +18,10 @@ pub struct Engine {
 }
 
 pub enum Event {
+    /// Answer text.
     Delta(String),
+    /// Reasoning ("thinking") text from models that stream it separately (Qwen3, DeepSeek-R1 …).
+    Reasoning(String),
     Done { tokens_in: u32, tokens_out: u32 },
 }
 
@@ -94,7 +97,15 @@ impl Engine {
                     tin = u["prompt_tokens"].as_u64().unwrap_or(0) as u32;
                     tout = u["completion_tokens"].as_u64().unwrap_or(0) as u32;
                 }
-                if let Some(t) = v["choices"][0]["delta"]["content"].as_str() {
+                let delta = &v["choices"][0]["delta"];
+                let reasoning = delta["reasoning_content"].as_str().or_else(|| delta["reasoning"].as_str()).unwrap_or("");
+                if !reasoning.is_empty() {
+                    pieces += 1;
+                    if tx.send(Event::Reasoning(reasoning.to_string())).await.is_err() {
+                        return Ok(());
+                    }
+                }
+                if let Some(t) = delta["content"].as_str() {
                     if !t.is_empty() {
                         pieces += 1;
                         if tx.send(Event::Delta(t.to_string())).await.is_err() {
@@ -156,7 +167,7 @@ pub async fn benchmark(engine: &Engine, cfg: &EngineConfig) -> Result<BenchResul
     let collect = async {
         while let Some(ev) = rx.recv().await {
             match ev {
-                Event::Delta(_) => {
+                Event::Delta(_) | Event::Reasoning(_) => {
                     if first.is_none() {
                         first = Some(Instant::now());
                     }

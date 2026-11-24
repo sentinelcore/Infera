@@ -45,6 +45,7 @@ type Msg struct {
 	Nonce      string  `json:"n,omitempty"`
 	CT         string  `json:"c,omitempty"`
 	Seq        int     `json:"seq,omitempty"`
+	R          bool    `json:"r,omitempty"` // tok: reasoning text rather than answer text
 	TokensIn   int     `json:"tokens_in,omitempty"`
 	TokensOut  int     `json:"tokens_out,omitempty"`
 	Receipt    string  `json:"receipt,omitempty"`

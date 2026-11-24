@@ -454,6 +454,13 @@ async fn run_job(ctx: &Arc<Ctx>, job_id: &str, model: &str, sandbox: SandboxKey,
                     let (nonce, ct) = chan.seal_up(t.as_bytes());
                     send(&ctx.state, json!({"t": "tok", "job_id": job_id, "seq": seq, "n": nonce, "c": ct}));
                 }
+                Some(Event::Reasoning(t)) => {
+                    // Reasoning is sealed and hashed into the receipt like answer text, flagged with "r".
+                    out.push_str(&t);
+                    seq += 1;
+                    let (nonce, ct) = chan.seal_up(t.as_bytes());
+                    send(&ctx.state, json!({"t": "tok", "job_id": job_id, "seq": seq, "n": nonce, "c": ct, "r": true}));
+                }
                 Some(Event::Done { tokens_in, tokens_out }) => {
                     let hash = hex::encode(Sha256::digest(out.as_bytes()));
                     let receipt = format!("{job_id}|{model}|{hash}|{tokens_in}|{tokens_out}|{}", unix());
