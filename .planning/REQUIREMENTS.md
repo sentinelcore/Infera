@@ -34,8 +34,8 @@ Status: ✅ done · 🔨 in progress · ⬜ not started
 
 | ID | Requirement | Phase |
 |---|---|---|
-| MOB-01 | Android app: foreground service, offer cards via push, M1/M2 classes | 5 |
-| MOB-02 | smolmaxxing engine for MoE-from-flash on phones | 5 |
+| MOB-01 | Android app: foreground service, offer cards (notifications with Accept/Decline), M1/M2 classes | 5 – 🔨 built, needs phone testing |
+| MOB-02 | smolmaxxing engine for MoE-from-flash on phones | 5 – ⬜ (llama.cpp engine in place; smolmaxxing patch next) |
 | MOB-03 | iPhone Charge Mode | 6 |
 | PRIV-01 | Attested sandbox: sealed level (App Attest, Play Integrity, SIP) | 6 |
 | PRIV-02 | Confidential level (Android pVM, confidential GPUs) | 7 |
