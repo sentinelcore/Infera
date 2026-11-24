@@ -1,0 +1,28 @@
+# Checks the deployed server (Railway) after each push and every hour.
+# Set the repository variable INFERA_PUBLIC_URL (Settings → Secrets and variables → Actions → Variables).
+name: live-check
+on:
+  push:
+    branches: ["ccr-13fb360c-2cnfc4"]
+    paths: ["control-plane/**"]
+  schedule: [{ cron: "17 * * * *" }]
+  workflow_dispatch:
+jobs:
+  check:
+    if: vars.INFERA_PUBLIC_URL != ''
+    runs-on: ubuntu-latest
+    env: { URL: "${{ vars.INFERA_PUBLIC_URL }}" }
+    steps:
+      - name: Wait for Railway to redeploy after a push
+        if: github.event_name == 'push'
+        run: sleep 240
+      - name: Health, dashboard, API
+        run: |
+          set -e
+          curl -fsS "$URL/healthz" | grep -q ok
+          curl -fsS "$URL/" | grep -q "<title>Infera</title>"
+          curl -fsS "$URL/api/network" | tee net.json | grep -q devices_online
+          curl -fsS "$URL/v1/models" | grep -q '"object":"list"'
+          code=$(curl -s -o /dev/null -w "%{http_code}" "$URL/v1/chat/completions" -d '{}')
+          [ "$code" = "401" ] || { echo "expected 401 without a key, got $code"; exit 1; }
+          echo "Live site OK: $(cat net.json)"
