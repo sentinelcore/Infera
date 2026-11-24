@@ -184,8 +184,17 @@ pub async fn run_with(ask: bool, state: node::State) -> Result<()> {
     }
     println!("Starting engine for {} …", c.engine.model_id);
     let engine = engine::Engine::start(&c.engine).await?;
-    if c.bench.as_ref().map(|b| b.model_id != c.engine.model_id).unwrap_or(true) {
-        println!("Benchmarking this device …");
+    let fp = engine::fingerprint().await;
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    let why = match &c.bench {
+        None => Some("first run"),
+        Some(b) if b.model_id != c.engine.model_id => Some("the model changed"),
+        Some(b) if !b.fingerprint.is_empty() && b.fingerprint != fp => Some("hardware, drivers or the OS changed"),
+        Some(b) if b.at > 0 && now.saturating_sub(b.at) > 30 * 86_400 => Some("the last benchmark is over 30 days old"),
+        _ => None,
+    };
+    if let Some(why) = why {
+        println!("Benchmarking this device ({why}) …");
         let b = engine::benchmark(&engine, &c.engine).await?;
         print_bench(&b);
         c.bench = Some(b);

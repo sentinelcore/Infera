@@ -300,6 +300,9 @@ wait:
 					fmt.Sprintf("%s · %d+%d tokens · %.2fx", req.Model, tin, tout, band.Multiplier))
 				g.st.FinishJob(jobID, "done", tin, tout, charge, pay, "", m.Receipt)
 				g.dep.Reward(dev, jobID, time.Since(started))
+				if req.jobType == "" {
+					g.RecordSpeed(dev, tout, time.Since(started))
+				}
 				if req.expect != "" {
 					g.judgeCanary(dev, jobID, output, req.expect, pay)
 				}

@@ -22,7 +22,10 @@
 
 - **Database:** Railway Postgres service `postgres` (volume), server uses it via `INFERA_DATABASE_URL` over Railway's private network. SQLite still used for local tests. The few test accounts made on the earlier SQLite deploy were not migrated.
 
+- P1 gap items G1–G6 done: /download, rate limits, batch queue, pause/hours, GPU/RAM/fullscreen rules, re-benchmark + class demotion.
+
 ## Next
+- P2 gap items (see .planning/GAPS.md).
 - Embeddings, re-runs, and landing page + X beta tools all done and deployed.
 - Remaining (see ROADMAP): phone testing (owner), Stripe keys (owner), signed models + auto-update, smolmaxxing on Android, iPhone, sealed/confidential privacy, signed installers (needs Apple/Windows certs).
 - macOS checks run on GitHub's Mac runners instead of the owner's Mac mini (cloud sessions can't use the Mac yet).

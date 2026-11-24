@@ -303,3 +303,23 @@ func TestRateLimit(t *testing.T) {
 		t.Fatal("after release a request should pass")
 	}
 }
+
+func TestClassDemotion(t *testing.T) {
+	st := mustStore(t)
+	acct, _, _ := st.CreateAccount("o@x.dev", "owner", 0)
+	code, _ := st.CreatePairCode(acct.ID)
+	id, _, _ := st.ConsumePairCode(code, "box", "pk", "linux")
+	st.UpdateDeviceProfile(id, "linux x86_64", "B", "sandboxed", `{"tokens_per_s":30,"params_b":8,"vram_gb":12,"ram_gb":32,"gpu":"RTX 4070"}`, "m")
+	g := &Gateway{st: st, hub: NewHub(st), dep: &Dependability{st: st}}
+	for i := 0; i < 6; i++ {
+		dev, _ := st.Device(id)
+		g.RecordSpeed(dev, 120, 10*time.Second) // 12 tok/s, far below the 30 claimed
+	}
+	dev, _ := st.Device(id)
+	if dev.Class != "C" {
+		t.Fatalf("device should be moved down to C, is %s", dev.Class)
+	}
+	if classFor(9, 1.7, 0, 8, "", "android 15") != "M1" || classFor(2, 1, 0, 4, "", "android 14") != "unrated" {
+		t.Fatal("phone classes wrong")
+	}
+}

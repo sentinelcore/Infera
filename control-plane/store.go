@@ -164,6 +164,8 @@ func OpenStore(path string) (*Store, error) {
 		}
 		db.Exec(`ALTER TABLE score_events ADD COLUMN IF NOT EXISTS decayed_30 BIGINT NOT NULL DEFAULT 0`)
 		db.Exec(`ALTER TABLE score_events ADD COLUMN IF NOT EXISTS decayed_90 BIGINT NOT NULL DEFAULT 0`)
+		db.Exec(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS live_tps DOUBLE PRECISION NOT NULL DEFAULT 0`)
+		db.Exec(`ALTER TABLE devices ADD COLUMN IF NOT EXISTS live_n BIGINT NOT NULL DEFAULT 0`)
 		st := &Store{db: db, pg: true}
 		if err := st.MigrateBatch(); err != nil {
 			return nil, err
@@ -181,6 +183,8 @@ func OpenStore(path string) (*Store, error) {
 	// Migrations for databases created by earlier builds (errors mean the column exists).
 	db.Exec(`ALTER TABLE score_events ADD COLUMN decayed_30 INTEGER NOT NULL DEFAULT 0`)
 	db.Exec(`ALTER TABLE score_events ADD COLUMN decayed_90 INTEGER NOT NULL DEFAULT 0`)
+	db.Exec(`ALTER TABLE devices ADD COLUMN live_tps REAL NOT NULL DEFAULT 0`)
+	db.Exec(`ALTER TABLE devices ADD COLUMN live_n INTEGER NOT NULL DEFAULT 0`)
 	st := &Store{db: db}
 	if err := st.MigrateBatch(); err != nil {
 		return nil, err

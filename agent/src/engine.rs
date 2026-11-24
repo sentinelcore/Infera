@@ -163,6 +163,27 @@ pub struct BenchResult {
     pub first_token_ms: u64,
     pub class: String,
     pub reason: String,
+    /// Hardware/driver/OS fingerprint at benchmark time; a change triggers a re-benchmark.
+    #[serde(default)]
+    pub fingerprint: String,
+    /// Unix time of the benchmark; older than 30 days triggers a re-benchmark.
+    #[serde(default)]
+    pub at: u64,
+}
+
+/// CPU + RAM + GPU + driver + OS: changes when hardware, drivers or the OS change.
+pub async fn fingerprint() -> String {
+    let mut sys = sysinfo::System::new();
+    sys.refresh_cpu_all();
+    sys.refresh_memory();
+    let cpu = sys.cpus().first().map(|c| c.brand().trim().to_string()).unwrap_or_default();
+    let ram = sys.total_memory() / 1_000_000_000;
+    let gpu = match Command::new("nvidia-smi").args(["--query-gpu=name,driver_version", "--format=csv,noheader"]).output().await {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).lines().next().unwrap_or("").trim().to_string(),
+        _ => String::new(),
+    };
+    let os = sysinfo::System::long_os_version().unwrap_or_default();
+    format!("{cpu}|{ram}GB|{gpu}|{os}")
 }
 
 /// Install-time benchmark (ARCHITECTURE.md §3.1): hardware, then a timed generation on the
@@ -218,6 +239,8 @@ pub async fn benchmark(engine: &Engine, cfg: &EngineConfig) -> Result<BenchResul
         first_token_ms: (first - t0).as_millis() as u64,
         class,
         reason,
+        fingerprint: fingerprint().await,
+        at: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0),
     })
 }
 

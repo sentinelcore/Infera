@@ -9,7 +9,7 @@ Audited 2026-11-24. ✅ built · 🟡 partial · ⬜ not built. Priority: P1 nex
 | G3 | Gateway | Per-API-key rate limits | ✅ | P1 |
 | G4 | Node | Resource caps (max 80% GPU, 50% RAM), GPU temperature, fullscreen/game detection | ✅ (GPU busy/hot via nvidia-smi, free RAM, Windows fullscreen; caps on the engine itself not enforced) | P1 |
 | G5 | Node | Pause for 1 h / until tomorrow; "only between hours X–Y" schedule | ✅ | P1 |
-| G6 | Node | Re-benchmark on driver/OS/hardware change, monthly, or live speed drift > 20%; server moves a device down a class when it under-delivers | 🟡 (only when the model changes) | P1 |
+| G6 | Node | Re-benchmark on driver/OS/hardware change, monthly, or live speed drift > 20%; server moves a device down a class when it under-delivers | ✅ | P1 |
 | G7 | Node | `models`: download from our storage on unmetered networks, SHA-256 + signature check, disk quota | ⬜ (owner points at Ollama / a file) | P2 |
 | G8 | Node | `updater`: signed update manifest, silent update when idle; staged rollout with auto-halt on crashes | ⬜ | P2 |
 | G9 | Offers | Auto-approve limits beyond min pay (max duration, min pay per hour, charging-only, Wi-Fi-only on desktop); scheduler learns declined job types | 🟡 (min pay only) | P2 |
