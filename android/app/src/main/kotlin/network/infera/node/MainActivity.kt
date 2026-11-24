@@ -368,7 +368,7 @@ class MainActivity : Activity() {
                 button(if (stopArmed) "Tap again: stop now and take the penalty" else "Stop now", primary = false) {
                     if (stopArmed) { n?.stopNow(); stopArmed = false } else stopArmed = true
                 },
-                text("Stopping now loses this job's pay, debits 2× its value and costs 10 dependability points.", 12f, color = Color.GRAY),
+                text("Stopping now loses this job's ~$%.4f, debits $%.4f (2×) and costs 10 dependability points.".format(s.runningPayUsd, s.runningPayUsd * 2), 12f, color = Color.GRAY),
             ))
         }
 
@@ -384,7 +384,7 @@ class MainActivity : Activity() {
         ).joinToString(" · ", "Auto-approve only: ")
         root.addView(card(ask, screen, text(limText, 13f), button("Auto-approve limits…", primary = false) { editLimits() },
             text("Jobs run only while charging, on Wi-Fi, above 50% battery and not warm. Jobs outside your limits come as offers to accept or decline.", 12f, color = Color.GRAY)))
-        if (running) root.addView(button("Stop the Infera service", primary = false) {
+        if (running && s?.runningJob == null) root.addView(button("Stop the Infera service", primary = false) {
             startService(android.content.Intent(this, NodeService::class.java).setAction(NodeService.ACTION_STOP))
             ui.postDelayed({ render() }, 800)
         })

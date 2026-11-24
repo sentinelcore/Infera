@@ -82,8 +82,10 @@ pub fn main(ask: bool) -> Result<()> {
     let pause_tom = MenuItem::new("Pause until tomorrow", true, None);
     let resume = MenuItem::new("Resume", false, None);
     let quit = MenuItem::new("Quit Infera", true, None);
+    // Shown only while a job runs, with the exact cost of quitting now (G10).
+    let quit_now = MenuItem::new("Quit now", false, None);
     let menu = Menu::new();
-    menu.append_items(&[&status, &today, &PredefinedMenuItem::separator(), &toggle, &ask_item, &pause1, &pause_tom, &resume, &finish, &open_item, &PredefinedMenuItem::separator(), &quit])?;
+    menu.append_items(&[&status, &today, &PredefinedMenuItem::separator(), &toggle, &ask_item, &pause1, &pause_tom, &resume, &finish, &open_item, &PredefinedMenuItem::separator(), &quit, &quit_now])?;
 
     let mut tray = None;
     let mut look = Look::Paused;
@@ -141,6 +143,9 @@ pub fn main(ask: bool) -> Result<()> {
                 push_state(&state);
             } else if ev.id == open_item.id() {
                 let _ = open::that(&page);
+            } else if ev.id == quit_now.id() {
+                crate::node::stop_now(&state, true);
+                state.lock().unwrap().quit_requested = true;
             } else if ev.id == quit.id() {
                 let mut s = state.lock().unwrap();
                 s.quit_requested = true;
@@ -178,6 +183,15 @@ pub fn main(ask: bool) -> Result<()> {
         today.set_text(&today_text);
         toggle.set_text(if online { "Go offline" } else { "Go online" });
         finish.set_enabled(has_job);
+        let pay = state.lock().unwrap().job.as_ref().map(|j| j.est_pay_usd).unwrap_or(0.0);
+        if has_job {
+            quit.set_text("Quit after this job finishes (no penalty)");
+            quit_now.set_text(&format!("Quit now: lose ${:.4}, ${:.4} debited, −10 dependability", pay, pay * 2.0));
+        } else {
+            quit.set_text("Quit Infera");
+            quit_now.set_text("Quit now (only while a job runs)");
+        }
+        quit_now.set_enabled(has_job);
         let paused = state.lock().unwrap().paused_until > std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
         resume.set_enabled(paused);
         ask_item.set_checked(mode == "ask");

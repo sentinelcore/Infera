@@ -176,8 +176,8 @@ td.num { font-variant-numeric: tabular-nums; font-family: var(--mono); }
       <h2>Penalties and score changes</h2>
       <p class="lede">Declining offers is free. Stopping an accepted job midway costs money and dependability. Use "Finish current job, then go offline" in the node to stop safely.</p>
       <div class="table-wrap"><table>
-        <thead><tr><th>When</th><th>Device</th><th>Cause</th><th>Score</th><th>Evidence</th></tr></thead>
-        <tbody id="pen-rows"><tr><td colspan="5" class="muted">No penalties. Keep it that way.</td></tr></tbody>
+        <thead><tr><th>When</th><th>Device</th><th>Cause</th><th>Score</th><th>Evidence</th><th>Appeal</th></tr></thead>
+        <tbody id="pen-rows"><tr><td colspan="6" class="muted">No penalties. Keep it that way.</td></tr></tbody>
       </table></div>
 
       <h2>Ledger</h2>
@@ -250,6 +250,13 @@ td.num { font-variant-numeric: tabular-nums; font-family: var(--mono); }
       <button class="ghost" id="w-csv">Download full queue (CSV)</button>
       <pre id="w-out" hidden></pre>
     </div>
+    <h2>Appeals</h2>
+    <p class="lede">Owners appeal penalties, suspensions and removals from their dashboard. Upholding one gives back the score points, refunds the job's debit and lifts a suspension or removal. (Enter the admin token in the payout card below first.)</p>
+    <div class="card"><button class="primary" id="ap-load">Load open appeals</button></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Filed</th><th>Device</th><th>Penalty</th><th>Owner says</th><th>Note</th><th></th></tr></thead>
+      <tbody id="ap-rows"></tbody>
+    </table></div>
     <h2>Weekly USDT payout batch</h2>
     <p class="lede">Lists contributors whose available balance is above the minimum and whose wallet has passed the 48-hour hold. Send USDT from the treasury wallet, then record each transaction hash.</p>
     <div class="card">
@@ -332,6 +339,7 @@ if (refFromURL) store.set("infera-ref", refFromURL);
 net(); setInterval(net, 15000);
 
 // ---------- contributor ----------
+const APPEALABLE = ["owner_action", "not_delivered", "device_failure", "wrong_result", "suspension", "removed"];
 let ownerKey = store.get("infera-owner");
 $("o-signup").onclick = async () => {
   try {
@@ -357,7 +365,7 @@ async function showOwner() {
     const devs = d.devices || [];
     $("dev-rows").innerHTML = devs.length ? devs.map(v => {
       const susp = v.suspended_until * 1000 > Date.now();
-      const st = susp ? `<span class="pill warn">suspended until ${new Date(v.suspended_until * 1000).toLocaleString()}</span>`
+      const st = v.suspended_until >= 253402300799 ? `<span class="pill warn">removed · appeal below</span>` : susp ? `<span class="pill warn">suspended until ${new Date(v.suspended_until * 1000).toLocaleString()}</span>`
         : `<span class="pill ${v.online ? "on" : ""}">${esc(v.status)}${v.online && v.mode === "ask" ? " · ask" : ""}</span>`;
       return `<tr><td><b>${esc(v.name)}</b><div class="muted mono">${esc(v.platform)}</div></td><td>${st}</td>
         <td>${esc(v.class)}<div class="muted">${esc(v.privacy_level)}</div></td>
@@ -367,8 +375,15 @@ async function showOwner() {
     }).join("") : `<tr><td colspan="6" class="muted">No devices yet. Add one below.</td></tr>`;
     const pens = d.penalties || [];
     $("pen-rows").innerHTML = pens.length ? pens.map(p => `<tr><td>${when(p.created_at)}</td><td class="mono">${esc(p.device_id)}</td>
-      <td>${esc(p.cause.replace(/_/g, " "))}</td><td class="num ${p.delta < 0 ? "neg" : ""}">${p.delta > 0 ? "+" : ""}${p.delta}</td><td>${esc(p.evidence)}</td></tr>`).join("")
-      : `<tr><td colspan="5" class="muted">No penalties. Keep it that way.</td></tr>`;
+      <td>${esc(p.cause.replace(/_/g, " "))}</td><td class="num ${p.delta < 0 ? "neg" : ""}">${p.delta > 0 ? "+" : ""}${p.delta}</td><td>${esc(p.evidence)}</td>
+      <td>${p.appeal ? esc(p.appeal) : (APPEALABLE.includes(p.cause) && Date.now() / 1000 - p.created_at < 14 * 86400 ? `<button class="ghost" data-appeal="${p.id}">Appeal</button>` : "")}</td></tr>`).join("")
+      : `<tr><td colspan="6" class="muted">No penalties. Keep it that way.</td></tr>`;
+    $("pen-rows").querySelectorAll("[data-appeal]").forEach(b => b.onclick = async () => {
+      const msg = prompt("What happened? (e.g. power cut, internet outage, it was not me)");
+      if (msg === null) return;
+      try { await call("/api/owner/appeal", { method: "POST", key: ownerKey, body: JSON.stringify({ event_id: +b.dataset.appeal, message: msg }) }); toast("Appeal sent. We review appeals within 2 working days."); showOwner(); }
+      catch (e) { toast(e.message); }
+    });
     $("led-rows").innerHTML = (d.ledger || []).map(e => `<tr><td>${when(e.created_at)}</td><td>${esc(e.kind)}</td>
       <td class="num ${e.amount < 0 ? "neg" : ""}">${usd(e.amount)}</td><td>${e.kind === "earning" ? (e.release_at * 1000 > Date.now() ? "held until " + new Date(e.release_at * 1000).toLocaleDateString() : "yes") : ""}</td><td>${esc(e.note)}</td></tr>`).join("");
     const a = d.account;
@@ -467,6 +482,21 @@ $("w-csv").onclick = async () => {
     if (!r.ok) throw new Error("admin token required");
     $("w-out").hidden = false; $("w-out").textContent = await r.text();
   } catch (e) { toast(e.message); }
+};
+$("ap-load").onclick = async () => {
+  try {
+    const tok = $("a-token").value;
+    const r = await call("/api/admin/appeals", { key: tok });
+    const list = r.appeals || [];
+    $("ap-rows").innerHTML = list.length ? list.map(a => `<tr><td>${when(a.created_at)}</td><td class="mono">${esc(a.device_id)}</td>
+      <td>${esc(a.cause.replace(/_/g, " "))} (${a.delta})<div class="muted">${esc(a.evidence)}</div><div class="muted mono">${esc(a.job_id)}</div></td><td>${esc(a.message)}</td>
+      <td><input id="apn-${a.id}" placeholder="note to owner"></td><td><button class="ghost" data-id="${a.id}" data-ok="1">Uphold</button> <button class="ghost" data-id="${a.id}" data-ok="0">Reject</button></td></tr>`).join("")
+      : `<tr><td colspan="6" class="muted">No open appeals.</td></tr>`;
+    $("ap-rows").querySelectorAll("button").forEach(b => b.onclick = async () => {
+      try { await call("/api/admin/appeals/resolve", { method: "POST", key: tok, body: JSON.stringify({ id: +b.dataset.id, accept: b.dataset.ok === "1", note: $("apn-" + b.dataset.id).value }) }); toast("Done"); $("ap-load").click(); }
+      catch (e) { toast(e.message); }
+    });
+  } catch (e) { toast(e.message + " (enter the admin token first)"); }
 };
 $("a-load").onclick = async () => {
   try {

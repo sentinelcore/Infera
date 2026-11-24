@@ -344,3 +344,60 @@ func TestDeclinedJobTypesGoLast(t *testing.T) {
 		t.Fatal("an accept should clear the decline count")
 	}
 }
+
+func TestAppealsAndRemoval(t *testing.T) {
+	st := mustStore(t)
+	acct, _, _ := st.CreateAccount("ap@x.dev", "owner", 0)
+	other, _, _ := st.CreateAccount("other@x.dev", "owner", 0)
+	code, _ := st.CreatePairCode(acct.ID)
+	id, _, _ := st.ConsumePairCode(code, "box", "pk", "linux")
+	dep := &Dependability{st: st}
+	dev, _ := st.Device(id)
+	dep.Penalize(dev, "j1", CauseOwnerAction, 1000, "quit") // 70 -> 60, debit 2000
+	ev := st.RecentScoreEvents(acct.ID, 10)
+	if len(ev) == 0 || ev[0].ID == 0 {
+		t.Fatal("penalty event missing")
+	}
+	if st.FileAppeal(other.ID, ev[0].ID, "not mine") == nil {
+		t.Fatal("another owner could appeal this penalty")
+	}
+	if err := st.FileAppeal(acct.ID, ev[0].ID, "power cut"); err != nil {
+		t.Fatal(err)
+	}
+	if st.FileAppeal(acct.ID, ev[0].ID, "again") == nil {
+		t.Fatal("duplicate appeal accepted")
+	}
+	open := st.OpenAppeals()
+	if len(open) != 1 || open[0].Cause != CauseOwnerAction {
+		t.Fatalf("open appeals: %+v", open)
+	}
+	if _, err := st.ResolveAppeal(open[0].ID, true, "outage confirmed"); err != nil {
+		t.Fatal(err)
+	}
+	dev, _ = st.Device(id)
+	if dev.Dependability != 70 {
+		t.Fatalf("score after upheld appeal %v, want 70", dev.Dependability)
+	}
+	if b := st.OwnerBalance(acct.ID); b.Penalties != 0 {
+		t.Fatalf("debit not refunded: penalties %d", b.Penalties)
+	}
+	if ev := st.RecentScoreEvents(acct.ID, 10); ev[len(ev)-1].Appeal != "upheld" {
+		t.Fatalf("appeal status not shown on the penalty: %+v", ev)
+	}
+	if _, err := st.ResolveAppeal(open[0].ID, false, ""); err == nil {
+		t.Fatal("appeal resolved twice")
+	}
+
+	// Three suspensions in 30 days remove the device.
+	for i := 0; i < 2; i++ {
+		st.AddScoreEvent(id, "", "suspension", 0, "earlier suspension")
+	}
+	dev, _ = st.Device(id)
+	st.SetDeviceScore(id, 20, 0, 0)
+	dev, _ = st.Device(id)
+	dep.Penalize(dev, "j9", CauseWrongResult, 0, "bad") // score < 30 -> third suspension
+	dev, _ = st.Device(id)
+	if dev.SuspendedUntil != removedUntil {
+		t.Fatalf("not removed after 3 suspensions: until %d", dev.SuspendedUntil)
+	}
+}

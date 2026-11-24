@@ -173,6 +173,9 @@ func OpenStore(path string) (*Store, error) {
 		if err := st.MigrateBatch(); err != nil {
 			return nil, err
 		}
+		if err := st.MigrateAppeals(); err != nil {
+			return nil, err
+		}
 		return st, st.MigrateGrowth()
 	}
 	db, err := sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)")
@@ -190,6 +193,9 @@ func OpenStore(path string) (*Store, error) {
 	db.Exec(`ALTER TABLE devices ADD COLUMN live_n INTEGER NOT NULL DEFAULT 0`)
 	st := &Store{db: db}
 	if err := st.MigrateBatch(); err != nil {
+		return nil, err
+	}
+	if err := st.MigrateAppeals(); err != nil {
 		return nil, err
 	}
 	return st, st.MigrateGrowth()
@@ -440,6 +446,8 @@ func (s *Store) RecentLedger(accountID string, limit int) []LedgerEntry {
 }
 
 type ScoreEvent struct {
+	ID        int64   `json:"id"`
+	Appeal    string  `json:"appeal,omitempty"` // open | upheld | rejected
 	DeviceID  string  `json:"device_id"`
 	JobID     string  `json:"job_id"`
 	Cause     string  `json:"cause"`
@@ -449,8 +457,8 @@ type ScoreEvent struct {
 }
 
 func (s *Store) RecentScoreEvents(ownerID string, limit int) []ScoreEvent {
-	rows, err := s.query(`SELECT e.device_id,e.job_id,e.cause,e.delta,e.evidence,e.created_at FROM score_events e
-	  JOIN devices d ON d.id=e.device_id WHERE d.owner_id=? AND e.cause NOT IN ('completed','canary_pass','rerun_match') ORDER BY e.id DESC LIMIT ?`, ownerID, limit)
+	rows, err := s.query(`SELECT e.id,COALESCE(a.status,''),e.device_id,e.job_id,e.cause,e.delta,e.evidence,e.created_at FROM score_events e
+	  JOIN devices d ON d.id=e.device_id LEFT JOIN appeals a ON a.event_id=e.id WHERE d.owner_id=? AND e.cause NOT IN ('completed','canary_pass','rerun_match') ORDER BY e.id DESC LIMIT ?`, ownerID, limit)
 	if err != nil {
 		return nil
 	}
@@ -458,7 +466,7 @@ func (s *Store) RecentScoreEvents(ownerID string, limit int) []ScoreEvent {
 	var out []ScoreEvent
 	for rows.Next() {
 		var e ScoreEvent
-		rows.Scan(&e.DeviceID, &e.JobID, &e.Cause, &e.Delta, &e.Evidence, &e.CreatedAt)
+		rows.Scan(&e.ID, &e.Appeal, &e.DeviceID, &e.JobID, &e.Cause, &e.Delta, &e.Evidence, &e.CreatedAt)
 		out = append(out, e)
 	}
 	return out

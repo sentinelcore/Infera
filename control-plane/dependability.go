@@ -87,6 +87,10 @@ func (d *Dependability) Penalize(dev *DeviceRow, jobID, cause string, jobValue i
 		score = 30 // back on probation at 30 after the suspension
 		d.st.AddScoreEvent(dev.ID, jobID, "suspension", 0, "score below 30: suspended 72 hours, payouts frozen")
 	}
+	if suspendedUntil > dev.SuspendedUntil && d.st.CountScoreEvents(dev.ID, "suspension", t-30*24*3600) >= 3 {
+		suspendedUntil = removedUntil
+		d.st.AddScoreEvent(dev.ID, jobID, "removed", 0, "3 suspensions in 30 days: removed from the network (you can appeal)")
+	}
 	d.st.SetDeviceScore(dev.ID, score, 0, suspendedUntil)
 }
 
