@@ -1,0 +1,90 @@
+// Infera control plane: OpenAI-compatible gateway, node hub, scheduler, ledger and dashboard.
+package main
+
+import (
+	"embed"
+	"encoding/json"
+	"io/fs"
+	"log"
+	"net/http"
+	"os"
+	"strconv"
+	"time"
+)
+
+//go:embed web
+var webFS embed.FS
+
+func env(k, def string) string {
+	if v := os.Getenv(k); v != "" {
+		return v
+	}
+	return def
+}
+
+func envFloat(k string, def float64) float64 {
+	if v, err := strconv.ParseFloat(os.Getenv(k), 64); err == nil {
+		return v
+	}
+	return def
+}
+
+func main() {
+	st, err := OpenStore(env("INFERA_DB", "infera.db"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	cfg := &Config{
+		OwnerShare:    envFloat("INFERA_OWNER_SHARE", 0.70),
+		Prices:        map[string]Price{},
+		DefaultPrice:  Price{In: envFloat("INFERA_PRICE_IN", 0.10), Out: envFloat("INFERA_PRICE_OUT", 0.30)},
+		FallbackURL:   os.Getenv("INFERA_FALLBACK_URL"),
+		FallbackKey:   os.Getenv("INFERA_FALLBACK_KEY"),
+		FallbackModel: os.Getenv("INFERA_FALLBACK_MODEL"),
+		FirstToken:    time.Duration(envFloat("INFERA_FIRST_TOKEN_S", 90)) * time.Second,
+		JobDeadline:   time.Duration(envFloat("INFERA_JOB_DEADLINE_S", 600)) * time.Second,
+	}
+	if p := os.Getenv("INFERA_PRICES"); p != "" { // e.g. {"qwen3.5-2b":{"in":0.05,"out":0.15}}
+		if err := json.Unmarshal([]byte(p), &cfg.Prices); err != nil {
+			log.Fatalf("INFERA_PRICES: %v", err)
+		}
+	}
+	hub := NewHub(st)
+	dep := &Dependability{st: st}
+	gw := &Gateway{st: st, hub: hub, dep: dep, cfg: cfg}
+	api := &API{st: st, hub: hub, cfg: cfg, inviteCode: os.Getenv("INFERA_INVITE_CODE"), adminToken: os.Getenv("INFERA_ADMIN_TOKEN"),
+		starterCents: int64(envFloat("INFERA_STARTER_CREDITS_USD", 5) * 100)}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /v1/chat/completions", gw.ChatCompletions)
+	mux.HandleFunc("GET /v1/models", gw.Models)
+	mux.HandleFunc("GET /ws/node", hub.ServeNode)
+	mux.HandleFunc("POST /api/signup", api.Signup)
+	mux.HandleFunc("POST /api/pair-code", api.PairCode)
+	mux.HandleFunc("POST /api/devices/pair", api.PairDevice)
+	mux.HandleFunc("GET /api/owner", api.Owner)
+	mux.HandleFunc("POST /api/owner/payout-address", api.PayoutAddress)
+	mux.HandleFunc("GET /api/customer", api.Customer)
+	mux.HandleFunc("GET /api/device/me", api.DeviceMe)
+	mux.HandleFunc("GET /api/network", api.Network)
+	mux.HandleFunc("GET /api/admin/payouts", api.PayoutBatch)
+	mux.HandleFunc("POST /api/admin/payouts/mark-sent", api.MarkPaid)
+	mux.HandleFunc("POST /api/admin/credits", api.GrantCredits)
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
+	sub, _ := fs.Sub(webFS, "web")
+	mux.Handle("GET /", http.FileServer(http.FS(sub)))
+
+	addr := env("INFERA_ADDR", ":8080")
+	log.Printf("Infera control plane on %s (owner share %.0f%%, fallback %v)", addr, cfg.OwnerShare*100, cfg.FallbackURL != "")
+	srv := &http.Server{Addr: addr, Handler: logRequests(mux), ReadHeaderTimeout: 15 * time.Second}
+	log.Fatal(srv.ListenAndServe())
+}
+
+func logRequests(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/healthz" && r.URL.Path != "/ws/node" && r.URL.Path != "/api/device/me" {
+			log.Printf("%s %s", r.Method, r.URL.Path)
+		}
+		h.ServeHTTP(w, r)
+	})
+}

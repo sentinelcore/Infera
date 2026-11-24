@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Infera</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --bg: #f4f6f4; --surface: #ffffff; --surface-2: #e9eeeb; --fg: #14201b; --muted: #56655e; --line: #c9d3ce;
+  --accent: #17795a; --accent-soft: #dcefe7; --money: #a86a00; --money-soft: #f6ead2; --alert: #b3412e; --alert-soft: #f6e0db;
+  --display: "Sora", system-ui, sans-serif; --body: "IBM Plex Sans", system-ui, sans-serif; --mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root {
+  --bg: #0e1412; --surface: #161f1b; --surface-2: #1d2924; --fg: #e3ebe7; --muted: #9aaba3; --line: #2f3e37;
+  --accent: #4cc398; --accent-soft: #173a2e; --money: #e6ae45; --money-soft: #3a2c10; --alert: #ee8a75; --alert-soft: #3d1f19; color-scheme: dark; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.55 var(--body); padding: 0 max(16px, env(safe-area-inset-left)); }
+.wrap { max-width: 1040px; margin: 0 auto; padding-bottom: 64px; }
+header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 22px 0; border-bottom: 1px solid var(--line); }
+.logo { font: 700 1.5rem var(--display); letter-spacing: -0.02em; }
+.logo small { font: 400 0.8rem var(--mono); color: var(--muted); margin-left: 8px; }
+nav { display: flex; gap: 6px; flex-wrap: wrap; }
+nav button { font: 500 0.9rem var(--body); padding: 7px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; }
+nav button[aria-selected="true"] { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+h2 { font: 600 1.35rem var(--display); margin: 28px 0 6px; }
+h3 { font: 600 1.02rem var(--display); margin: 0 0 8px; }
+p.lede { color: var(--muted); margin: 0 0 16px; max-width: 70ch; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px; min-width: 0; }
+label { display: block; font-size: 0.82rem; color: var(--muted); margin: 10px 0 4px; }
+input, select, textarea { width: 100%; font: 0.95rem var(--body); padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg); }
+textarea { font-family: var(--mono); font-size: 0.85rem; min-height: 90px; }
+button.primary { margin-top: 12px; font: 600 0.92rem var(--body); padding: 9px 16px; border-radius: 8px; border: 0; background: var(--accent); color: var(--bg); cursor: pointer; }
+button.ghost { margin-top: 12px; font: 500 0.88rem var(--body); padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--fg); cursor: pointer; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mono, code, pre { font-family: var(--mono); font-size: 0.83rem; }
+pre { background: var(--surface-2); padding: 12px; border-radius: 8px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; margin: 8px 0 0; }
+.big { font: 700 2rem var(--display); font-variant-numeric: tabular-nums; }
+.money { color: var(--money); }
+.muted { color: var(--muted); font-size: 0.85rem; }
+.pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font: 500 0.75rem var(--mono); border: 1px solid var(--line); }
+.pill.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.pill.warn { background: var(--alert-soft); border-color: var(--alert); color: var(--alert); }
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); margin-top: 10px; }
+table { width: 100%; border-collapse: collapse; font-size: 0.88rem; min-width: 560px; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font: 500 0.72rem var(--mono); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); background: var(--surface-2); }
+tr:last-child td { border-bottom: 0; }
+td.num { font-variant-numeric: tabular-nums; font-family: var(--mono); }
+.neg { color: var(--alert); }
+.code { font: 700 2.4rem var(--mono); letter-spacing: 0.2em; color: var(--accent); }
+.toast { position: fixed; bottom: calc(16px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 8px; font-size: 0.9rem; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+.stat .k { font: 500 0.72rem var(--mono); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.stat .v { font: 700 1.4rem var(--display); font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">Infera<small id="netstat">connecting…</small></div>
+    <nav role="tablist">
+      <button role="tab" data-tab="contribute" aria-selected="true">Contribute a device</button>
+      <button role="tab" data-tab="dev">Developers</button>
+      <button role="tab" data-tab="admin">Admin</button>
+    </nav>
+  </header>
+
+  <!-- CONTRIBUTE -->
+  <section id="tab-contribute">
+    <div id="owner-signin">
+      <h2>Earn from your idle computer</h2>
+      <p class="lede">Create a contributor account, install the Infera node on your laptop or desktop, and pair it with a 6-digit code. Your device serves AI jobs while you're away and you're paid weekly in USDT.</p>
+      <div class="grid">
+        <div class="card">
+          <h3>New contributor</h3>
+          <label for="o-email">Email</label><input id="o-email" type="email" autocomplete="email">
+          <label for="o-invite">Beta invite code</label><input id="o-invite">
+          <button class="primary" id="o-signup">Create account</button>
+        </div>
+        <div class="card">
+          <h3>Already have a key</h3>
+          <label for="o-key">Contributor key (starts with ik_own_)</label><input id="o-key" autocomplete="off">
+          <button class="primary" id="o-signin">Sign in</button>
+        </div>
+      </div>
+    </div>
+    <div id="owner-app" hidden>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap">
+        <h2>Your earnings</h2><button class="ghost" id="o-signout">Sign out</button>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="k">Available</div><div class="v money" id="b-avail">$0.00</div></div>
+        <div class="stat"><div class="k">Held</div><div class="v" id="b-held">$0.00</div></div>
+        <div class="stat"><div class="k">Today</div><div class="v" id="b-today">$0.00</div></div>
+        <div class="stat"><div class="k">Penalties</div><div class="v neg" id="b-pen">$0.00</div></div>
+        <div class="stat"><div class="k">Paid out</div><div class="v" id="b-paid">$0.00</div></div>
+      </div>
+
+      <h2>Devices</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Device</th><th>Status</th><th>Class</th><th>Dependability</th><th>Hold · Pay</th><th>Models</th></tr></thead>
+        <tbody id="dev-rows"><tr><td colspan="6" class="muted">No devices yet. Add one below.</td></tr></tbody>
+      </table></div>
+
+      <div class="grid" style="margin-top:14px">
+        <div class="card">
+          <h3>Add a device</h3>
+          <p class="muted">Install the node, then pair it with this code within 15 minutes.</p>
+          <button class="primary" id="o-code">Get pairing code</button>
+          <div id="pair-out" hidden>
+            <div class="code" id="pair-code"></div>
+            <pre id="pair-cmd"></pre>
+          </div>
+        </div>
+        <div class="card">
+          <h3>USDT payout wallet</h3>
+          <label for="p-net">Network</label>
+          <select id="p-net"><option value="tron">Tron (TRC-20), lowest fees</option><option value="arbitrum">Arbitrum</option><option value="bnb">BNB Chain</option><option value="polygon">Polygon</option><option value="ethereum">Ethereum</option><option value="solana">Solana</option><option value="ton">TON</option></select>
+          <label for="p-addr">USDT address</label><input id="p-addr" autocomplete="off">
+          <button class="primary" id="p-save">Save wallet</button>
+          <p class="muted" id="p-current"></p>
+        </div>
+      </div>
+
+      <h2>Penalties and score changes</h2>
+      <p class="lede">Declining offers is free. Stopping an accepted job midway costs money and dependability. Use "Finish current job, then go offline" in the node to stop safely.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>When</th><th>Device</th><th>Cause</th><th>Score</th><th>Evidence</th></tr></thead>
+        <tbody id="pen-rows"><tr><td colspan="5" class="muted">No penalties. Keep it that way.</td></tr></tbody>
+      </table></div>
+
+      <h2>Ledger</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>When</th><th>Type</th><th>Amount</th><th>Released</th><th>Note</th></tr></thead>
+        <tbody id="led-rows"></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <!-- DEVELOPERS -->
+  <section id="tab-dev" hidden>
+    <div id="cust-signin">
+      <h2>OpenAI-compatible inference</h2>
+      <p class="lede">Point any OpenAI client at Infera. Jobs run on community devices in a sealed sandbox; set <code>"privacy"</code> to choose the minimum privacy level. Beta accounts start with free credits.</p>
+      <div class="grid">
+        <div class="card">
+          <h3>Get an API key</h3>
+          <label for="c-email">Email</label><input id="c-email" type="email" autocomplete="email">
+          <label for="c-invite">Beta invite code</label><input id="c-invite">
+          <button class="primary" id="c-signup">Create key</button>
+        </div>
+        <div class="card">
+          <h3>Already have a key</h3>
+          <label for="c-key">API key (starts with ik_cust_)</label><input id="c-key" autocomplete="off">
+          <button class="primary" id="c-signin">Sign in</button>
+        </div>
+      </div>
+    </div>
+    <div id="cust-app" hidden>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap">
+        <h2>Credits: <span class="money" id="c-credits">$0.00</span></h2><button class="ghost" id="c-signout">Sign out</button>
+      </div>
+      <div class="grid">
+        <div class="card">
+          <h3>Try it</h3>
+          <label for="t-model">Model</label><select id="t-model"></select>
+          <label for="t-prompt">Prompt</label><textarea id="t-prompt">Explain in two sentences why idle computers can serve AI.</textarea>
+          <button class="primary" id="t-run">Run</button>
+          <pre id="t-out" aria-live="polite"></pre>
+        </div>
+        <div class="card">
+          <h3>Use it from code</h3>
+          <pre id="c-snippet"></pre>
+        </div>
+      </div>
+      <h2>Charges</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>When</th><th>Type</th><th>Amount</th><th>Note</th></tr></thead>
+        <tbody id="cled-rows"></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <!-- ADMIN -->
+  <section id="tab-admin" hidden>
+    <h2>Weekly USDT payout batch</h2>
+    <p class="lede">Lists contributors whose available balance is above the minimum and whose wallet has passed the 48-hour hold. Send USDT from the treasury wallet, then record each transaction hash.</p>
+    <div class="card">
+      <label for="a-token">Admin token</label><input id="a-token" type="password" autocomplete="off">
+      <label for="a-min">Minimum payout (USD)</label><input id="a-min" type="number" value="10" min="1">
+      <button class="primary" id="a-load">Load batch</button>
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Contributor</th><th>Network</th><th>Address</th><th>USDT</th><th>Tx hash</th><th></th></tr></thead>
+      <tbody id="a-rows"></tbody>
+    </table></div>
+  </section>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const usd = (micro) => (micro < 0 ? "−$" : "$") + (Math.abs(micro) / 1e6).toFixed(micro !== 0 && Math.abs(micro) < 1e4 ? 4 : 2);
+const when = (t) => t ? new Date(t * 1000).toLocaleString() : "";
+const store = { get(k) { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } },
+                set(k, v) { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) {} } };
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(t._h); t._h = setTimeout(() => t.hidden = true, 4000); }
+async function call(path, opts = {}) {
+  const r = await fetch(path, { ...opts, headers: { "Content-Type": "application/json", ...(opts.key ? { Authorization: "Bearer " + opts.key } : {}) } });
+  const ct = r.headers.get("content-type") || "";
+  const body = ct.includes("json") ? await r.json() : await r.text();
+  if (!r.ok) throw new Error(body?.error?.message || body || r.statusText);
+  return body;
+}
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+// tabs
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("nav button").forEach(x => x.setAttribute("aria-selected", x === b));
+  ["contribute", "dev", "admin"].forEach(t => $("tab-" + t).hidden = t !== b.dataset.tab);
+  location.hash = b.dataset.tab;
+});
+if (location.hash) document.querySelector(`nav button[data-tab="${location.hash.slice(1)}"]`)?.click();
+
+async function net() {
+  try { const n = await call("/api/network"); $("netstat").textContent = `${n.devices_online} devices online`; } catch (e) { $("netstat").textContent = "offline"; }
+}
+net(); setInterval(net, 15000);
+
+// ---------- contributor ----------
+let ownerKey = store.get("infera-owner");
+$("o-signup").onclick = async () => {
+  try {
+    const r = await call("/api/signup", { method: "POST", body: JSON.stringify({ email: $("o-email").value, kind: "owner", invite: $("o-invite").value }) });
+    ownerKey = r.api_key; store.set("infera-owner", ownerKey);
+    alertKey(r.api_key); showOwner();
+  } catch (e) { toast(e.message); }
+};
+$("o-signin").onclick = () => { ownerKey = $("o-key").value.trim(); store.set("infera-owner", ownerKey); showOwner(); };
+$("o-signout").onclick = () => { ownerKey = ""; store.set("infera-owner", ""); $("owner-app").hidden = true; $("owner-signin").hidden = false; };
+function alertKey(k) { toast("Your key is saved in this browser. Copy it somewhere safe: " + k); }
+
+async function showOwner() {
+  if (!ownerKey) return;
+  try {
+    const d = await call("/api/owner", { key: ownerKey });
+    $("owner-signin").hidden = true; $("owner-app").hidden = false;
+    $("b-avail").textContent = usd(d.balance.available);
+    $("b-held").textContent = usd(d.balance.held);
+    $("b-today").textContent = usd(d.today.earned_today) + " · " + d.today.jobs_today + " jobs";
+    $("b-pen").textContent = usd(-d.balance.penalties);
+    $("b-paid").textContent = usd(d.balance.paid);
+    const devs = d.devices || [];
+    $("dev-rows").innerHTML = devs.length ? devs.map(v => {
+      const susp = v.suspended_until * 1000 > Date.now();
+      const st = susp ? `<span class="pill warn">suspended until ${new Date(v.suspended_until * 1000).toLocaleString()}</span>`
+        : `<span class="pill ${v.online ? "on" : ""}">${esc(v.status)}${v.online && v.mode === "ask" ? " · ask" : ""}</span>`;
+      return `<tr><td><b>${esc(v.name)}</b><div class="muted mono">${esc(v.platform)}</div></td><td>${st}</td>
+        <td>${esc(v.class)}<div class="muted">${esc(v.privacy_level)}</div></td>
+        <td class="num">${v.dependability.toFixed(1)}<div class="muted">streak ${v.streak}</div></td>
+        <td class="num">${v.band.suspended ? "frozen" : v.band.hold_days + " d · " + v.band.multiplier.toFixed(2) + "×"}${v.band.batch_only ? '<div class="muted">batch only</div>' : ""}</td>
+        <td class="mono">${esc((v.models || []).join(", "))}</td></tr>`;
+    }).join("") : `<tr><td colspan="6" class="muted">No devices yet. Add one below.</td></tr>`;
+    const pens = d.penalties || [];
+    $("pen-rows").innerHTML = pens.length ? pens.map(p => `<tr><td>${when(p.created_at)}</td><td class="mono">${esc(p.device_id)}</td>
+      <td>${esc(p.cause.replace(/_/g, " "))}</td><td class="num ${p.delta < 0 ? "neg" : ""}">${p.delta > 0 ? "+" : ""}${p.delta}</td><td>${esc(p.evidence)}</td></tr>`).join("")
+      : `<tr><td colspan="5" class="muted">No penalties. Keep it that way.</td></tr>`;
+    $("led-rows").innerHTML = (d.ledger || []).map(e => `<tr><td>${when(e.created_at)}</td><td>${esc(e.kind)}</td>
+      <td class="num ${e.amount < 0 ? "neg" : ""}">${usd(e.amount)}</td><td>${e.kind === "earning" ? (e.release_at * 1000 > Date.now() ? "held until " + new Date(e.release_at * 1000).toLocaleDateString() : "yes") : ""}</td><td>${esc(e.note)}</td></tr>`).join("");
+    const a = d.account;
+    $("p-current").textContent = a.payout_address ? `Current: ${a.payout_network} · ${a.payout_address}` : "No wallet yet.";
+  } catch (e) { toast(e.message); }
+}
+$("o-code").onclick = async () => {
+  try {
+    const r = await call("/api/pair-code", { method: "POST", key: ownerKey });
+    $("pair-out").hidden = false; $("pair-code").textContent = r.code;
+    $("pair-cmd").textContent = `infera pair ${r.code} --server ${location.origin}\ninfera run`;
+  } catch (e) { toast(e.message); }
+};
+$("p-save").onclick = async () => {
+  try { const r = await call("/api/owner/payout-address", { method: "POST", key: ownerKey, body: JSON.stringify({ network: $("p-net").value, address: $("p-addr").value }) }); toast(r.note); showOwner(); }
+  catch (e) { toast(e.message); }
+};
+if (ownerKey) showOwner();
+setInterval(() => { if (ownerKey && !$("owner-app").hidden) showOwner(); }, 10000);
+
+// ---------- developers ----------
+let custKey = store.get("infera-cust");
+$("c-signup").onclick = async () => {
+  try {
+    const r = await call("/api/signup", { method: "POST", body: JSON.stringify({ email: $("c-email").value, kind: "customer", invite: $("c-invite").value }) });
+    custKey = r.api_key; store.set("infera-cust", custKey); alertKey(r.api_key); showCust();
+  } catch (e) { toast(e.message); }
+};
+$("c-signin").onclick = () => { custKey = $("c-key").value.trim(); store.set("infera-cust", custKey); showCust(); };
+$("c-signout").onclick = () => { custKey = ""; store.set("infera-cust", ""); $("cust-app").hidden = true; $("cust-signin").hidden = false; };
+async function showCust() {
+  if (!custKey) return;
+  try {
+    const d = await call("/api/customer", { key: custKey });
+    $("cust-signin").hidden = true; $("cust-app").hidden = false;
+    $("c-credits").textContent = usd(d.credits);
+    $("cled-rows").innerHTML = (d.ledger || []).map(e => `<tr><td>${when(e.created_at)}</td><td>${esc(e.kind)}</td><td class="num ${e.amount < 0 ? "neg" : ""}">${usd(e.amount)}</td><td>${esc(e.note)}</td></tr>`).join("");
+    const m = await call("/v1/models");
+    const ids = (m.data || []).map(x => x.id);
+    $("t-model").innerHTML = ids.length ? ids.map(i => `<option>${esc(i)}</option>`).join("") : `<option value="">No models online yet</option>`;
+    $("c-snippet").textContent = `curl ${location.origin}/v1/chat/completions \\
+  -H "Authorization: Bearer ${custKey}" \\
+  -H "Content-Type: application/json" \\
+  -d '{"model":"${ids[0] || "MODEL"}","stream":true,
+       "messages":[{"role":"user","content":"Hello"}]}'
+
+# Python (openai package)
+from openai import OpenAI
+client = OpenAI(base_url="${location.origin}/v1", api_key="${custKey}")
+r = client.chat.completions.create(model="${ids[0] || "MODEL"}",
+      messages=[{"role": "user", "content": "Hello"}])
+print(r.choices[0].message.content)`;
+  } catch (e) { toast(e.message); }
+}
+$("t-run").onclick = async () => {
+  const out = $("t-out"); out.textContent = "";
+  try {
+    const r = await fetch("/v1/chat/completions", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + custKey },
+      body: JSON.stringify({ model: $("t-model").value, stream: true, messages: [{ role: "user", content: $("t-prompt").value }] }) });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.error?.message || r.statusText); }
+    const reader = r.body.getReader(); const dec = new TextDecoder(); let buf = "";
+    for (;;) {
+      const { value, done } = await reader.read(); if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i; while ((i = buf.indexOf("\n\n")) >= 0) {
+        const line = buf.slice(0, i).replace(/^data: /, ""); buf = buf.slice(i + 2);
+        if (line === "[DONE]") continue;
+        try { const j = JSON.parse(line); if (j.error) out.textContent += "\n[" + j.error.message + "]"; else out.textContent += j.choices[0].delta.content || ""; } catch (e) {}
+      }
+    }
+    out.textContent += `\n\n— served via ${r.headers.get("X-Infera-Route") || "?"}`;
+    showCust();
+  } catch (e) { out.textContent = e.message; }
+};
+if (custKey) showCust();
+
+// ---------- admin ----------
+$("a-load").onclick = async () => {
+  try {
+    const tok = $("a-token").value;
+    const r = await call("/api/admin/payouts?min_usd=" + encodeURIComponent($("a-min").value), { key: tok });
+    const lines = r.lines || [];
+    $("a-rows").innerHTML = lines.length ? lines.map((l, i) => `<tr><td>${esc(l.email)}<div class="muted mono">${esc(l.account_id)}</div></td><td>${esc(l.network)}</td>
+      <td class="mono">${esc(l.address)}</td><td class="num">${(l.amount / 1e6).toFixed(2)}</td>
+      <td><input id="tx-${i}" placeholder="paste tx hash"></td><td><button class="ghost" data-i="${i}">Mark sent</button></td></tr>`).join("")
+      : `<tr><td colspan="6" class="muted">Nobody is due a payout.</td></tr>`;
+    $("a-rows").querySelectorAll("button").forEach(b => b.onclick = async () => {
+      const l = lines[b.dataset.i];
+      try { await call("/api/admin/payouts/mark-sent", { method: "POST", key: tok, body: JSON.stringify({ account_id: l.account_id, amount_usdt: +(l.amount / 1e6).toFixed(2), network: l.network, address: l.address, tx_hash: $("tx-" + b.dataset.i).value }) }); toast("Recorded"); $("a-load").click(); }
+      catch (e) { toast(e.message); }
+    });
+  } catch (e) { toast(e.message); }
+};
+</script>
+</body>
+</html>

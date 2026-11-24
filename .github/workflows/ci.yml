@@ -1,0 +1,18 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  control-plane:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: control-plane } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.24" }
+      - run: go vet ./... && go test ./... && go build ./...
+  agent:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: agent } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --release && cargo test --release

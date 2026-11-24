@@ -1,0 +1,21 @@
+# Infera control plane + automatic HTTPS (Caddy). On any VPS with Docker:
+#   1. Point your domain's DNS A record at the server.
+#   2. cp deploy/.env.example deploy/.env and fill it in.
+#   3. docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
+services:
+  infera:
+    build: ../control-plane
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - infera-data:/data
+  caddy:
+    image: caddy:2.8
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    command: caddy reverse-proxy --from ${INFERA_DOMAIN} --to infera:8080
+    volumes:
+      - caddy-data:/data
+volumes:
+  infera-data:
+  caddy-data:

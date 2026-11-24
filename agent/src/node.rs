@@ -1,0 +1,521 @@
+//! The node loop: connection to the hub, idle rules (governor), offers, sealed jobs, receipts.
+
+use crate::config::Config;
+use crate::engine::{Engine, Event};
+use crate::seal::SandboxKey;
+use anyhow::Result;
+use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+use ed25519_dalek::{Signer, SigningKey};
+use futures_util::{SinkExt, StreamExt};
+use serde::Serialize;
+use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
+use std::collections::{HashMap, VecDeque};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use tokio::sync::{mpsc, oneshot, watch};
+use tokio_tungstenite::tungstenite::Message;
+
+#[derive(Serialize, Clone, Default)]
+pub struct OfferView {
+    pub job_id: String,
+    pub job_type: String,
+    pub model: String,
+    pub est_pay_usd: f64,
+    pub est_minutes: f64,
+    pub per_hour_usd: f64,
+    pub seconds_left: u64,
+    #[serde(skip)]
+    pub deadline: Option<Instant>,
+}
+
+#[derive(Serialize, Clone, Default)]
+pub struct JobView {
+    pub job_id: String,
+    pub model: String,
+    pub est_pay_usd: f64,
+    pub running_s: u64,
+    #[serde(skip)]
+    pub started: Option<Instant>,
+}
+
+#[derive(Serialize, Default)]
+pub struct Shared {
+    pub connected: bool,
+    pub online: bool,
+    pub mode: String,
+    pub status: String,
+    pub pause_reason: String,
+    /// Machine conditions allow new jobs (online, idle, on power, not suspended), ignoring any running job.
+    pub ready: bool,
+    #[serde(skip)]
+    pub sent: String,
+    pub draining: bool,
+    pub quit_after_job: bool,
+    pub job: Option<JobView>,
+    pub offer: Option<OfferView>,
+    pub hub: Value,
+    pub remote: Value,
+    pub bench: Value,
+    pub model_id: String,
+    pub events: VecDeque<String>,
+    #[serde(skip)]
+    pub decision: Option<oneshot::Sender<bool>>,
+    #[serde(skip)]
+    pub out: Option<mpsc::Sender<String>>,
+    #[serde(skip)]
+    pub stop_job: Option<watch::Sender<bool>>,
+}
+
+impl Shared {
+    pub fn log(&mut self, s: impl Into<String>) {
+        let line = format!("{} {}", clock(), s.into());
+        println!("{line}");
+        self.events.push_front(line);
+        self.events.truncate(30);
+    }
+}
+
+pub type State = Arc<Mutex<Shared>>;
+
+fn clock() -> String {
+    let t = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+    format!("{:02}:{:02}:{:02}", (t / 3600) % 24, (t / 60) % 60, t % 60)
+}
+
+fn unix() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()
+}
+
+pub fn send(state: &State, v: Value) {
+    let tx = state.lock().unwrap().out.clone();
+    if let Some(tx) = tx {
+        let _ = tx.try_send(v.to_string());
+    }
+}
+
+struct Ctx {
+    cfg: Config,
+    engine: Arc<Engine>,
+    key: SigningKey,
+    state: State,
+    payloads: Mutex<HashMap<String, oneshot::Sender<(String, String, String)>>>,
+    cancels: Mutex<HashMap<String, watch::Sender<bool>>>,
+    quit: watch::Sender<bool>,
+}
+
+pub async fn run(cfg: Config, engine: Engine, key: SigningKey, state: State) -> Result<()> {
+    let (quit_tx, mut quit_rx) = watch::channel(false);
+    let ctx = Arc::new(Ctx { cfg, engine: Arc::new(engine), key, state, payloads: Mutex::new(HashMap::new()), cancels: Mutex::new(HashMap::new()), quit: quit_tx });
+
+    // Ctrl-C: first press finishes the current job, then quits. Second press stops now (penalty).
+    {
+        let ctx = ctx.clone();
+        tokio::spawn(async move {
+            let mut presses = 0;
+            loop {
+                if tokio::signal::ctrl_c().await.is_err() {
+                    return;
+                }
+                presses += 1;
+                let running = ctx.state.lock().unwrap().job.clone();
+                if running.is_none() {
+                    send(&ctx.state, json!({"t": "bye", "reason": "drain_complete"}));
+                    tokio::time::sleep(Duration::from_millis(300)).await;
+                    let _ = ctx.quit.send(true);
+                    return;
+                }
+                if presses == 1 {
+                    let mut s = ctx.state.lock().unwrap();
+                    s.draining = true;
+                    s.quit_after_job = true;
+                    s.log("Finishing the current job, then quitting. Press Ctrl-C again to stop now (counts as an owner abort: job pay lost, 2× debit, −10 dependability).");
+                } else {
+                    stop_now(&ctx.state, true);
+                    tokio::time::sleep(Duration::from_millis(500)).await;
+                    let _ = ctx.quit.send(true);
+                    return;
+                }
+            }
+        });
+    }
+
+    tokio::spawn(governor(ctx.clone()));
+    tokio::spawn(remote_stats(ctx.clone()));
+
+    let mut backoff = 2u64;
+    loop {
+        let res = tokio::select! {
+            r = session(ctx.clone()) => r,
+            _ = quit_rx.changed() => return Ok(()),
+        };
+        {
+            let mut s = ctx.state.lock().unwrap();
+            s.connected = false;
+            s.out = None;
+            match &res {
+                Ok(()) => s.log("Disconnected from Infera; reconnecting"),
+                Err(e) => s.log(format!("Connection problem: {e}; retrying in {backoff}s")),
+            }
+        }
+        if *quit_rx.borrow() {
+            return Ok(());
+        }
+        tokio::select! {
+            _ = tokio::time::sleep(Duration::from_secs(backoff)) => {},
+            _ = quit_rx.changed() => return Ok(()),
+        }
+        backoff = (backoff * 2).min(30);
+    }
+}
+
+/// Stop the running job immediately. Counts as an owner action on the server.
+pub fn stop_now(state: &State, quitting: bool) {
+    let (job, stop) = {
+        let mut s = state.lock().unwrap();
+        s.online = false;
+        (s.job.clone(), s.stop_job.take())
+    };
+    if let Some(j) = job {
+        send(state, json!({"t": "abort", "job_id": j.job_id, "reason": "owner_stop"}));
+        if let Some(st) = stop {
+            let _ = st.send(true);
+        }
+        state.lock().unwrap().log(format!("Stopped job {} (owner abort)", j.job_id));
+    }
+    if quitting {
+        send(state, json!({"t": "bye", "reason": "owner_quit"}));
+    }
+}
+
+fn ws_url(server: &str, id: &str, token: &str) -> String {
+    let base = server.trim_end_matches('/').replacen("https://", "wss://", 1).replacen("http://", "ws://", 1);
+    format!("{base}/ws/node?device_id={id}&token={token}")
+}
+
+async fn session(ctx: Arc<Ctx>) -> Result<()> {
+    let (ws, _) = tokio_tungstenite::connect_async(ws_url(&ctx.cfg.server, &ctx.cfg.device_id, &ctx.cfg.token)).await?;
+    let (mut sink, mut stream) = ws.split();
+    let (tx, mut rx) = mpsc::channel::<String>(1024);
+    {
+        let mut s = ctx.state.lock().unwrap();
+        s.connected = true;
+        s.out = Some(tx.clone());
+        s.log(format!("Connected to {}", ctx.cfg.server));
+    }
+    let writer = tokio::spawn(async move {
+        while let Some(m) = rx.recv().await {
+            if sink.send(Message::Text(m)).await.is_err() {
+                break;
+            }
+        }
+    });
+
+    let bench = ctx.cfg.bench.clone().unwrap_or_default();
+    let mode = ctx.state.lock().unwrap().mode.clone();
+    send(&ctx.state, json!({
+        "t": "hello", "agent_version": env!("CARGO_PKG_VERSION"),
+        "platform": format!("{} {}", std::env::consts::OS, std::env::consts::ARCH),
+        "bench": bench, "class": bench.class, "privacy": "sandboxed", "models": [ctx.cfg.engine.model_id],
+        "mode": mode, "tps": bench.tokens_per_s,
+    }));
+    push_state(&ctx.state);
+
+    while let Some(msg) = stream.next().await {
+        let msg = msg?;
+        let Message::Text(text) = msg else { continue };
+        let Ok(m) = serde_json::from_str::<Value>(&text) else { continue };
+        let t = m["t"].as_str().unwrap_or("");
+        let job_id = m["job_id"].as_str().unwrap_or("").to_string();
+        match t {
+            "config" => {
+                let mut s = ctx.state.lock().unwrap();
+                s.hub = m.clone();
+            }
+            "offer" => {
+                tokio::spawn(handle_offer(ctx.clone(), m.clone()));
+            }
+            "payload" => {
+                if let Some(slot) = ctx.payloads.lock().unwrap().remove(&job_id) {
+                    let _ = slot.send((m["epk"].as_str().unwrap_or("").into(), m["n"].as_str().unwrap_or("").into(), m["c"].as_str().unwrap_or("").into()));
+                }
+            }
+            "cancel" => {
+                if let Some(c) = ctx.cancels.lock().unwrap().get(&job_id) {
+                    let _ = c.send(true);
+                }
+                ctx.payloads.lock().unwrap().remove(&job_id);
+            }
+            "offer_expired" => {
+                let mut s = ctx.state.lock().unwrap();
+                if s.offer.as_ref().map(|o| o.job_id == job_id).unwrap_or(false) {
+                    s.offer = None;
+                    s.decision = None;
+                }
+            }
+            _ => {}
+        }
+    }
+    writer.abort();
+    Ok(())
+}
+
+pub fn push_state(state: &State) {
+    let (status, online, mode) = {
+        let mut s = state.lock().unwrap();
+        s.sent = format!("{}|{}|{}", s.status, s.online, s.mode);
+        (s.status.clone(), s.online, s.mode.clone())
+    };
+    send(state, json!({"t": "state", "status": status, "online": online, "mode": mode}));
+}
+
+async fn handle_offer(ctx: Arc<Ctx>, m: Value) {
+    let job_id = m["job_id"].as_str().unwrap_or("").to_string();
+    let model = m["model"].as_str().unwrap_or("").to_string();
+    let est_pay = m["est_pay_usd"].as_f64().unwrap_or(0.0);
+    let ttl = m["ttl_s"].as_u64().unwrap_or(30);
+    let est_tokens = m["est_tokens"].as_f64().unwrap_or(0.0);
+
+    let (status, mode) = {
+        let s = ctx.state.lock().unwrap();
+        (s.status.clone(), s.mode.clone())
+    };
+    if status != "idle" {
+        send(&ctx.state, json!({"t": "decline", "job_id": job_id, "reason": "governor"}));
+        return;
+    }
+    let tps = ctx.cfg.bench.as_ref().map(|b| b.tokens_per_s).unwrap_or(10.0).max(1.0);
+    let est_minutes = est_tokens / tps / 60.0;
+    let below_limit = ctx.cfg.limits.min_pay_usd > 0.0 && est_pay < ctx.cfg.limits.min_pay_usd;
+
+    let accepted = if mode == "auto" && !below_limit {
+        true
+    } else {
+        // Uber-style offer card on the local page; no answer before the countdown ends = decline.
+        let (tx, rx) = oneshot::channel();
+        {
+            let mut s = ctx.state.lock().unwrap();
+            s.offer = Some(OfferView {
+                job_id: job_id.clone(),
+                job_type: m["job_type"].as_str().unwrap_or("chat").into(),
+                model: model.clone(),
+                est_pay_usd: est_pay,
+                est_minutes,
+                per_hour_usd: if est_minutes > 0.0 { est_pay / est_minutes * 60.0 } else { 0.0 },
+                seconds_left: ttl,
+                deadline: Some(Instant::now() + Duration::from_secs(ttl)),
+            });
+            s.decision = Some(tx);
+            s.log(format!("New job offer: ${est_pay:.4} for about {:.1} min – open http://127.0.0.1:{} to accept", est_minutes.max(0.1), ctx.cfg.governor.ui_port));
+        }
+        let r = tokio::time::timeout(Duration::from_secs(ttl), rx).await;
+        let mut s = ctx.state.lock().unwrap();
+        s.offer = None;
+        s.decision = None;
+        matches!(r, Ok(Ok(true)))
+    };
+    if !accepted {
+        send(&ctx.state, json!({"t": "decline", "job_id": job_id, "reason": "user_declined"}));
+        return;
+    }
+    // Re-check the governor after a human decision.
+    if ctx.state.lock().unwrap().status != "idle" {
+        send(&ctx.state, json!({"t": "decline", "job_id": job_id, "reason": "governor"}));
+        return;
+    }
+
+    let sandbox = SandboxKey::new();
+    let (ptx, prx) = oneshot::channel();
+    ctx.payloads.lock().unwrap().insert(job_id.clone(), ptx);
+    let (ctx_tx, cancel_rx) = watch::channel(false);
+    ctx.cancels.lock().unwrap().insert(job_id.clone(), ctx_tx.clone());
+    {
+        let mut s = ctx.state.lock().unwrap();
+        s.status = "busy".into();
+        s.job = Some(JobView { job_id: job_id.clone(), model: model.clone(), est_pay_usd: est_pay, running_s: 0, started: Some(Instant::now()) });
+        s.stop_job = Some(ctx_tx);
+    }
+    push_state(&ctx.state);
+    send(&ctx.state, json!({"t": "accept", "job_id": job_id, "sandbox_pub": sandbox.public_b64}));
+
+    let result = match tokio::time::timeout(Duration::from_secs(20), prx).await {
+        Ok(Ok((epk, n, c))) => run_job(&ctx, &job_id, &model, sandbox, &epk, &n, &c, cancel_rx).await,
+        _ => Err(anyhow::anyhow!("job payload never arrived")),
+    };
+    if let Err(e) = result {
+        ctx.state.lock().unwrap().log(format!("Job {job_id} failed: {e}"));
+    }
+
+    ctx.cancels.lock().unwrap().remove(&job_id);
+    let quit = {
+        let mut s = ctx.state.lock().unwrap();
+        s.job = None;
+        s.stop_job = None;
+        if s.draining {
+            s.draining = false;
+            s.online = false;
+            s.log("Job finished; now offline");
+        }
+        s.status = if s.ready && s.online && !s.draining { "idle".into() } else { "paused".into() };
+        s.quit_after_job
+    };
+    push_state(&ctx.state);
+    if quit {
+        send(&ctx.state, json!({"t": "bye", "reason": "drain_complete"}));
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        let _ = ctx.quit.send(true);
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn run_job(ctx: &Arc<Ctx>, job_id: &str, model: &str, sandbox: SandboxKey, epk: &str, n: &str, c: &str, mut cancel: watch::Receiver<bool>) -> Result<()> {
+    let chan = sandbox.open(job_id, epk)?;
+    let plain = chan.open_down(n, c)?;
+    let request: Value = serde_json::from_slice(&plain)?;
+    ctx.state.lock().unwrap().log(format!("Running job {job_id} ({model}) in the sealed sandbox"));
+
+    let (tx, mut rx) = mpsc::channel::<Event>(512);
+    let engine = ctx.engine.clone();
+    let gen = tokio::spawn(async move { engine.chat(request, tx).await });
+    let mut out = String::new();
+    let mut seq = 0u32;
+    let started = Instant::now();
+    loop {
+        tokio::select! {
+            _ = cancel.changed() => {
+                gen.abort();
+                ctx.state.lock().unwrap().log(format!("Job {job_id} stopped"));
+                return Ok(());
+            }
+            ev = rx.recv() => match ev {
+                Some(Event::Delta(t)) => {
+                    out.push_str(&t);
+                    seq += 1;
+                    let (nonce, ct) = chan.seal_up(t.as_bytes());
+                    send(&ctx.state, json!({"t": "tok", "job_id": job_id, "seq": seq, "n": nonce, "c": ct}));
+                }
+                Some(Event::Done { tokens_in, tokens_out }) => {
+                    let hash = hex::encode(Sha256::digest(out.as_bytes()));
+                    let receipt = format!("{job_id}|{model}|{hash}|{tokens_in}|{tokens_out}|{}", unix());
+                    let sig = B64.encode(ctx.key.sign(receipt.as_bytes()).to_bytes());
+                    send(&ctx.state, json!({"t": "done", "job_id": job_id, "tokens_in": tokens_in, "tokens_out": tokens_out, "receipt": receipt, "sig": sig}));
+                    ctx.state.lock().unwrap().log(format!("Job {job_id} done: {tokens_out} tokens in {:.1}s", started.elapsed().as_secs_f64()));
+                    return Ok(());
+                }
+                None => {
+                    let err = match gen.await { Ok(Err(e)) => e.to_string(), _ => "engine stopped".into() };
+                    send(&ctx.state, json!({"t": "abort", "job_id": job_id, "reason": "engine_error"}));
+                    anyhow::bail!("engine error: {err}");
+                }
+            }
+        }
+    }
+}
+
+/// Governor (ARCHITECTURE.md §3): new jobs only while online, on mains power and while other
+/// programs leave the machine mostly idle. A running job always continues.
+async fn governor(ctx: Arc<Ctx>) {
+    let mut sys = sysinfo::System::new();
+    let me = sysinfo::get_current_pid().ok();
+    let mut last_sent = Instant::now() - Duration::from_secs(60);
+    loop {
+        sys.refresh_cpu_usage();
+        sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+        let cores = sys.cpus().len().max(1) as f32;
+        let total = sys.global_cpu_usage();
+        let mut ours = 0.0f32;
+        for (pid, p) in sys.processes() {
+            if Some(*pid) == me || (p.parent().is_some() && p.parent() == me) {
+                ours += p.cpu_usage();
+            }
+        }
+        let others = (total - ours / cores).max(0.0);
+        let ac = on_ac_power();
+
+        let changed = {
+            let mut s = ctx.state.lock().unwrap();
+            if let Some(o) = s.offer.as_mut() {
+                if let Some(d) = o.deadline {
+                    o.seconds_left = d.saturating_duration_since(Instant::now()).as_secs();
+                }
+            }
+            if let Some(j) = s.job.as_mut() {
+                if let Some(st) = j.started {
+                    j.running_s = st.elapsed().as_secs();
+                }
+            }
+            let suspended = s.hub["suspended_until"].as_u64().map(|u| u > unix()).unwrap_or(false);
+            let reason = if !s.online {
+                "you are offline"
+            } else if s.draining {
+                "finishing up"
+            } else if suspended {
+                "suspended by Infera (see dashboard)"
+            } else if ctx.cfg.governor.require_ac && ac == Some(false) {
+                "on battery"
+            } else if others > ctx.cfg.governor.max_other_cpu {
+                "computer is in use"
+            } else {
+                ""
+            };
+            s.ready = reason.is_empty();
+            if s.job.is_none() {
+                s.status = if s.ready { "idle".into() } else { "paused".into() };
+            }
+            s.pause_reason = if s.job.is_some() { String::new() } else { reason.into() };
+            let changed = format!("{}|{}|{}", s.status, s.online, s.mode) != s.sent;
+            changed
+        };
+        if changed || last_sent.elapsed() > Duration::from_secs(30) {
+            push_state(&ctx.state);
+            last_sent = Instant::now();
+        }
+        tokio::time::sleep(Duration::from_secs(2)).await;
+    }
+}
+
+fn on_ac_power() -> Option<bool> {
+    #[cfg(target_os = "linux")]
+    {
+        let dir = std::fs::read_dir("/sys/class/power_supply").ok()?;
+        let mut saw_mains = false;
+        for e in dir.flatten() {
+            let p = e.path();
+            let kind = std::fs::read_to_string(p.join("type")).unwrap_or_default();
+            if kind.trim() == "Mains" {
+                saw_mains = true;
+                if std::fs::read_to_string(p.join("online")).unwrap_or_default().trim() == "1" {
+                    return Some(true);
+                }
+            }
+        }
+        if saw_mains {
+            Some(false)
+        } else {
+            None
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let o = std::process::Command::new("pmset").args(["-g", "batt"]).output().ok()?;
+        Some(String::from_utf8_lossy(&o.stdout).contains("AC Power"))
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
+        None
+    }
+}
+
+/// Earnings and dependability for the local page.
+async fn remote_stats(ctx: Arc<Ctx>) {
+    let http = reqwest::Client::new();
+    loop {
+        let url = format!("{}/api/device/me?device_id={}", ctx.cfg.server.trim_end_matches('/'), ctx.cfg.device_id);
+        if let Ok(r) = http.get(url).bearer_auth(&ctx.cfg.token).send().await {
+            if let Ok(v) = r.json::<Value>().await {
+                ctx.state.lock().unwrap().remote = v;
+            }
+        }
+        tokio::time::sleep(Duration::from_secs(15)).await;
+    }
+}
