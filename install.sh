@@ -1,8 +1,8 @@
 #!/bin/sh
 # Infera node installer for macOS and Linux.
-#   curl -fsSL https://raw.githubusercontent.com/sentinelcore/DePINClaw/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/sentinelcore/Infera/main/install.sh | sh
 set -eu
-REPO="${INFERA_REPO:-sentinelcore/DePINClaw}"
+REPO="${INFERA_REPO:-sentinelcore/Infera}"
 DEST="${INFERA_BIN:-$HOME/.infera/bin}"
 os=$(uname -s); arch=$(uname -m)
 case "$os-$arch" in

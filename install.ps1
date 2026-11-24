@@ -1,7 +1,7 @@
 # Infera node installer for Windows (PowerShell):
-#   irm https://raw.githubusercontent.com/sentinelcore/DePINClaw/main/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/sentinelcore/Infera/main/install.ps1 | iex
 $ErrorActionPreference = "Stop"
-$repo = if ($env:INFERA_REPO) { $env:INFERA_REPO } else { "sentinelcore/DePINClaw" }
+$repo = if ($env:INFERA_REPO) { $env:INFERA_REPO } else { "sentinelcore/Infera" }
 $dest = Join-Path $env:USERPROFILE ".infera\bin"
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
 $zip = Join-Path $env:TEMP "infera.zip"

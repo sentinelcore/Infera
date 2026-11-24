@@ -28,7 +28,7 @@ Status: ✅ done · 🔨 in progress · ⬜ not started
 | PAY-02 | Weekly payout batch + mark sent | ✅ |
 | PAY-03 | Automated USDT sending (Fireblocks/BitGo or exchange API) | ⬜ Phase 2 |
 | OPS-01 | Docker + HTTPS deploy, CI, release builds | ✅ |
-| OPS-02 | Repo references point at the renamed repository | ⬜ blocked: new repo name |
+| OPS-02 | Repo references point at the renamed repository (sentinelcore/Infera) | ✅ |
 
 ## v2 (phones, privacy, scale)
 

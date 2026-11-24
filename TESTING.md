@@ -27,7 +27,7 @@ It builds the server and node, starts them on localhost, creates a contributor a
 You need a small VPS (1 vCPU, 1 GB RAM is enough for the beta) with Docker, and a domain.
 
 ```sh
-git clone https://github.com/sentinelcore/DePINClaw.git && cd DePINClaw
+git clone https://github.com/sentinelcore/Infera.git && cd Infera
 cp deploy/.env.example deploy/.env      # set INFERA_DOMAIN, INFERA_INVITE_CODE, INFERA_ADMIN_TOKEN
 docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
 ```
@@ -44,9 +44,9 @@ To run it without Docker: `cd control-plane && go build -o infera-server . && IN
 
 ```sh
 # macOS / Linux
-curl -fsSL https://raw.githubusercontent.com/sentinelcore/DePINClaw/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/sentinelcore/Infera/main/install.sh | sh
 # Windows (PowerShell)
-irm https://raw.githubusercontent.com/sentinelcore/DePINClaw/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/sentinelcore/Infera/main/install.ps1 | iex
 ```
 
 **Pair it**

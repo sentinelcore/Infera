@@ -12,7 +12,6 @@
 - Phase 2: Stripe prepaid credits (needs Stripe keys) and automated USDT payouts (needs custody/exchange account).
 
 ## Blockers
-- OPS-02: repository rename not visible on GitHub yet; need the new name to update install URLs.
 - Deploy needs the owner's VPS, domain, and a public release tag.
 
 ## Decisions
