@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Download Infera</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400&display=swap">
+<style>
+:root{--bg:#f4f6f4;--surface:#fff;--surface-2:#e9eeeb;--fg:#14201b;--muted:#56655e;--line:#c9d3ce;--accent:#17795a;--accent-soft:#dcefe7;--warn:#a86a00}
+@media (prefers-color-scheme:dark){:root{--bg:#0e1412;--surface:#161f1b;--surface-2:#1d2924;--fg:#e3ebe7;--muted:#9aaba3;--line:#2f3e37;--accent:#4cc398;--accent-soft:#173a2e;--warn:#e6ae45;color-scheme:dark}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 "IBM Plex Sans",system-ui,sans-serif;padding:0 max(16px,env(safe-area-inset-left)) 48px}
+.wrap{max-width:960px;margin:0 auto}header{display:flex;justify-content:space-between;align-items:center;padding:22px 0;border-bottom:1px solid var(--line)}
+.logo{font:700 1.5rem "Sora",system-ui;text-decoration:none;color:var(--fg)}h1{font:700 clamp(1.7rem,4vw,2.3rem) "Sora",system-ui;margin:28px 0 6px}
+h2{font:600 1.1rem "Sora",system-ui;margin:0 0 6px}p{max-width:68ch}.muted{color:var(--muted)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-top:18px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px;min-width:0}
+.card.main{border:2px solid var(--accent)}
+a.btn{display:inline-block;margin:10px 0;padding:10px 16px;border-radius:8px;background:var(--accent);color:var(--bg);font-weight:600;text-decoration:none}
+a.btn:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+code,pre{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.82rem}pre{background:var(--surface-2);padding:10px;border-radius:8px;overflow-x:auto;white-space:pre-wrap;word-break:break-all}
+.note{font-size:.85rem;color:var(--warn)}ol{padding-left:20px}
+</style>
+</head>
+<body><div class="wrap">
+<header><a class="logo" href="/">Infera</a><a href="/#contribute">Dashboard →</a></header>
+<h1>Download Infera</h1>
+<p class="muted">Pick your device. You'll need a pairing code from the dashboard (Contribute a device → Get pairing code). These are beta builds, refreshed automatically with every update.</p>
+<div class="grid">
+  <div class="card main" id="android">
+    <h2>Android phone</h2>
+    <a class="btn" href="https://github.com/sentinelcore/Infera/releases/download/test-build/infera-android.apk">Download APK</a>
+    <ol class="muted"><li>Open the downloaded file and allow your browser to install apps.</li><li>Enter this site's address and your pairing code.</li><li>Paste a small model link (e.g. Qwen3 0.6B .gguf), benchmark, then Start earning.</li></ol>
+    <p class="note">Runs only while charging, on Wi-Fi, above 50% battery.</p>
+  </div>
+  <div class="card" id="windows">
+    <h2>Windows</h2>
+    <a class="btn" href="https://github.com/sentinelcore/Infera/releases/download/test-build/infera-windows-x64.zip">Download for Windows</a>
+    <ol class="muted"><li>Unzip, open a terminal in that folder.</li><li><code>.\infera.exe pair CODE --server <span class="origin"></span></code></li><li>Pick a model (see below), then <code>.\infera.exe tray</code></li></ol>
+    <p class="note">First run: Windows shows a blue box. Click <b>More info → Run anyway</b> (the build isn't code-signed yet).</p>
+  </div>
+  <div class="card" id="mac">
+    <h2>Mac and Linux</h2>
+    <pre>curl -fsSL <span class="origin"></span>/install.sh | sh</pre>
+    <p class="muted">Linux direct download: <a href="https://github.com/sentinelcore/Infera/releases/download/test-build/infera-linux-x64.tar.gz">infera-linux-x64.tar.gz</a>. Mac builds are coming; until then the script shows how to build it on a Mac in a few minutes.</p>
+    <p class="note">Mac: if macOS blocks the file, run <code>xattr -d com.apple.quarantine ./infera</code> once.</p>
+  </div>
+</div>
+<div class="card" style="margin-top:14px">
+  <h2>Choose a model (desktops)</h2>
+  <p class="muted">Easiest with <a href="https://ollama.com">Ollama</a>. Everyone uses the same model names so jobs can reach every device:</p>
+  <pre>ollama pull qwen3:1.7b
+infera engine --url http://127.0.0.1:11434 --model qwen3-1.7b --engine-model qwen3:1.7b --params-b 1.7
+infera bench
+infera service install    # starts Infera (menu-bar / tray icon) every time you log in</pre>
+  <p class="muted">Bigger GPU? Use <code>qwen3:8b</code> as <code>qwen3-8b</code> (8 GB+ VRAM) or <code>qwen3:14b</code> as <code>qwen3-14b</code> (16 GB+). Add <code>--embed-model nomic-embed-text</code> after <code>ollama pull nomic-embed-text</code> to also earn from embeddings.</p>
+</div>
+</div>
+<script>document.querySelectorAll(".origin").forEach(e => e.textContent = location.origin);</script>
+</body></html>

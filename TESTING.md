@@ -44,9 +44,9 @@ To run it without Docker: `cd control-plane && go build -o infera-server . && IN
 
 ```sh
 # macOS / Linux
-curl -fsSL https://raw.githubusercontent.com/sentinelcore/Infera/main/install.sh | sh
+curl -fsSL https://control-plane-production-11856175.up.railway.app/install.sh | sh
 # Windows (PowerShell)
-irm https://raw.githubusercontent.com/sentinelcore/Infera/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/sentinelcore/Infera/ccr-13fb360c-2cnfc4/install.ps1 | iex
 ```
 
 **Pair it**

@@ -88,6 +88,16 @@ func main() {
 	mux.HandleFunc("GET /api/admin/waitlist", api.AdminWaitlist)
 	mux.HandleFunc("POST /api/admin/waitlist/invite", api.AdminWaitlist)
 	mux.HandleFunc("GET /s/{tag}", api.SharePage)
+	mux.HandleFunc("GET /install.sh", func(w http.ResponseWriter, r *http.Request) {
+		b, _ := webFS.ReadFile("web/install.sh")
+		w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
+		w.Write(b)
+	})
+	mux.HandleFunc("GET /download", func(w http.ResponseWriter, r *http.Request) {
+		b, _ := webFS.ReadFile("web/download.html")
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write(b)
+	})
 	mux.HandleFunc("GET /api/admin/payouts", api.PayoutBatch)
 	mux.HandleFunc("POST /api/admin/payouts/mark-sent", api.MarkPaid)
 	mux.HandleFunc("POST /api/admin/credits", api.GrantCredits)

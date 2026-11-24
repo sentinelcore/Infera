@@ -6,7 +6,7 @@ $dest = Join-Path $env:USERPROFILE ".infera\bin"
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
 $zip = Join-Path $env:TEMP "infera.zip"
 Write-Host "Downloading infera-windows-x64 ..."
-Invoke-WebRequest "https://github.com/$repo/releases/latest/download/infera-windows-x64.zip" -OutFile $zip
+Invoke-WebRequest "https://github.com/$repo/releases/download/test-build/infera-windows-x64.zip" -OutFile $zip
 Expand-Archive -Force $zip -DestinationPath $dest
 Remove-Item $zip
 $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
