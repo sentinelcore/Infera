@@ -31,7 +31,9 @@ Timeline: 24 weeks to public launch. Weeks are relative to kickoff.
 ## Phase 1: Desktop node alpha (weeks 2–6)
 
 **Build**
-- Agent core: identity, transport, probe, governor, engine (llama.cpp sidecar) and models.
+- Agent core: identity, transport, governor, models, and the engine adapter interface with llama.cpp as the first engine.
+- Install benchmark and device classes A/B/C (`ARCHITECTURE.md` §3.1), shown to the owner after install.
+- Secure job sandbox v1 on desktops: sealed (encrypted) jobs, isolated process, no disk writes (§3.3). Customer `privacy` field in the gateway.
 - `nodehub`, `scheduler` v1 (route to a node if a warm one exists, otherwise fall back), and `ledger` v0 (receipts and points).
 - Tauri tray app for Windows, macOS (Apple Silicon first) and Linux, with autostart and silent auto-update.
 - Headless install script for Linux and macOS.
@@ -53,6 +55,8 @@ Timeline: 24 weeks to public launch. Weeks are relative to kickoff.
 - Hardening: crash supervisor, staged rollouts, and per-OS pause triggers (fullscreen and game detection).
 - Reputation scoring, plus redundant re-runs on 3% of jobs.
 - Leaderboard, referral rewards and points multipliers for early contributors.
+- Uber-style job offer cards on desktops (tray pop-up), with Go online / Go offline and auto-approve modes (§3.2).
+- MLX engine for Macs; vLLM engine for Class A Linux desktops.
 - Customer console: usage graphs, invoices and API-key scopes.
 
 **Beta waves** (details in `BETA_LAUNCH_X.md`)
@@ -71,7 +75,10 @@ Timeline: 24 weeks to public launch. Weeks are relative to kickoff.
 ## Phase 3: Android and earnings (weeks 10–15)
 
 **Build**
-- Android app: Rust core via uniffi, llama.cpp JNI, a foreground service with WorkManager constraints, and boot restart.
+- Android app: Rust core via uniffi, a foreground service with WorkManager constraints, and boot restart.
+- Android engines: llama.cpp with the smolmaxxing patch (`third_party/smolmaxxing`) for 1-bit models and MoE-from-flash, MNN-LLM, and LiteRT-LM on supported NPUs.
+- Phone classes M1/M2, Uber-style offer cards with push notifications (FCM), and opt-in big MoE batch jobs for M1 phones.
+- Confidential level on phones with Android protected VMs; Sealed level via Play Integrity.
 - Phone workloads: embeddings, Whisper-small **Transcription API**, and 1–3B batch chat.
 - Earnings v1: points convert to a USD balance in the ledger from real job revenue (operator share of e.g. 70%, a config value).
 - Payouts v1: Stripe Connect (fiat) and USDC on Solana or Base, weekly, above the threshold, with KYC at the payout threshold.
@@ -88,10 +95,10 @@ Timeline: 24 weeks to public launch. Weeks are relative to kickoff.
 ## Phase 4: iOS, public beta and OpenRouter (weeks 15–20)
 
 **Build**
-- iOS app with Charge Mode (foreground while charging, and `BGProcessingTask` overnight), via TestFlight.
+- iOS app with Charge Mode (foreground while charging, and `BGProcessingTask` overnight), MLX Swift engine, offer cards via time-sensitive notifications, App Attest, via TestFlight.
 - MLX backend on macOS for higher tokens/sec.
 - Hedged interactive routing, so T1/T2 nodes serve real-time chat.
-- `privacy: private` routing tier.
+- Confidential partner nodes (confidential-computing GPUs) for `privacy: confidential` traffic.
 - Public status page and network stats page (nodes online, tokens served).
 
 **Revenue track**

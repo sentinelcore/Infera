@@ -109,6 +109,10 @@ svg .head-mut { fill: var(--muted); }
 svg .head-money { fill: var(--money); }
 svg .head-alert { fill: var(--alert); }
 svg .dot { fill: var(--accent); }
+svg .ring-track { fill: none; stroke: var(--line); stroke-width: 4; }
+svg .ring-fill { fill: none; stroke: var(--accent); stroke-width: 4; stroke-linecap: round; }
+svg .btn-acc { fill: var(--accent); }
+svg .t-inv { fill: var(--bg); font-weight: 600; }
 
 /* Cards, tables */
 .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
@@ -155,6 +159,15 @@ td.yes { color: var(--accent); font-weight: 500; }
 .wave .val { position: absolute; top: 50%; transform: translateY(-50%); font-family: var(--font-mono); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
 .wave .who { grid-column: 2; font-size: 0.82rem; color: var(--muted); margin-top: -4px; }
 
+/* Speed ranges */
+.speeds { display: grid; gap: 10px; margin-top: 4px; }
+.sp { display: grid; grid-template-columns: 200px 1fr 110px; gap: 12px; align-items: center; font-size: 0.88rem; }
+.sp .track { position: relative; height: 18px; background: var(--surface-2); border-radius: 5px; }
+.sp .rng { position: absolute; top: 0; bottom: 0; background: var(--accent); border-radius: 5px; min-width: 6px; }
+.sp .v { font-family: var(--font-mono); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+.speeds .axis { display: flex; justify-content: space-between; margin-left: 212px; margin-right: 122px; font-family: var(--font-mono); font-size: 0.7rem; color: var(--muted); }
+@media (max-width: 560px) { .sp { grid-template-columns: 1fr; gap: 4px; } .speeds .axis { margin: 0; } }
+
 /* Checklist */
 .check { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
 .check li { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; }
@@ -195,12 +208,15 @@ html { scroll-behavior: smooth; }
   <a href="#big-picture">Big picture</a>
   <a href="#architecture">Architecture</a>
   <a href="#device">Inside a device</a>
+  <a href="#classes">Benchmark and classes</a>
   <a href="#install-forget">Install and forget</a>
-  <a href="#approval">Job approval on phones</a>
+  <a href="#approval">Job offers</a>
   <a href="#request">Life of a request</a>
   <a href="#money">Money flow</a>
-  <a href="#trust">Trust and privacy</a>
+  <a href="#trust">Trust</a>
+  <a href="#privacy">Secure sandbox</a>
   <a href="#models">Models</a>
+  <a href="#engines">Engines and research</a>
   <a href="#roadmap">Roadmap</a>
   <a href="#beta">Beta on X</a>
   <a href="#week1">Week-1 checklist</a>
@@ -252,9 +268,9 @@ html { scroll-behavior: smooth; }
       <path d="M435,200 L435,238" class="ln" marker-end="url(#g1)"/>
       <!-- money -->
       <path d="M200,160 L318,160" class="ln-money" marker-end="url(#m1)"/>
-      <text x="259" y="180" text-anchor="middle" class="t-money" font-size="12">$ pays</text>
+      <text x="259" y="180" text-anchor="middle" class="t-money" style="font-size:12px">$ pays</text>
       <path d="M550,185 C610,290 700,295 760,262" class="ln-money" marker-end="url(#m1)"/>
-      <text x="640" y="292" text-anchor="middle" class="t-money" font-size="12">owners earn</text>
+      <text x="640" y="292" text-anchor="middle" class="t-money" style="font-size:12px">owners earn</text>
     </svg>
     <div class="legend"><span><i></i>Request and job</span><span><i class="money"></i>Money</span><span><i class="plain"></i>Fallback when no device fits</span></div>
   </div>
@@ -282,7 +298,7 @@ html { scroll-behavior: smooth; }
 
       <!-- control plane frame -->
       <rect x="20" y="100" width="700" height="330" rx="14" class="frame"/>
-      <text x="38" y="124" class="t-acc" font-size="13">CONTROL PLANE · cloud, 3 regions</text>
+      <text x="38" y="124" class="t-acc" style="font-size:13px">CONTROL PLANE · cloud, 3 regions</text>
 
       <rect x="50" y="142" width="640" height="58" rx="10" class="box-acc"/>
       <text x="370" y="167" text-anchor="middle" class="t-title">API Gateway</text>
@@ -394,24 +410,24 @@ html { scroll-behavior: smooth; }
       <rect x="20" y="104" width="860" height="168" rx="12" class="box-acc"/>
       <text x="40" y="132" class="t-title">Agent core (Rust, one codebase)</text>
       <g>
-        <rect x="40" y="148" width="194" height="52" rx="8" class="box"/><text x="56" y="170" class="t-title" font-size="13">identity</text><text x="56" y="189" class="t-sub" font-size="11.5">device key, pairing code</text>
-        <rect x="248" y="148" width="194" height="52" rx="8" class="box"/><text x="264" y="170" class="t-title" font-size="13">transport</text><text x="264" y="189" class="t-sub" font-size="11.5">secure link to the cloud</text>
-        <rect x="456" y="148" width="194" height="52" rx="8" class="box"/><text x="472" y="170" class="t-title" font-size="13">probe</text><text x="472" y="189" class="t-sub" font-size="11.5">benchmarks the hardware</text>
-        <rect x="664" y="148" width="196" height="52" rx="8" class="box"/><text x="680" y="170" class="t-title" font-size="13">governor</text><text x="680" y="189" class="t-sub" font-size="11.5">idle rules, resource caps</text>
-        <rect x="40" y="208" width="194" height="52" rx="8" class="box"/><text x="56" y="230" class="t-title" font-size="13">engine</text><text x="56" y="249" class="t-sub" font-size="11.5">runs inference, streams</text>
-        <rect x="248" y="208" width="194" height="52" rx="8" class="box"/><text x="264" y="230" class="t-title" font-size="13">models</text><text x="264" y="249" class="t-sub" font-size="11.5">download on Wi-Fi, verify</text>
-        <rect x="456" y="208" width="194" height="52" rx="8" class="box"/><text x="472" y="230" class="t-title" font-size="13">jobs</text><text x="472" y="249" class="t-sub" font-size="11.5">accept, run, sign receipt</text>
-        <rect x="664" y="208" width="196" height="52" rx="8" class="box"/><text x="680" y="230" class="t-title" font-size="13">updater</text><text x="680" y="249" class="t-sub" font-size="11.5">silent signed updates</text>
+        <rect x="40" y="148" width="194" height="52" rx="8" class="box"/><text x="56" y="170" class="t-title" style="font-size:13px">identity</text><text x="56" y="189" class="t-sub" style="font-size:11.5px">device key, pairing code</text>
+        <rect x="248" y="148" width="194" height="52" rx="8" class="box"/><text x="264" y="170" class="t-title" style="font-size:13px">transport</text><text x="264" y="189" class="t-sub" style="font-size:11.5px">secure link to the cloud</text>
+        <rect x="456" y="148" width="194" height="52" rx="8" class="box"/><text x="472" y="170" class="t-title" style="font-size:13px">probe</text><text x="472" y="189" class="t-sub" style="font-size:11.5px">benchmarks the hardware</text>
+        <rect x="664" y="148" width="196" height="52" rx="8" class="box"/><text x="680" y="170" class="t-title" style="font-size:13px">governor</text><text x="680" y="189" class="t-sub" style="font-size:11.5px">idle rules, resource caps</text>
+        <rect x="40" y="208" width="194" height="52" rx="8" class="box"/><text x="56" y="230" class="t-title" style="font-size:13px">engine</text><text x="56" y="249" class="t-sub" style="font-size:11.5px">runs inference, streams</text>
+        <rect x="248" y="208" width="194" height="52" rx="8" class="box"/><text x="264" y="230" class="t-title" style="font-size:13px">models</text><text x="264" y="249" class="t-sub" style="font-size:11.5px">download on Wi-Fi, verify</text>
+        <rect x="456" y="208" width="194" height="52" rx="8" class="box"/><text x="472" y="230" class="t-title" style="font-size:13px">jobs</text><text x="472" y="249" class="t-sub" style="font-size:11.5px">accept, run, sign receipt</text>
+        <rect x="664" y="208" width="196" height="52" rx="8" class="box"/><text x="680" y="230" class="t-title" style="font-size:13px">updater</text><text x="680" y="249" class="t-sub" style="font-size:11.5px">silent signed updates</text>
       </g>
 
       <!-- engine -->
       <rect x="20" y="290" width="860" height="48" rx="10" class="box"/>
-      <text x="40" y="320" class="t-title" font-size="14">Inference engine</text>
-      <text x="230" y="320" class="t-sub">llama.cpp (CUDA · Vulkan · Metal · CPU)   ·   MLX on Apple Silicon   ·   MLC LLM on Android</text>
+      <text x="40" y="320" class="t-title" style="font-size:14px">Secure sandbox</text>
+      <text x="230" y="320" class="t-sub">encrypted jobs · llama.cpp (CUDA · Vulkan · Metal · CPU) · MLX · MLC LLM</text>
 
       <!-- hw -->
       <rect x="20" y="348" width="860" height="40" rx="10" class="box-2"/>
-      <text x="40" y="373" class="t-title" font-size="14">Hardware</text>
+      <text x="40" y="373" class="t-title" style="font-size:14px">Hardware</text>
       <text x="230" y="373" class="t-sub">NVIDIA / AMD / Intel GPU   ·   Apple M-series   ·   laptop CPU   ·   phone GPU / NPU</text>
     </svg>
   </div>
@@ -434,7 +450,7 @@ html { scroll-behavior: smooth; }
         <li>Stops when the phone gets warm</li>
         <li>Restarts by itself after a reboot</li>
         <li>Serves embeddings, transcription, small models</li>
-        <li>Job notifications: approve, reject or auto-approve</li>
+        <li>Uber-style job offers, or auto-approve</li>
       </ul>
     </div>
     <div class="card">
@@ -445,7 +461,125 @@ html { scroll-behavior: smooth; }
         <li>Works while plugged in, mostly overnight</li>
         <li>Or with the app open on a nightstand</li>
         <li>Lower output per phone than Android</li>
-        <li>Job notifications: approve, reject or auto-approve</li>
+        <li>Uber-style job offers, or auto-approve</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- Benchmark and device classes -->
+<section id="classes">
+  <div class="head">
+    <span class="label">04 · Onboarding</span>
+    <h2>Benchmark and device classes</h2>
+    <p class="intro">Right after install, every phone and computer runs a short benchmark (about 2–4 minutes; phones do it on the charger). The result puts the device in a class. The class decides which models it downloads and which jobs it is offered, so a phone is never sent a job built for a gaming PC.</p>
+  </div>
+  <div class="figure">
+    <svg viewBox="0 0 900 340" role="img" aria-label="Benchmark pipeline: detect hardware, check engines, speed tests, sustained heat test, network test; a classifier then assigns one of five classes: A Powerhouse, B Performer, C Standard, M1 Mobile Plus, M2 Mobile Lite.">
+      <defs>
+        <marker id="g6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head-mut"/></marker>
+        <marker id="a6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head-acc"/></marker>
+      </defs>
+      <text x="15" y="14" class="t-mono" style="font-size:11px">BENCHMARK · ON INSTALL</text>
+      <rect x="15" y="24" width="160" height="78" rx="10" class="box"/>
+      <text x="95" y="50" text-anchor="middle" class="t-title" style="font-size:14px">1 · Hardware</text>
+      <text x="95" y="70" text-anchor="middle" class="t-sub" style="font-size:11.5px">CPU, RAM, GPU, VRAM</text>
+      <text x="95" y="87" text-anchor="middle" class="t-sub" style="font-size:11.5px">NPU, free disk</text>
+      <rect x="190" y="24" width="160" height="78" rx="10" class="box"/>
+      <text x="270" y="50" text-anchor="middle" class="t-title" style="font-size:14px">2 · Engines</text>
+      <text x="270" y="70" text-anchor="middle" class="t-sub" style="font-size:11.5px">CUDA, Vulkan, Metal</text>
+      <text x="270" y="87" text-anchor="middle" class="t-sub" style="font-size:11.5px">NPU, CPU: fastest wins</text>
+      <rect x="365" y="24" width="160" height="78" rx="10" class="box"/>
+      <text x="445" y="50" text-anchor="middle" class="t-title" style="font-size:14px">3 · Speed tests</text>
+      <text x="445" y="70" text-anchor="middle" class="t-sub" style="font-size:11.5px">tokens/sec on 1B, 3B, 8B</text>
+      <text x="445" y="87" text-anchor="middle" class="t-sub" style="font-size:11.5px">RAM + flash speed</text>
+      <rect x="540" y="24" width="160" height="78" rx="10" class="box"/>
+      <text x="620" y="50" text-anchor="middle" class="t-title" style="font-size:14px">4 · Heat test</text>
+      <text x="620" y="70" text-anchor="middle" class="t-sub" style="font-size:11.5px">90 s steady load:</text>
+      <text x="620" y="87" text-anchor="middle" class="t-sub" style="font-size:11.5px">does it slow down?</text>
+      <rect x="715" y="24" width="160" height="78" rx="10" class="box"/>
+      <text x="795" y="50" text-anchor="middle" class="t-title" style="font-size:14px">5 · Network</text>
+      <text x="795" y="70" text-anchor="middle" class="t-sub" style="font-size:11.5px">latency to region</text>
+      <text x="795" y="87" text-anchor="middle" class="t-sub" style="font-size:11.5px">download speed</text>
+      <path d="M175,63 L188,63" class="ln" marker-end="url(#g6)"/>
+      <path d="M350,63 L363,63" class="ln" marker-end="url(#g6)"/>
+      <path d="M525,63 L538,63" class="ln" marker-end="url(#g6)"/>
+      <path d="M700,63 L713,63" class="ln" marker-end="url(#g6)"/>
+      <path d="M795,102 L795,122 L450,122 L450,138" class="ln" marker-end="url(#g6)"/>
+
+      <rect x="310" y="140" width="280" height="54" rx="10" class="box-acc"/>
+      <text x="450" y="163" text-anchor="middle" class="t-title" style="font-size:14px">Classifier</text>
+      <text x="450" y="182" text-anchor="middle" class="t-sub" style="font-size:11.5px">class · allowed jobs · models to download</text>
+
+      <path d="M450,194 L95,240" class="ln-acc" marker-end="url(#a6)"/>
+      <path d="M450,194 L270,240" class="ln-acc" marker-end="url(#a6)"/>
+      <path d="M450,194 L445,240" class="ln-acc" marker-end="url(#a6)"/>
+      <path d="M450,194 L620,240" class="ln-acc" marker-end="url(#a6)"/>
+      <path d="M450,194 L795,240" class="ln-acc" marker-end="url(#a6)"/>
+
+      <rect x="15" y="242" width="160" height="86" rx="10" class="box"/>
+      <text x="95" y="266" text-anchor="middle" class="t-title" style="font-size:14px">Class A</text>
+      <text x="95" y="285" text-anchor="middle" class="t-sub" style="font-size:11.5px">Powerhouse</text>
+      <text x="95" y="306" text-anchor="middle" class="t-mono" style="font-size:11px">14–32B chat</text>
+      <text x="95" y="320" text-anchor="middle" class="t-mono" style="font-size:11px">real-time</text>
+      <rect x="190" y="242" width="160" height="86" rx="10" class="box"/>
+      <text x="270" y="266" text-anchor="middle" class="t-title" style="font-size:14px">Class B</text>
+      <text x="270" y="285" text-anchor="middle" class="t-sub" style="font-size:11.5px">Performer</text>
+      <text x="270" y="306" text-anchor="middle" class="t-mono" style="font-size:11px">7–9B chat</text>
+      <text x="270" y="320" text-anchor="middle" class="t-mono" style="font-size:11px">real-time + batch</text>
+      <rect x="365" y="242" width="160" height="86" rx="10" class="box"/>
+      <text x="445" y="266" text-anchor="middle" class="t-title" style="font-size:14px">Class C</text>
+      <text x="445" y="285" text-anchor="middle" class="t-sub" style="font-size:11.5px">Standard</text>
+      <text x="445" y="306" text-anchor="middle" class="t-mono" style="font-size:11px">1–4B, embeddings</text>
+      <text x="445" y="320" text-anchor="middle" class="t-mono" style="font-size:11px">batch, transcription</text>
+      <rect x="540" y="242" width="160" height="86" rx="10" class="box"/>
+      <text x="620" y="266" text-anchor="middle" class="t-title" style="font-size:14px">Class M1</text>
+      <text x="620" y="285" text-anchor="middle" class="t-sub" style="font-size:11.5px">Mobile Plus</text>
+      <text x="620" y="306" text-anchor="middle" class="t-mono" style="font-size:11px">1–3B, Whisper</text>
+      <text x="620" y="320" text-anchor="middle" class="t-mono" style="font-size:11px">embeddings</text>
+      <rect x="715" y="242" width="160" height="86" rx="10" class="box"/>
+      <text x="795" y="266" text-anchor="middle" class="t-title" style="font-size:14px">Class M2</text>
+      <text x="795" y="285" text-anchor="middle" class="t-sub" style="font-size:11.5px">Mobile Lite</text>
+      <text x="795" y="306" text-anchor="middle" class="t-mono" style="font-size:11px">embeddings</text>
+      <text x="795" y="320" text-anchor="middle" class="t-mono" style="font-size:11px">classification</text>
+    </svg>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Class</th><th>Typical hardware</th><th>Must reach in benchmark</th><th>Runs</th><th>Gets these jobs</th></tr></thead>
+      <tbody>
+        <tr><td><b>A · Powerhouse</b></td><td>GPU with 16 GB+ VRAM (RTX 4080 / 4090 / 5090), Mac with 32 GB+</td><td>≥ 40 tokens/sec on an 8B model</td><td>14–32B chat models</td><td>Real-time chat (large models), batch chat, plus everything below</td></tr>
+        <tr><td><b>B · Performer</b></td><td>GPU with 8–16 GB (RTX 3060 12 GB, 4070), Mac with 16–24 GB</td><td>≥ 25 tokens/sec on an 8B model</td><td>7–9B chat models, 35B MoE</td><td>Real-time chat (mid models), batch chat, embeddings, transcription</td></tr>
+        <tr><td><b>C · Standard</b></td><td>GPU with 4–8 GB, CPU-only laptops and desktops with 16 GB RAM</td><td>≥ 10 tokens/sec on a 3B model</td><td>1–4B and 1-bit 8B models, embeddings, Whisper</td><td>Batch chat (small models), embeddings, transcription</td></tr>
+        <tr><td><b>M1 · Mobile Plus</b></td><td>Recent flagship phones with 8 GB+ RAM</td><td>≥ 8 tokens/sec on a 1–3B model, steady through the heat test</td><td>1–3B and 1-bit models, Whisper small; opt-in 16–35B MoE from flash</td><td>Embeddings, transcription, small batch chat; MoE batch chat if opted in</td></tr>
+        <tr><td><b>M2 · Mobile Lite</b></td><td>Phones with 4–8 GB RAM</td><td>Passes the embeddings test</td><td>Embedding and classification models</td><td>Embeddings, classification</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="grid-3">
+    <div class="card"><span class="tag">WHAT THE OWNER SEES</span><h3>Result screen</h3>
+      <ul>
+        <li>"Your device: Class B · Performer"</li>
+        <li>What it can run and which jobs it will get</li>
+        <li>Models it will download (on Wi-Fi)</li>
+        <li>Devices below the minimum see "Not eligible yet" and why</li>
+      </ul>
+    </div>
+    <div class="card"><span class="tag">STAYING ACCURATE</span><h3>Re-benchmark</h3>
+      <ul>
+        <li>After a driver, OS or hardware change</li>
+        <li>Once a month, while idle</li>
+        <li>When live job speed drifts more than 20% from the benchmark</li>
+        <li>Live job speed keeps refining the profile between runs</li>
+      </ul>
+    </div>
+    <div class="card"><span class="tag">ROUTING</span><h3>How the class is used</h3>
+      <ul>
+        <li>Jobs are offered only to classes allowed to run them</li>
+        <li>Within a class: rank by live speed, reputation and distance</li>
+        <li>Server checks results against known ranges for that hardware; a device claiming a higher class than it delivers is moved down</li>
       </ul>
     </div>
   </div>
@@ -454,7 +588,7 @@ html { scroll-behavior: smooth; }
 <!-- 4. Install and forget -->
 <section id="install-forget">
   <div class="head">
-    <span class="label">04 · Contributor experience</span>
+    <span class="label">05 · Contributor experience</span>
     <h2>Install and forget</h2>
     <p class="intro">After a one-time pairing code there is nothing to set up. The app picks its model from the benchmark, waits for the device to be free, works, and steps aside the moment the owner needs the device.</p>
   </div>
@@ -468,7 +602,7 @@ html { scroll-behavior: smooth; }
       <text x="20" y="24" class="t-mono">ONCE</text>
       <rect x="20" y="36" width="180" height="62" rx="10" class="box"/><text x="110" y="63" text-anchor="middle" class="t-title">Install</text><text x="110" y="83" text-anchor="middle" class="t-sub">download, double-click</text>
       <rect x="240" y="36" width="180" height="62" rx="10" class="box"/><text x="330" y="63" text-anchor="middle" class="t-title">Pair</text><text x="330" y="83" text-anchor="middle" class="t-sub">enter 6-digit code</text>
-      <rect x="460" y="36" width="180" height="62" rx="10" class="box"/><text x="550" y="63" text-anchor="middle" class="t-title">Benchmark</text><text x="550" y="83" text-anchor="middle" class="t-sub">picks the right tier</text>
+      <rect x="460" y="36" width="180" height="62" rx="10" class="box"/><text x="550" y="63" text-anchor="middle" class="t-title">Benchmark</text><text x="550" y="83" text-anchor="middle" class="t-sub">assigns device class</text>
       <rect x="680" y="36" width="200" height="62" rx="10" class="box"/><text x="780" y="63" text-anchor="middle" class="t-title">Get model</text><text x="780" y="83" text-anchor="middle" class="t-sub">on Wi-Fi, verified</text>
       <path d="M200,67 L238,67" class="ln" marker-end="url(#g3)"/>
       <path d="M420,67 L458,67" class="ln" marker-end="url(#g3)"/>
@@ -481,12 +615,12 @@ html { scroll-behavior: smooth; }
       <rect x="660" y="170" width="220" height="70" rx="10" class="box-alert"/><text x="770" y="199" text-anchor="middle" class="t-title">Paused</text><text x="770" y="221" text-anchor="middle" class="t-sub">owner needs the device</text>
 
       <path d="M280,190 L358,190" class="ln-acc" marker-end="url(#a3)"/>
-      <text x="319" y="180" text-anchor="middle" class="t-mono" font-size="11">idle</text>
+      <text x="319" y="180" text-anchor="middle" class="t-mono" style="font-size:11px">idle</text>
       <path d="M580,190 L658,190" class="ln-alert" marker-end="url(#r3)"/>
-      <text x="619" y="180" text-anchor="middle" class="t-mono" font-size="11">&lt; 1 sec</text>
+      <text x="619" y="180" text-anchor="middle" class="t-mono" style="font-size:11px">&lt; 1 sec</text>
       <path d="M770,240 C770,300 170,300 170,242" class="ln" marker-end="url(#g3)"/>
-      <text x="470" y="292" text-anchor="middle" class="t-mono" font-size="11">conditions clear again → back to waiting</text>
-      <text x="470" y="268" text-anchor="middle" class="t-sub" font-size="11.5">Triggers to pause: keyboard or mouse used · game or fullscreen app · unplugged · too hot · battery low</text>
+      <text x="470" y="292" text-anchor="middle" class="t-mono" style="font-size:11px">conditions clear again → back to waiting</text>
+      <text x="470" y="268" text-anchor="middle" class="t-sub" style="font-size:11.5px">Triggers to pause: keyboard or mouse used · game or fullscreen app · unplugged · too hot · battery low</text>
     </svg>
   </div>
   <div class="table-wrap">
@@ -504,15 +638,15 @@ html { scroll-behavior: smooth; }
   </div>
 </section>
 
-<!-- 5. Job approval on phones -->
+<!-- Job offers -->
 <section id="approval">
   <div class="head">
-    <span class="label">05 · Phones</span>
-    <h2>Job approval on phones</h2>
-    <p class="intro">Phone owners choose how jobs are accepted. Each offer shows what the job is, how long it will take on that phone, and how much it will earn. The owner taps Approve or Reject, or leaves the phone on auto-approve and never sees a prompt.</p>
+    <span class="label">06 · Offers</span>
+    <h2>Job offers, Uber-style</h2>
+    <p class="intro">Owners who turn off auto-approve get every job as an offer card, like a ride request: the earnings in large type, the time it takes, and a 30-second countdown. Accept and the job runs right away; decline or let it time out and it goes to the next best device in the same class. Offers only go to devices that are ready at that moment, and the card never shows what the job contains.</p>
   </div>
   <div class="figure">
-    <svg viewBox="0 0 900 430" role="img" aria-label="Phone notification showing a transcription job that takes about 6 minutes and earns 4 cents, with Approve and Reject buttons. Flow: approved jobs are queued and run when charging, then earnings are credited; rejected or expired jobs go to the next device with no penalty. Auto-approve skips the prompt.">
+    <svg viewBox="0 0 900 430" role="img" aria-label="Phone offer card: online toggle, today's earnings, countdown of 24 seconds, earnings of 4 cents, about 40 cents per hour, job category transcription, size 12 minutes of audio, takes about 6 minutes, runs now; Accept button and Decline. Flow: accepted jobs run right away and earnings are credited; declined or timed-out offers go to the next best device in the same class.">
       <defs>
         <marker id="a5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head-acc"/></marker>
         <marker id="r5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head-alert"/></marker>
@@ -521,113 +655,118 @@ html { scroll-behavior: smooth; }
       </defs>
       <!-- phone -->
       <rect x="40" y="10" width="260" height="410" rx="34" class="box-2"/>
-      <rect x="135" y="22" width="70" height="8" rx="4" class="box"/>
-      <text x="64" y="54" class="t-mono">9:41</text>
-      <text x="276" y="54" text-anchor="end" class="t-mono">⚡ 82%</text>
-      <!-- notification -->
-      <rect x="56" y="70" width="228" height="190" rx="14" class="box"/>
-      <text x="72" y="94" class="t-mono" font-size="11">DEPINCLAW · NOW</text>
-      <text x="72" y="118" class="t-title" font-size="14">New job: Transcription</text>
-      <text x="72" y="138" class="t-sub">12 min of audio</text>
-      <text x="72" y="164" class="t-mono" font-size="11">TIME</text>
-      <text x="72" y="186" class="t-title" font-size="16">~6 min</text>
-      <text x="176" y="164" class="t-mono" font-size="11">EARNS</text>
-      <text x="176" y="186" class="t-title t-money" font-size="16">$0.04</text>
-      <text x="72" y="210" class="t-sub" font-size="11.5">Expires in 10 min</text>
-      <rect x="68" y="222" width="98" height="28" rx="7" class="box-acc"/>
-      <text x="117" y="241" text-anchor="middle" class="t-acc" font-size="13">Approve</text>
-      <rect x="176" y="222" width="96" height="28" rx="7" class="box"/>
-      <text x="224" y="241" text-anchor="middle" class="t-sub" font-size="13">Reject</text>
-      <!-- settings -->
-      <text x="64" y="294" class="t-title" font-size="13">Approval mode</text>
-      <circle cx="74" cy="320" r="6" class="box"/><text x="88" y="324" class="t-sub">Auto-approve (default)</text>
-      <circle cx="74" cy="346" r="6" class="box"/><text x="88" y="350" class="t-sub">Auto-approve with limits</text>
-      <circle cx="74" cy="372" r="6" class="box-acc"/><circle cx="74" cy="372" r="3" class="dot"/><text x="88" y="376" class="t-sub">Ask me each time</text>
-      <text x="170" y="404" text-anchor="middle" class="t-mono" font-size="10.5">example values</text>
+      <rect x="135" y="20" width="70" height="8" rx="4" class="box"/>
+      <rect x="56" y="36" width="78" height="24" rx="12" class="box-acc"/>
+      <circle cx="70" cy="48" r="4" class="dot"/>
+      <text x="80" y="52" class="t-acc" style="font-size:12px">Online</text>
+      <text x="284" y="52" text-anchor="end" class="t-mono" style="font-size:11px">Today $1.82 · 37 jobs</text>
+      <!-- card -->
+      <rect x="56" y="72" width="228" height="304" rx="16" class="box"/>
+      <text x="72" y="98" class="t-mono" style="font-size:11px">NEW JOB OFFER</text>
+      <circle cx="252" cy="100" r="18" class="ring-track"/>
+      <circle cx="252" cy="100" r="18" class="ring-fill" stroke-dasharray="90 113" transform="rotate(-90 252 100)"/>
+      <text x="252" y="104" text-anchor="middle" class="t-mono" style="font-size:11px">24s</text>
+      <text x="72" y="152" class="t-title t-money" style="font-size:40px">$0.04</text>
+      <text x="72" y="176" class="t-sub">≈ $0.40 per hour</text>
+      <line x1="72" y1="192" x2="268" y2="192" class="life"/>
+      <text x="72" y="216" class="t-mono" style="font-size:11px">JOB</text><text x="134" y="216" class="t-title" style="font-size:13px">Transcription</text>
+      <text x="72" y="240" class="t-mono" style="font-size:11px">SIZE</text><text x="134" y="240" class="t-title" style="font-size:13px">12 min of audio</text>
+      <text x="72" y="264" class="t-mono" style="font-size:11px">TIME</text><text x="134" y="264" class="t-title" style="font-size:13px">about 6 min</text>
+      <text x="72" y="288" class="t-mono" style="font-size:11px">RUNS</text><text x="134" y="288" class="t-title" style="font-size:13px">now · charging</text>
+      <rect x="68" y="304" width="204" height="40" rx="10" class="btn-acc"/>
+      <text x="170" y="329" text-anchor="middle" class="t-inv" style="font-size:15px">Accept</text>
+      <text x="170" y="364" text-anchor="middle" class="t-sub">Decline</text>
+      <text x="170" y="404" text-anchor="middle" class="t-mono" style="font-size:10.5px">example values · content never shown</text>
 
       <!-- flow -->
       <rect x="360" y="20" width="220" height="56" rx="10" class="box"/>
-      <text x="470" y="44" text-anchor="middle" class="t-title" font-size="14">Job offer arrives</text>
-      <text x="470" y="64" text-anchor="middle" class="t-sub" font-size="11.5">batch · embeddings · transcription</text>
+      <text x="470" y="44" text-anchor="middle" class="t-title" style="font-size:14px">Offer sent</text>
+      <text x="470" y="64" text-anchor="middle" class="t-sub" style="font-size:11.5px">best ready device in the class</text>
       <rect x="640" y="20" width="240" height="56" rx="10" class="box"/>
-      <text x="760" y="44" text-anchor="middle" class="t-title" font-size="14">Notification</text>
-      <text x="760" y="64" text-anchor="middle" class="t-sub" font-size="11.5">time + earnings shown</text>
+      <text x="760" y="44" text-anchor="middle" class="t-title" style="font-size:14px">Offer card · 30 s</text>
+      <text x="760" y="64" text-anchor="middle" class="t-sub" style="font-size:11.5px">earnings, time, job category</text>
       <path d="M580,48 L638,48" class="ln" marker-end="url(#g5)"/>
-      <text x="609" y="40" text-anchor="middle" class="t-mono" font-size="10.5">ask me</text>
+      <text x="609" y="40" text-anchor="middle" class="t-mono" style="font-size:10.5px">ask</text>
 
       <rect x="360" y="140" width="220" height="56" rx="10" class="box-acc"/>
-      <text x="470" y="164" text-anchor="middle" class="t-title" font-size="14">Approved</text>
-      <text x="470" y="184" text-anchor="middle" class="t-sub" font-size="11.5">queued on the phone</text>
+      <text x="470" y="164" text-anchor="middle" class="t-title" style="font-size:14px">Accepted</text>
+      <text x="470" y="184" text-anchor="middle" class="t-sub" style="font-size:11.5px">sealed job unlocks in sandbox</text>
       <path d="M470,76 L470,138" class="ln-acc" stroke-dasharray="6 4" marker-end="url(#a5)"/>
-      <text x="478" y="112" class="t-mono" font-size="11">auto-approve</text>
+      <text x="478" y="112" class="t-mono" style="font-size:11px">auto-approve</text>
       <path d="M655,76 L585,138" class="ln-acc" marker-end="url(#a5)"/>
-      <text x="628" y="122" class="t-mono" font-size="11">tap Approve</text>
+      <text x="628" y="122" class="t-mono" style="font-size:11px">tap Accept</text>
 
       <rect x="360" y="240" width="220" height="56" rx="10" class="box"/>
-      <text x="470" y="264" text-anchor="middle" class="t-title" font-size="14">Runs when allowed</text>
-      <text x="470" y="284" text-anchor="middle" class="t-sub" font-size="11.5">charging · Wi-Fi · cool</text>
+      <text x="470" y="264" text-anchor="middle" class="t-title" style="font-size:14px">Runs right away</text>
+      <text x="470" y="284" text-anchor="middle" class="t-sub" style="font-size:11.5px">device was ready when offered</text>
       <path d="M470,196 L470,238" class="ln-acc" marker-end="url(#a5)"/>
 
       <rect x="360" y="340" width="220" height="56" rx="10" class="box-money"/>
-      <text x="470" y="364" text-anchor="middle" class="t-title" font-size="14">Earnings credited</text>
-      <text x="470" y="384" text-anchor="middle" class="t-sub" font-size="11.5">after verification</text>
+      <text x="470" y="364" text-anchor="middle" class="t-title" style="font-size:14px">Earnings credited</text>
+      <text x="470" y="384" text-anchor="middle" class="t-sub" style="font-size:11.5px">after verification</text>
       <path d="M470,296 L470,338" class="ln-money" marker-end="url(#m5)"/>
 
       <rect x="640" y="140" width="240" height="70" rx="10" class="box-alert"/>
-      <text x="760" y="166" text-anchor="middle" class="t-title" font-size="14">Rejected or expired</text>
-      <text x="760" y="188" text-anchor="middle" class="t-sub" font-size="11.5">no answer in 10 min = reject</text>
+      <text x="760" y="166" text-anchor="middle" class="t-title" style="font-size:14px">Declined or timed out</text>
+      <text x="760" y="188" text-anchor="middle" class="t-sub" style="font-size:11.5px">no answer in 30 s = decline</text>
       <path d="M760,76 L760,138" class="ln-alert" marker-end="url(#r5)"/>
-      <text x="768" y="112" class="t-mono" font-size="11">tap Reject</text>
+      <text x="768" y="112" class="t-mono" style="font-size:11px">tap Decline</text>
 
       <rect x="640" y="260" width="240" height="64" rx="10" class="box-2"/>
-      <text x="760" y="286" text-anchor="middle" class="t-title" font-size="14">Offered to next device</text>
-      <text x="760" y="308" text-anchor="middle" class="t-sub" font-size="11.5">no penalty, reputation unchanged</text>
+      <text x="760" y="286" text-anchor="middle" class="t-title" style="font-size:14px">Next best device</text>
+      <text x="760" y="308" text-anchor="middle" class="t-sub" style="font-size:11.5px">same class · no penalty</text>
       <path d="M760,210 L760,258" class="ln" marker-end="url(#g5)"/>
     </svg>
   </div>
 
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Approval mode</th><th>What happens</th></tr></thead>
+      <thead><tr><th>Mode</th><th>What happens</th></tr></thead>
       <tbody>
-        <tr><td><b>Auto-approve</b> (default)</td><td>Every job that meets the idle rules runs without asking. One summary notification a day at most.</td></tr>
-        <tr><td><b>Auto-approve with limits</b></td><td>Runs automatically only inside the owner's limits: max duration, min earnings, only while charging, only on Wi-Fi. Anything outside the limits asks first.</td></tr>
-        <tr><td><b>Ask me each time</b></td><td>Every job arrives as a notification with Approve and Reject buttons.</td></tr>
+        <tr><td><b>Auto-approve</b> (default)</td><td>Every job the device's class allows runs without asking. One earnings summary a day.</td></tr>
+        <tr><td><b>Auto-approve with limits</b></td><td>Runs automatically within the owner's limits: longest job, lowest pay per job, lowest pay per hour, only while charging, only on Wi-Fi. Anything outside the limits arrives as an offer card.</td></tr>
+        <tr><td><b>Ask for every job</b></td><td>Every job arrives as an offer card with a 30-second countdown.</td></tr>
       </tbody>
     </table>
   </div>
 
   <div class="grid-3">
-    <div class="card"><span class="tag">TIME ESTIMATE</span><h3>How long it takes</h3>
+    <div class="card"><span class="tag">ON THE CARD</span><h3>What the owner sees</h3>
       <ul>
-        <li>Job size (tokens or audio minutes) ÷ this phone's benchmark speed</li>
-        <li>Plus model load time if the model isn't loaded yet</li>
-        <li>Shown rounded up: "about 6 min"</li>
+        <li>Earnings for this job, in large type</li>
+        <li>Equivalent pay per hour</li>
+        <li>Job category and size (e.g. "Transcription · 12 min of audio")</li>
+        <li>Estimated time on this device</li>
+        <li>Countdown; today's total and job count at the top</li>
+        <li>Never the prompt, the output or the customer</li>
       </ul>
     </div>
-    <div class="card"><span class="tag">EARNINGS ESTIMATE</span><h3>How much it pays</h3>
+    <div class="card"><span class="tag">THE NUMBERS</span><h3>How they are worked out</h3>
       <ul>
-        <li>Job price × owner share (e.g. 70%)</li>
-        <li>Shown in the owner's currency</li>
-        <li>Final credit uses actual tokens; the receipt shows estimate and final side by side</li>
+        <li>Time: job size ÷ this device's benchmark speed, plus model load time if needed</li>
+        <li>Earnings: job price × owner share (e.g. 70%)</li>
+        <li>Per hour: earnings ÷ estimated time</li>
+        <li>Final credit uses actual work; the receipt shows estimate and final</li>
       </ul>
     </div>
-    <div class="card"><span class="tag">RULES</span><h3>Fair to owners and customers</h3>
+    <div class="card"><span class="tag">RULES</span><h3>Like a driver app</h3>
       <ul>
-        <li>Only batch, embeddings and transcription jobs wait for a tap; real-time chat never does</li>
-        <li>Rejecting carries no penalty</li>
-        <li>Approved jobs still run only when charging, on Wi-Fi and cool</li>
-        <li>With the app open, the offer shows as an in-app card</li>
+        <li>Go online / go offline toggle on the home screen</li>
+        <li>Offer goes to one device at a time, best match first</li>
+        <li>Declining never lowers reputation; the scheduler learns which job types an owner prefers</li>
+        <li>Real-time chat goes only to auto-approve devices</li>
+        <li>Desktops get the same card as a tray pop-up</li>
       </ul>
     </div>
   </div>
-  <p class="note">Notifications reach the phone through Firebase Cloud Messaging (Android) and Apple Push Notification service (iPhone), sent by a new push service in the control plane. On iPhone, approved jobs run in the next Charge Mode window.</p>
+  <p class="note">Offers reach phones as high-priority notifications with Accept and Decline buttons (Firebase on Android, time-sensitive Apple Push on iPhone), and as a full-screen card when the app is open. On iPhone, offers are sent only while the phone is in Charge Mode.</p>
 </section>
+
 
 <!-- 5. Request lifecycle -->
 <section id="request">
   <div class="head">
-    <span class="label">06 · Runtime</span>
+    <span class="label">07 · Runtime</span>
     <h2>Life of a request</h2>
     <p class="intro">One customer request, start to finish. If the device drops part-way, the scheduler re-sends the job to another device or to rented GPUs, and the customer just sees the answer.</p>
   </div>
@@ -639,11 +778,11 @@ html { scroll-behavior: smooth; }
         <marker id="g4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head-mut"/></marker>
       </defs>
       <!-- actors -->
-      <rect x="30" y="14" width="120" height="40" rx="8" class="box"/><text x="90" y="39" text-anchor="middle" class="t-title" font-size="14">Customer</text>
-      <rect x="210" y="14" width="120" height="40" rx="8" class="box-acc"/><text x="270" y="39" text-anchor="middle" class="t-title" font-size="14">Gateway</text>
-      <rect x="390" y="14" width="120" height="40" rx="8" class="box-acc"/><text x="450" y="39" text-anchor="middle" class="t-title" font-size="14">Scheduler</text>
-      <rect x="570" y="14" width="120" height="40" rx="8" class="box"/><text x="630" y="39" text-anchor="middle" class="t-title" font-size="14">Device</text>
-      <rect x="750" y="14" width="120" height="40" rx="8" class="box-money"/><text x="810" y="39" text-anchor="middle" class="t-title" font-size="14">Ledger</text>
+      <rect x="30" y="14" width="120" height="40" rx="8" class="box"/><text x="90" y="39" text-anchor="middle" class="t-title" style="font-size:14px">Customer</text>
+      <rect x="210" y="14" width="120" height="40" rx="8" class="box-acc"/><text x="270" y="39" text-anchor="middle" class="t-title" style="font-size:14px">Gateway</text>
+      <rect x="390" y="14" width="120" height="40" rx="8" class="box-acc"/><text x="450" y="39" text-anchor="middle" class="t-title" style="font-size:14px">Scheduler</text>
+      <rect x="570" y="14" width="120" height="40" rx="8" class="box"/><text x="630" y="39" text-anchor="middle" class="t-title" style="font-size:14px">Device</text>
+      <rect x="750" y="14" width="120" height="40" rx="8" class="box-money"/><text x="810" y="39" text-anchor="middle" class="t-title" style="font-size:14px">Ledger</text>
       <line x1="90" y1="54" x2="90" y2="455" class="life"/>
       <line x1="270" y1="54" x2="270" y2="455" class="life"/>
       <line x1="450" y1="54" x2="450" y2="455" class="life"/>
@@ -679,7 +818,7 @@ html { scroll-behavior: smooth; }
 <!-- 6. Money -->
 <section id="money">
   <div class="head">
-    <span class="label">07 · Payments</span>
+    <span class="label">08 · Payments</span>
     <h2>Money flow</h2>
     <p class="intro">Customers pay for what they use. Each completed job's revenue is split between the device owner and the protocol, and owners are paid weekly once they pass a minimum balance.</p>
   </div>
@@ -714,7 +853,7 @@ html { scroll-behavior: smooth; }
 <!-- 7. Trust -->
 <section id="trust">
   <div class="head">
-    <span class="label">08 · Safety</span>
+    <span class="label">09 · Safety</span>
     <h2>Trust and privacy</h2>
   </div>
   <div class="grid-3">
@@ -742,48 +881,193 @@ html { scroll-behavior: smooth; }
       <span class="tag">CUSTOMER DATA</span>
       <h3>Privacy</h3>
       <ul>
-        <li>Encrypted connection end to end</li>
-        <li>Devices never write prompts to disk</li>
-        <li>"Private" requests go only to verified or partner devices, or rented GPUs</li>
+        <li>Every job runs in a secure sandbox the owner can't look into</li>
+        <li>Jobs are encrypted to the sandbox's own key</li>
+        <li>Customers pick a minimum privacy level per request (see Secure job sandbox)</li>
       </ul>
     </div>
   </div>
 </section>
 
-<!-- 8. Models -->
-<section id="models">
+<!-- Secure sandbox -->
+<section id="privacy">
   <div class="head">
-    <span class="label">09 · Workloads</span>
-    <h2>Models and job types</h2>
-    <p class="intro">Each device keeps one or two models ready, chosen by its benchmark. Slow or unreliable devices still earn by serving batch, embedding and transcription jobs that don't need an instant answer.</p>
+    <span class="label">10 · Privacy</span>
+    <h2>Secure job sandbox</h2>
+    <p class="intro">Every job runs inside a sealed sandbox on the device. The job arrives encrypted with a key that only the sandbox holds, so the owner, the app's own interface and our relay servers see only metadata: category, size, time and earnings. The prompt and the answer never touch the disk and are wiped from memory when the job ends.</p>
   </div>
+  <div class="figure">
+    <svg viewBox="0 0 900 380" role="img" aria-label="Sealed job flow: the gateway encrypts the job to a key held only inside the device's sandbox after checking the sandbox's attestation. The owner side of the device sees only metadata. The sandbox decrypts, runs the model, encrypts the answer back to the gateway, and wipes memory.">
+      <defs>
+        <marker id="a7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head-acc"/></marker>
+        <marker id="g7" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head-mut"/></marker>
+      </defs>
+      <!-- gateway -->
+      <rect x="20" y="100" width="190" height="140" rx="12" class="box-acc"/>
+      <text x="115" y="150" text-anchor="middle" class="t-title" style="font-size:14px">Gateway</text>
+      <text x="115" y="174" text-anchor="middle" class="t-sub" style="font-size:11.5px">1 · checks sandbox proof</text>
+      <text x="115" y="194" text-anchor="middle" class="t-sub" style="font-size:11.5px">2 · locks job to that</text>
+      <text x="115" y="210" text-anchor="middle" class="t-sub" style="font-size:11.5px">sandbox's key</text>
+
+      <!-- device frame -->
+      <rect x="300" y="14" width="580" height="352" rx="16" class="frame"/>
+      <text x="318" y="38" class="t-acc" style="font-size:13px">CONTRIBUTOR'S DEVICE</text>
+
+      <rect x="320" y="54" width="240" height="298" rx="12" class="box-2"/>
+      <text x="440" y="80" text-anchor="middle" class="t-title" style="font-size:14px">Owner side</text>
+      <text x="440" y="99" text-anchor="middle" class="t-sub" style="font-size:11.5px">app, offer card, agent</text>
+      <text x="340" y="204" class="t-mono" style="font-size:11px">CAN SEE</text>
+      <text x="340" y="224" class="t-sub">job category and size</text>
+      <text x="340" y="242" class="t-sub">time and earnings</text>
+      <text x="340" y="260" class="t-sub">device load and heat</text>
+      <text x="340" y="288" class="t-mono" style="font-size:11px">CANNOT SEE</text>
+      <text x="340" y="308" class="t-sub">the prompt or files</text>
+      <text x="340" y="326" class="t-sub">the answer</text>
+      <text x="340" y="344" class="t-sub">who the customer is</text>
+
+      <rect x="590" y="54" width="270" height="298" rx="12" class="box-acc"/>
+      <text x="725" y="80" text-anchor="middle" class="t-title" style="font-size:14px">Secure sandbox</text>
+      <text x="725" y="99" text-anchor="middle" class="t-sub" style="font-size:11.5px">signed, attested, locked down</text>
+      <rect x="610" y="120" width="230" height="40" rx="8" class="box"/>
+      <text x="725" y="145" text-anchor="middle" class="t-sub">unlock job with sandbox key</text>
+      <rect x="610" y="176" width="230" height="40" rx="8" class="box"/>
+      <text x="725" y="201" text-anchor="middle" class="t-sub">run model (llama.cpp / MLX)</text>
+      <rect x="610" y="232" width="230" height="40" rx="8" class="box"/>
+      <text x="725" y="257" text-anchor="middle" class="t-sub">lock answer for the gateway</text>
+      <rect x="610" y="288" width="230" height="40" rx="8" class="box"/>
+      <text x="725" y="313" text-anchor="middle" class="t-sub">wipe memory · nothing on disk</text>
+      <path d="M725,160 L725,174" class="ln" marker-end="url(#g7)"/>
+      <path d="M725,216 L725,230" class="ln" marker-end="url(#g7)"/>
+      <path d="M725,272 L725,286" class="ln" marker-end="url(#g7)"/>
+
+      <path d="M210,140 L608,140" class="ln-acc" marker-end="url(#a7)"/>
+      <text x="440" y="132" text-anchor="middle" class="t-mono" style="font-size:11px">sealed job (encrypted) →</text>
+      <path d="M610,252 L598,252 L598,176 L212,176" class="ln-acc" marker-end="url(#a7)"/>
+      <text x="440" y="168" text-anchor="middle" class="t-mono" style="font-size:11px">← sealed answer</text>
+    </svg>
+  </div>
+
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Tier</th><th>Devices</th><th>Models</th><th>Serves</th></tr></thead>
+      <thead><tr><th>Privacy level</th><th>Devices</th><th>How the job is hidden</th><th>Gets</th></tr></thead>
       <tbody>
-        <tr><td><b>T1</b></td><td>GPU with 12 GB+ VRAM, Mac with 32 GB+</td><td>14B–32B chat models</td><td>Real-time chat</td></tr>
-        <tr><td><b>T2</b></td><td>GPU with 6–12 GB, Mac with 16 GB</td><td>7–9B chat models</td><td>Real-time and batch chat</td></tr>
-        <tr><td><b>T3</b></td><td>CPU laptops, phones</td><td>1–4B models, embeddings, Whisper small</td><td>Embeddings, transcription, batch</td></tr>
+        <tr><td><b>Confidential</b></td><td>Android phones with protected virtual machines (Android Virtualization Framework, e.g. recent Pixels); partner servers with confidential-computing GPUs (NVIDIA H100 / Blackwell) and CPUs (AMD SEV-SNP, Intel TDX)</td><td>Hardware-isolated memory with remote attestation. The owner cannot read the job even with full admin or root access.</td><td>All jobs, including those marked private</td></tr>
+        <tr><td><b>Sealed</b></td><td>iPhones; Android phones passing strong Play Integrity; Macs with System Integrity Protection on</td><td>Locked-down OS sandbox, no debugger access, encrypted job, attestation that the device is not jailbroken or rooted. Reading the job would mean breaking the OS's security, which attestation detects.</td><td>Standard jobs</td></tr>
+        <tr><td><b>Sandboxed</b></td><td>Windows and Linux PCs with consumer GPUs</td><td>Encrypted job, isolated low-privilege sandbox process, no logs, no disk writes, memory wiped. Consumer GPUs have no hardware isolation, so an admin could in principle read GPU memory.</td><td>Jobs whose customer allows this level: public data, synthetic data, evals, open datasets</td></tr>
       </tbody>
     </table>
   </div>
+
+  <div class="grid-3">
+    <div class="card"><span class="tag">CUSTOMER CONTROL</span><h3>Minimum privacy per request</h3>
+      <ul>
+        <li>API field <code>privacy</code>: <code>confidential</code>, <code>sealed</code> or <code>sandboxed</code></li>
+        <li>The scheduler sends the job only to devices at that level or higher</li>
+        <li>Higher levels cost more per token</li>
+      </ul>
+    </div>
+    <div class="card"><span class="tag">IN THE SANDBOX</span><h3>Lock-down rules</h3>
+      <ul>
+        <li>Only our signed engine and signed models run</li>
+        <li>Network only to our relay; no other outbound access</li>
+        <li>Swap off or encrypted; no crash dumps with job data</li>
+        <li>Sandbox refuses to start if the device is rooted, jailbroken or debugged</li>
+      </ul>
+    </div>
+    <div class="card"><span class="tag">PROOF</span><h3>Attestation</h3>
+      <ul>
+        <li>Sandbox makes a fresh key per job and proves it runs our signed code</li>
+        <li>Android: key attestation and Play Integrity; iPhone and Mac: App Attest; servers: GPU and CPU attestation reports</li>
+        <li>No valid proof, no job</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+
+<!-- 8. Models -->
+<section id="models">
+  <div class="head">
+    <span class="label">11 · Workloads</span>
+    <h2>Models and job types</h2>
+    <p class="intro">Each device keeps one or two models ready, chosen by its class. Slow or unreliable devices still earn by serving batch, embedding and transcription jobs that don't need an instant answer.</p>
+  </div>
+  <p class="note">Which device runs which models is set by its class from the install benchmark (see Benchmark and device classes).</p>
   <div class="table-wrap">
     <table>
       <thead><tr><th>Product</th><th>Speed needed</th><th>Price vs chat</th><th>Served by</th></tr></thead>
       <tbody>
-        <tr><td><b>Real-time chat</b></td><td>First word in under 1.5 s</td><td>Standard</td><td>T1/T2 devices, else rented GPUs</td></tr>
-        <tr><td><b>Batch chat</b></td><td>Within 24 hours</td><td>50–80% cheaper</td><td>Any device, phones included</td></tr>
-        <tr><td><b>Embeddings</b></td><td>Seconds</td><td>Low per token</td><td>T3 and any idle device</td></tr>
-        <tr><td><b>Transcription</b></td><td>Minutes</td><td>Per audio minute</td><td>Phones and laptops</td></tr>
+        <tr><td><b>Real-time chat</b></td><td>First word in under 1.5 s</td><td>Standard</td><td>Class A/B devices on auto-approve, else rented GPUs</td></tr>
+        <tr><td><b>Batch chat</b></td><td>Within 24 hours</td><td>50–80% cheaper</td><td>Classes A, B, C and M1</td></tr>
+        <tr><td><b>Embeddings</b></td><td>Seconds</td><td>Low per token</td><td>Any class, phones included</td></tr>
+        <tr><td><b>Transcription</b></td><td>Minutes</td><td>Per audio minute</td><td>Classes B, C and M1</td></tr>
       </tbody>
     </table>
   </div>
 </section>
 
+<!-- Engines and models -->
+<section id="engines">
+  <div class="head">
+    <span class="label">12 · Research</span>
+    <h2>Inference engines and on-device research</h2>
+    <p class="intro">The node app is not tied to one engine. Each engine plugs in through the same adapter, and the install benchmark tests every engine available on the device and picks the fastest one per model. Recent on-device work, smolmaxxing in particular, lets ordinary phones run far bigger models than their RAM suggests.</p>
+  </div>
+
+  <div class="card">
+    <span class="tag">SMOLMAXXING · MIT · ADDED TO REPO AT third_party/smolmaxxing</span>
+    <h3>35B models on phones, by paging experts from flash</h3>
+    <p class="intro" style="font-size:0.95rem">A patch set on llama.cpp. For mixture-of-experts models it keeps the popular experts in RAM, reads the rest from flash on demand and prefetches the next layer's. It also adds 1-bit and ternary kernels for plain ARM cores, and big-core-only thread placement. Measured on the devices themselves:</p>
+    <div class="speeds" role="img" aria-label="Qwen3.6-35B-A3B generation speed on phones: Galaxy S24 Ultra 12 to 16 tokens per second, OnePlus Nord CE 2 4.9 to 5.7, Infinix GT 20 Pro 3.1.">
+      <div class="sp"><span class="nm">Galaxy S24 Ultra · 12 GB</span><div class="track"><div class="rng" style="left:75%;width:25%"></div></div><span class="v">12–16 tok/s</span></div>
+      <div class="sp"><span class="nm">OnePlus Nord CE 2 · 7.4 GB</span><div class="track"><div class="rng" style="left:30.6%;width:5%"></div></div><span class="v">4.9–5.7 tok/s</span></div>
+      <div class="sp"><span class="nm">Infinix GT 20 Pro · 8 GB</span><div class="track"><div class="rng" style="left:calc(19.4% - 3px);width:6px"></div></div><span class="v">3.1 tok/s</span></div>
+      <div class="axis"><span>0</span><span>4</span><span>8</span><span>12</span><span>16 tok/s</span></div>
+    </div>
+    <p class="note">Qwen3.6-35B-A3B (35B total, 3B active), 12.3 GB file. The same phone runs Qwen3-Next-80B-A3B at 2.6–3.1 tok/s with about 5 GB peak memory. Bars to scale; the S24 bar spans the reported 12–16 range.</p>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Engine</th><th>Best on</th><th>Role in DePINClaw</th></tr></thead>
+      <tbody>
+        <tr><td><b>llama.cpp</b></td><td>Everything: CPU, CUDA, Vulkan, Metal</td><td>Default engine on every platform</td></tr>
+        <tr><td><b>llama.cpp + smolmaxxing</b></td><td>ARM phones, low-RAM devices</td><td>Android engine for big MoE models from flash and 1-bit models</td></tr>
+        <tr><td><b>MLX / MLX Swift</b></td><td>Apple Silicon Macs, iPhones</td><td>Mac and iPhone engine; named fastest on Apple Silicon</td></tr>
+        <tr><td><b>MNN-LLM</b> (Alibaba)</td><td>Android CPU and GPU</td><td>Long-prompt jobs; vendor reports 8.6× (CPU) and 25.3× (GPU) faster prompt processing than llama.cpp</td></tr>
+        <tr><td><b>LiteRT-LM</b> (Google)</td><td>Android NPUs: Tensor, Qualcomm, MediaTek, Exynos</td><td>NPU engine on supported phones</td></tr>
+        <tr><td><b>Qualcomm Genie / QNN</b></td><td>Snapdragon NPUs</td><td>Snapdragon phones and Windows on Arm laptops</td></tr>
+        <tr><td><b>ExecuTorch</b> (Meta)</td><td>Phones to microcontrollers</td><td>Fallback NPU path for PyTorch-exported models</td></tr>
+        <tr><td><b>bitnet.cpp / T-MAC</b> (Microsoft)</td><td>CPUs running 1–2-bit models</td><td>CPU-only laptops and older phones</td></tr>
+        <tr><td><b>vLLM / SGLang</b></td><td>Linux PCs with big NVIDIA GPUs</td><td>Class A batch throughput</td></tr>
+        <tr><td><b>AirLLM</b></td><td>PCs with small GPUs</td><td>70B on a 4 GB GPU one layer at a time; slow, so batch jobs only</td></tr>
+        <tr><td><b>PowerInfer-2</b></td><td>Phones, sparse models</td><td>Watch list: needs specially trained sparse models</td></tr>
+        <tr><td><b>exo</b></td><td>Several home devices together</td><td>Later: owners pool their own devices into one node</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Model</th><th>Size</th><th>Why</th><th>Classes</th></tr></thead>
+      <tbody>
+        <tr><td><b>Qwen3.5-0.8B / 2B</b></td><td>0.8B, 2B</td><td>Phone and CPU picks; 0.8B is under 1 GB at 4-bit</td><td>M1, M2, C</td></tr>
+        <tr><td><b>Bonsai 1.7B / 4B / 8B</b> (1-bit)</td><td>8B in ~1.15 GB</td><td>Apache 2.0, March 2026; 8B fits where a 2B normally would</td><td>M1, M2, C</td></tr>
+        <tr><td><b>Gemma 4 E2B</b></td><td>2B effective</td><td>Reported 65 tok/s on iPhone 17 Pro, 19 tok/s on Galaxy S25 Ultra</td><td>M1, iPhone</td></tr>
+        <tr><td><b>Ling-mini-2.0</b></td><td>16B MoE, 1.4B active</td><td>11–15 tok/s on a mid-range phone with the expert pager</td><td>M1, C</td></tr>
+        <tr><td><b>Qwen3.6-35B-A3B</b></td><td>35B MoE, 3B active</td><td>3–16 tok/s on 8–12 GB phones; strongest answers per phone</td><td>M1 (opt-in), B, A</td></tr>
+        <tr><td><b>Qwen3-Next-80B-A3B</b></td><td>80B MoE, 3B active</td><td>2.6–3.1 tok/s on a mid-range phone</td><td>Batch only</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">Speeds are self-reported by each project. The install benchmark re-measures on each contributor's device before any model is used, and every model's licence is checked for commercial serving. Full research and sources: <code>docs/ON_DEVICE_INFERENCE.md</code>.</p>
+</section>
+
+
 <!-- 9. Roadmap -->
 <section id="roadmap">
   <div class="head">
-    <span class="label">10 · Execution</span>
+    <span class="label">13 · Execution</span>
     <h2>Roadmap: build and revenue side by side</h2>
     <p class="intro">Green bars are what gets built. Amber bars are the revenue sources added in the same window. Revenue starts in week 2 on rented capacity and moves onto community devices as they come online.</p>
   </div>
@@ -868,7 +1152,7 @@ html { scroll-behavior: smooth; }
 <!-- 10. Beta -->
 <section id="beta">
   <div class="head">
-    <span class="label">11 · Go to market</span>
+    <span class="label">14 · Go to market</span>
     <h2>Beta on X</h2>
     <p class="intro">Contributors and developers join through a waitlist linked from X. Each wave opens only when the previous one hits its quality targets. Bars are drawn to scale against the 2,000-person wave.</p>
   </div>
@@ -925,7 +1209,7 @@ html { scroll-behavior: smooth; }
 <!-- 11. Week 1 -->
 <section id="week1">
   <div class="head">
-    <span class="label">12 · Start here</span>
+    <span class="label">15 · Start here</span>
     <h2>Week-1 checklist</h2>
     <p class="intro">Ticks are saved in your browser only.</p>
   </div>
