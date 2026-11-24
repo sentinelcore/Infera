@@ -28,6 +28,7 @@ type Config struct {
 	FallbackURL   string
 	FallbackKey   string
 	FallbackModel string
+	EmbedPrice    float64 // USD per 1M input tokens for embeddings
 	FirstToken    time.Duration
 	JobDeadline   time.Duration
 }
@@ -61,6 +62,7 @@ type chatRequest struct {
 	Privacy     string            `json:"privacy"`
 	InferaBatch bool              `json:"infera_batch"`
 	expect      string            // canary: answer the output must contain
+	jobType     string            // "" (chat) or "embeddings"
 }
 
 func apiError(w http.ResponseWriter, code int, msg string) {
@@ -165,7 +167,7 @@ func (g *Gateway) runOnDevice(ctx context.Context, n *Node, acct *Account, jobID
 		return runNotAccepted
 	}
 	band := BandFor(dev.Dependability)
-	estCharge := g.cfg.cost(req.Model, estIn, req.MaxTokens)
+	estCharge := g.jobCost(req, estIn, req.MaxTokens)
 	estPay := float64(estCharge) * g.cfg.OwnerShare * band.Multiplier / microUSD
 
 	inbox := n.OpenJob(jobID)
@@ -177,6 +179,9 @@ func (g *Gateway) runOnDevice(ctx context.Context, n *Node, acct *Account, jobID
 	jobType := "chat"
 	if req.InferaBatch {
 		jobType = "batch_chat"
+	}
+	if req.jobType != "" {
+		jobType = req.jobType
 	}
 	n.Send(Msg{T: "offer", JobID: jobID, JobType: jobType, Model: req.Model, EstTokens: estIn + req.MaxTokens, EstPay: estPay, TTL: ttl, Privacy: req.Privacy})
 
@@ -227,7 +232,7 @@ wait:
 		select {
 		case <-ctx.Done():
 			n.Send(Msg{T: "cancel", JobID: jobID})
-			g.settlePartial(acct, dev, jobID, req.Model, estIn, pieces, band, "customer cancelled")
+			g.settlePartial(acct, dev, jobID, req, estIn, pieces, band, "customer cancelled")
 			return runClientGone
 		case <-idle.C:
 			n.Send(Msg{T: "cancel", JobID: jobID})
@@ -276,7 +281,7 @@ wait:
 				if tout <= 0 {
 					tout = pieces
 				}
-				charge := g.cfg.cost(req.Model, tin, tout)
+				charge := g.jobCost(req, tin, tout)
 				pay := int64(float64(charge) * g.cfg.OwnerShare * band.Multiplier)
 				g.st.AdjustCredits(acct.ID, -charge)
 				g.st.AddLedger(acct.ID, "", jobID, "charge", -charge, 0, req.Model)
@@ -336,8 +341,17 @@ func (g *Gateway) abort(dev *DeviceRow, jobID, cause string, estPay float64, evi
 }
 
 // settlePartial pays for work done when the customer disconnects: no penalty to the owner.
-func (g *Gateway) settlePartial(acct *Account, dev *DeviceRow, jobID, model string, estIn, pieces int, band Band, note string) {
-	charge := g.cfg.cost(model, estIn, pieces)
+// jobCost prices a job: chat by input and output tokens, embeddings by input tokens.
+func (g *Gateway) jobCost(req chatRequest, tin, tout int) int64 {
+	if req.jobType == "embeddings" {
+		return int64(math.Ceil(float64(tin) / 1e6 * g.cfg.EmbedPrice * microUSD))
+	}
+	return g.cfg.cost(req.Model, tin, tout)
+}
+
+func (g *Gateway) settlePartial(acct *Account, dev *DeviceRow, jobID string, req chatRequest, estIn, pieces int, band Band, note string) {
+	model := req.Model
+	charge := g.jobCost(req, estIn, pieces)
 	pay := int64(float64(charge) * g.cfg.OwnerShare * band.Multiplier)
 	g.st.AdjustCredits(acct.ID, -charge)
 	g.st.AddLedger(acct.ID, "", jobID, "charge", -charge, 0, model+" (partial)")
@@ -421,6 +435,7 @@ type streamWriter struct {
 	started bool
 	buf     strings.Builder
 	rbuf    strings.Builder
+	embed   bool // embeddings response instead of chat
 }
 
 func newStreamWriter(w http.ResponseWriter, stream bool, jobID, model string) *streamWriter {
@@ -490,6 +505,17 @@ func (s *streamWriter) delta(text string) {
 }
 
 func (s *streamWriter) finish(tin, tout int) {
+	if s.embed {
+		var res struct {
+			Data json.RawMessage `json:"data"`
+		}
+		json.Unmarshal([]byte(s.buf.String()), &res)
+		s.begin()
+		s.w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(s.w).Encode(map[string]any{"object": "list", "data": res.Data, "model": s.model,
+			"usage": map[string]int{"prompt_tokens": tin, "total_tokens": tin}})
+		return
+	}
 	usage := map[string]int{"prompt_tokens": tin, "completion_tokens": tout, "total_tokens": tin + tout}
 	if s.stream {
 		s.begin()
@@ -522,4 +548,58 @@ func (s *streamWriter) fail(msg string) {
 		return
 	}
 	apiError(s.w, 502, msg)
+}
+
+// Embeddings serves POST /v1/embeddings (OpenAI format) on devices that advertise the model.
+// Embeddings can wait, so devices in the batch-only dependability bands may take them too.
+func (g *Gateway) Embeddings(w http.ResponseWriter, r *http.Request) {
+	acct, err := g.st.AccountByKey(bearer(r))
+	if err != nil || acct.Kind != "customer" {
+		apiError(w, 401, "missing or invalid API key; create one on the Developers tab of the dashboard")
+		return
+	}
+	raw, err := io.ReadAll(io.LimitReader(r.Body, 8<<20))
+	if err != nil {
+		apiError(w, 400, "could not read request body")
+		return
+	}
+	var in struct {
+		Model   string          `json:"model"`
+		Input   json.RawMessage `json:"input"`
+		Privacy string          `json:"privacy"`
+	}
+	if json.Unmarshal(raw, &in) != nil || in.Model == "" || len(in.Input) == 0 || string(in.Input) == "null" {
+		apiError(w, 400, "request needs \"model\" and \"input\"")
+		return
+	}
+	if in.Privacy == "" {
+		in.Privacy = "sandboxed"
+	}
+	if _, ok := privacyRank[in.Privacy]; !ok {
+		apiError(w, 400, "privacy must be sandboxed, sealed or confidential")
+		return
+	}
+	req := chatRequest{Model: in.Model, Privacy: in.Privacy, InferaBatch: true, jobType: "embeddings"}
+	estIn := len(raw) / 4
+	if est := g.jobCost(req, estIn, 0); acct.Credits < est {
+		apiError(w, 402, fmt.Sprintf("not enough credits: this request can cost up to $%.6f", float64(est)/microUSD))
+		return
+	}
+	jobID := "job_" + randomHex(10)
+	sw := newStreamWriter(w, false, jobID, in.Model)
+	sw.embed = true
+	tried := 0
+	for _, n := range g.hub.Candidates(in.Model, in.Privacy, true) {
+		if tried >= 5 {
+			break
+		}
+		tried++
+		res := g.runOnDevice(r.Context(), n, acct, jobID, req, raw, estIn, sw)
+		if res == runDone || res == runClientGone {
+			return
+		}
+		jobID = "job_" + randomHex(10)
+		sw.reset(jobID)
+	}
+	apiError(w, 503, fmt.Sprintf("no device is serving embeddings model %q right now; GET /v1/models lists what's online", in.Model))
 }

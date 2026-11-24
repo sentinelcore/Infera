@@ -19,6 +19,13 @@ class H(BaseHTTPRequestHandler):
         self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(body)
     def do_POST(self):
         req = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        if self.path.endswith("/embeddings"):
+            inputs = req.get("input")
+            inputs = inputs if isinstance(inputs, list) else [inputs]
+            data = [{"object": "embedding", "index": i, "embedding": [round((len(str(t)) % 7) / 7 + j / 100, 4) for j in range(8)]} for i, t in enumerate(inputs)]
+            body = json.dumps({"object": "list", "data": data, "usage": {"prompt_tokens": sum(len(str(t).split()) for t in inputs), "total_tokens": 0}}).encode()
+            self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(body)
+            return
         prompt = " ".join(str(m.get("content", "")) for m in req.get("messages", []))
         words = ANSWER
         for k, v in KNOWN.items():

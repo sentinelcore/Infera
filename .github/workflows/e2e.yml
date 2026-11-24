@@ -27,6 +27,7 @@ jobs:
           (ollama serve > ollama.log 2>&1 &)
           for i in $(seq 1 30); do curl -sf localhost:11434/api/tags && break; sleep 1; done
           ollama pull qwen3:0.6b
+          ollama pull all-minilm
       - name: Local test with a real model
         env: { INFERA_PARAMS_B: "0.6" }
         run: ./scripts/local-test.sh

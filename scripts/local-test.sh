@@ -53,18 +53,21 @@ rm -rf "$INFERA_HOME"
 "$NODE" pair "$CODE" --server "http://localhost:$PORT" --name "$(hostname)" >/dev/null
 MODEL=mock-1b
 if [ "${1:-}" != "--mock" ] && curl -sf localhost:11434/api/tags >/dev/null 2>&1; then
-  TAG=$(curl -s localhost:11434/api/tags | python3 -c "import sys,json;m=json.load(sys.stdin)['models'];print(m[0]['name'] if m else '')")
+  TAG=$(curl -s localhost:11434/api/tags | python3 -c "import sys,json;m=json.load(sys.stdin)['models'];c=[x['name'] for x in m if 'embed' not in x['name'] and 'minilm' not in x['name']];print(c[0] if c else '')")
 fi
 if [ -n "${TAG:-}" ]; then
   MODEL=$(echo "$TAG" | tr ':' '-')
   echo "   Using Ollama model $TAG as \"$MODEL\""
-  "$NODE" engine --url http://127.0.0.1:11434 --model "$MODEL" --engine-model "$TAG" --params-b "${INFERA_PARAMS_B:-2}" >/dev/null
+  ETAG=$(curl -s localhost:11434/api/tags | python3 -c "import sys,json;m=[x['name'] for x in json.load(sys.stdin)['models'] if 'embed' in x['name'] or 'minilm' in x['name']];print(m[0] if m else '')")
+  EMBED=""; [ -n "$ETAG" ] && EMBED=$(echo "$ETAG" | tr ':' '-')
+  "$NODE" engine --url http://127.0.0.1:11434 --model "$MODEL" --engine-model "$TAG" --params-b "${INFERA_PARAMS_B:-2}" --embed-model "$EMBED" --embed-engine-model "$ETAG" >/dev/null
 else
   echo "   Using the stand-in engine (fake answers). Install Ollama and pull a model to test a real one."
   python3 "$ROOT/tools/mock_engine.py" 18090 0.03 > "$WORK/mock.log" 2>&1 &
   echo $! > "$WORK/mock.pid"
   sleep 0.5
-  "$NODE" engine --url http://127.0.0.1:18090 --model "$MODEL" --params-b 1 >/dev/null
+  EMBED=mock-embed
+  "$NODE" engine --url http://127.0.0.1:18090 --model "$MODEL" --params-b 1 --embed-model "$EMBED" >/dev/null
 fi
 # Local testing: don't wait for 5 minutes of keyboard idle.
 python3 - "$INFERA_HOME/config.toml" <<'PY'
@@ -92,6 +95,11 @@ STREAM=$(curl -sN "localhost:$PORT/v1/chat/completions" -H "Authorization: Beare
 echo "$STREAM" | grep -q '"finish_reason":"stop"' || { echo "TEST FAILED (stream): $STREAM"; exit 1; }
 echo "   Earnings check …"
 curl -s "localhost:$PORT/api/owner" -H "Authorization: Bearer $OWN" | python3 -c "import sys,json;d=json.load(sys.stdin);h=d['balance']['held'];assert h>0,d;print('   Owner earned (held):',h,'micro-USD')" || { echo "TEST FAILED (earnings)"; exit 1; }
+if [ -n "${EMBED:-}" ]; then
+  echo "   Embeddings check ($EMBED) …"
+  curl -s "localhost:$PORT/v1/embeddings" -H "Authorization: Bearer $CUST" -d "{\"model\":\"$EMBED\",\"input\":[\"idle laptops\",\"serve AI\"]}" \
+    | python3 -c "import sys,json;d=json.load(sys.stdin);assert len(d['data'])==2 and len(d['data'][0]['embedding'])>0,d;print('   2 vectors of', len(d['data'][0]['embedding']), 'dims')" || { echo "TEST FAILED (embeddings)"; exit 1; }
+fi
 echo "ALL LOCAL TESTS PASSED"
 
 cat <<INFO

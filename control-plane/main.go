@@ -38,6 +38,7 @@ func main() {
 		OwnerShare:    envFloat("INFERA_OWNER_SHARE", 0.70),
 		Prices:        map[string]Price{},
 		DefaultPrice:  Price{In: envFloat("INFERA_PRICE_IN", 0.10), Out: envFloat("INFERA_PRICE_OUT", 0.30)},
+		EmbedPrice:    envFloat("INFERA_PRICE_EMBED", 0.02),
 		FallbackURL:   os.Getenv("INFERA_FALLBACK_URL"),
 		FallbackKey:   os.Getenv("INFERA_FALLBACK_KEY"),
 		FallbackModel: os.Getenv("INFERA_FALLBACK_MODEL"),
@@ -70,6 +71,7 @@ func main() {
 	})
 	mux.HandleFunc("POST /v1/chat/completions", gw.ChatCompletions)
 	mux.HandleFunc("GET /v1/models", gw.Models)
+	mux.HandleFunc("POST /v1/embeddings", gw.Embeddings)
 	mux.HandleFunc("GET /ws/node", hub.ServeNode)
 	mux.HandleFunc("POST /api/signup", api.Signup)
 	mux.HandleFunc("POST /api/pair-code", api.PairCode)
