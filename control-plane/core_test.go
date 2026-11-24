@@ -92,3 +92,47 @@ func TestPenalties(t *testing.T) {
 		t.Fatalf("reward: %v -> %v", before, dev.Dependability)
 	}
 }
+
+func TestDecay(t *testing.T) {
+	st, _ := OpenStore(filepath.Join(t.TempDir(), "t.db"))
+	acct, _, _ := st.CreateAccount("o@x.dev", "owner", 0)
+	code, _ := st.CreatePairCode(acct.ID)
+	id, _, _ := st.ConsumePairCode(code, "box", "pk", "linux")
+	dep := &Dependability{st: st}
+	dev, _ := st.Device(id)
+	dep.Penalize(dev, "j1", CauseOwnerAction, 0, "quit") // 70 -> 60
+	if n := dep.DecayOnce(now() + 10*86400); n != 0 {
+		t.Fatal("decayed too early")
+	}
+	dep.DecayOnce(now() + 31*86400)
+	dev, _ = st.Device(id)
+	if dev.Dependability != 65 {
+		t.Fatalf("after 30 days: %v, want 65", dev.Dependability)
+	}
+	dep.DecayOnce(now() + 31*86400) // no double counting
+	dep.DecayOnce(now() + 91*86400)
+	dev, _ = st.Device(id)
+	if dev.Dependability != 70 {
+		t.Fatalf("after 90 days: %v, want 70", dev.Dependability)
+	}
+}
+
+func TestCanaryJudging(t *testing.T) {
+	st, _ := OpenStore(filepath.Join(t.TempDir(), "t.db"))
+	acct, _, _ := st.CreateAccount("o@x.dev", "owner", 0)
+	code, _ := st.CreatePairCode(acct.ID)
+	id, _, _ := st.ConsumePairCode(code, "box", "pk", "linux")
+	g := &Gateway{st: st, hub: NewHub(st), dep: &Dependability{st: st}}
+	dev, _ := st.Device(id)
+	g.judgeCanary(dev, "c1", "The answer is 42.", "42", 0)
+	g.judgeCanary(dev, "c2", "banana", "42", 0)
+	dev, _ = st.Device(id)
+	if dev.Dependability != 70 {
+		t.Fatalf("one fail should not penalize: %v", dev.Dependability)
+	}
+	g.judgeCanary(dev, "c3", "no idea", "paris", 0)
+	dev, _ = st.Device(id)
+	if dev.Dependability != 55 {
+		t.Fatalf("two fails in three should penalize -15: %v", dev.Dependability)
+	}
+}

@@ -26,9 +26,9 @@ type Msg struct {
 	Models       []string        `json:"models,omitempty"`
 
 	// state
-	Status string `json:"status,omitempty"` // idle | busy | paused
-	Online *bool  `json:"online,omitempty"`
-	Mode   string `json:"mode,omitempty"` // auto | ask
+	Status string  `json:"status,omitempty"` // idle | busy | paused
+	Online *bool   `json:"online,omitempty"`
+	Mode   string  `json:"mode,omitempty"` // auto | ask
 	TPS    float64 `json:"tps,omitempty"`
 
 	// jobs

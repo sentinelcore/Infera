@@ -61,11 +61,18 @@ pub struct GovernorConfig {
     /// Laptops: take new jobs only on mains power.
     pub require_ac: bool,
     pub ui_port: u16,
+    /// Take new jobs only after this many minutes without keyboard or mouse input (0 = ignore input).
+    #[serde(default = "default_idle_minutes")]
+    pub idle_minutes: f64,
+}
+
+fn default_idle_minutes() -> f64 {
+    5.0
 }
 
 impl Default for GovernorConfig {
     fn default() -> Self {
-        Self { max_other_cpu: 35.0, require_ac: true, ui_port: 7777 }
+        Self { max_other_cpu: 35.0, require_ac: true, ui_port: 7777, idle_minutes: 5.0 }
     }
 }
 

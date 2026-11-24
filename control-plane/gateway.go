@@ -46,10 +46,11 @@ func (c *Config) cost(model string, tin, tout int) int64 {
 }
 
 type Gateway struct {
-	st  *Store
-	hub *Hub
-	dep *Dependability
-	cfg *Config
+	st     *Store
+	hub    *Hub
+	dep    *Dependability
+	cfg    *Config
+	canary *Account // internal account that pays for test prompts
 }
 
 type chatRequest struct {
@@ -59,6 +60,7 @@ type chatRequest struct {
 	MaxTokens   int               `json:"max_tokens"`
 	Privacy     string            `json:"privacy"`
 	InferaBatch bool              `json:"infera_batch"`
+	expect      string            // canary: answer the output must contain
 }
 
 func apiError(w http.ResponseWriter, code int, msg string) {
@@ -278,6 +280,9 @@ wait:
 					fmt.Sprintf("%s · %d+%d tokens · %.2fx", req.Model, tin, tout, band.Multiplier))
 				g.st.FinishJob(jobID, "done", tin, tout, charge, pay, "", m.Receipt)
 				g.dep.Reward(dev, jobID, time.Since(started))
+				if req.expect != "" {
+					g.judgeCanary(dev, jobID, output, req.expect, pay)
+				}
 				g.hub.sendConfig(n)
 				sw.finish(tin, tout)
 				return runDone
@@ -478,7 +483,7 @@ func (s *streamWriter) finish(tin, tout int) {
 	s.w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(s.w).Encode(map[string]any{"id": s.jobID, "object": "chat.completion", "created": now(), "model": s.model,
 		"choices": []any{map[string]any{"index": 0, "message": map[string]string{"role": "assistant", "content": s.buf.String()}, "finish_reason": "stop"}},
-		"usage": usage})
+		"usage":   usage})
 }
 
 func (s *streamWriter) fail(msg string) {
@@ -489,4 +494,3 @@ func (s *streamWriter) fail(msg string) {
 	}
 	apiError(s.w, 502, msg)
 }
-

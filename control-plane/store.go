@@ -112,6 +112,9 @@ func OpenStore(path string) (*Store, error) {
 	if _, err := db.Exec(schema); err != nil {
 		return nil, fmt.Errorf("schema: %w", err)
 	}
+	// Migrations for databases created by earlier builds (errors mean the column exists).
+	db.Exec(`ALTER TABLE score_events ADD COLUMN decayed_30 INTEGER NOT NULL DEFAULT 0`)
+	db.Exec(`ALTER TABLE score_events ADD COLUMN decayed_90 INTEGER NOT NULL DEFAULT 0`)
 	return &Store{db: db}, nil
 }
 
@@ -350,7 +353,7 @@ type ScoreEvent struct {
 
 func (s *Store) RecentScoreEvents(ownerID string, limit int) []ScoreEvent {
 	rows, err := s.db.Query(`SELECT e.device_id,e.job_id,e.cause,e.delta,e.evidence,e.created_at FROM score_events e
-	  JOIN devices d ON d.id=e.device_id WHERE d.owner_id=? AND e.cause!='completed' ORDER BY e.id DESC LIMIT ?`, ownerID, limit)
+	  JOIN devices d ON d.id=e.device_id WHERE d.owner_id=? AND e.cause NOT IN ('completed','canary_pass') ORDER BY e.id DESC LIMIT ?`, ownerID, limit)
 	if err != nil {
 		return nil
 	}

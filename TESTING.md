@@ -71,6 +71,10 @@ infera run        # or: infera run --ask   (offer card for every job)
 
 Open `http://127.0.0.1:7777` for the local page: earnings, online toggle, offer cards with a 30-second countdown, and the safe stop button.
 
+**Install and forget:** `infera service install` starts the node every time you log in (systemd on Linux, a LaunchAgent on macOS, Task Scheduler on Windows). `infera service uninstall` removes it. If the computer shuts down or logs out mid-job, the node gets up to 25 seconds to finish the job first.
+
+New jobs start only after 5 minutes without keyboard or mouse use (change `idle_minutes` in `~/.infera/config.toml`; Linux needs `xprintidle` installed on X11, otherwise only CPU load is used).
+
 **Stopping**
 
 | Action | Penalty |
@@ -120,13 +124,16 @@ Tested end to end with the stand-in engine (`tools/mock_engine.py`):
 - Process killed mid-job: recorded as a device failure, −5, not debited
 - Real llama.cpp: the node started `llama-server` itself, benchmarked it, and served streamed and non-streamed jobs with llama.cpp's own token counts in the signed receipt (tested with a tiny random-weight model, since this test environment can't download real models)
 - USDT payouts: wallet address validation, 48-hour hold, batch CSV, "mark sent" lowers the owner's available balance; admin endpoints reject requests without the token
-- Unit tests: bands, sealing, receipts, penalties and suspension (`cd control-plane && go test ./...`)
+- Test prompts (canaries): with an honest engine, 3 of 3 passed; with an engine giving wrong answers, the second failure triggered a −15 "wrong result" penalty, and repeated failures led to a 72-hour suspension
+- Graceful stop: when the OS asked the node to stop mid-job, it finished the job, then quit with no penalty
+- Windows build compiles (keyboard/mouse idle via GetLastInputInfo, Task Scheduler service)
+- Unit tests: bands, sealing, receipts, penalties, suspension, penalty decay, canary judging (`cd control-plane && go test ./...`)
 
 ## 6. Known limits of this beta
 
 - **Privacy:** jobs are encrypted between the gateway and the node process, but the node hands the prompt to a normal local engine (Ollama, llama-server), so a contributor who inspects their own engine could read it. Every device is therefore at the `sandboxed` level. **Tell beta developers not to send sensitive data.** The attested sandbox (sealed and confidential levels) comes in later phases.
-- **Trust:** the device class comes from the node's own benchmark, and there are no test prompts or re-runs yet, so a modified node could claim a higher class or return wrong answers.
-- **Idle rules:** based on CPU load from other programs and mains power. Keyboard and mouse activity and fullscreen games are not detected yet.
-- **No tray app or autostart:** the node is a command-line program with a local web page. Run it in a terminal (or as a service you set up yourself).
+- **Trust:** the device class comes from the node's own benchmark. Test prompts (every 30 minutes per idle device, `INFERA_CANARY_MINUTES`) catch nodes that answer wrongly, but there are no re-runs of customer jobs yet.
+- **Idle rules:** CPU load from other programs, mains power, and keyboard/mouse inactivity (macOS, Windows, Linux X11 with `xprintidle`). Fullscreen games aren't detected separately.
+- **No tray app yet:** the node is a command-line program with a local web page; `infera service install` makes it start at login.
 - **Payments:** developers get admin-granted credits (no Stripe yet). USDT payouts are sent by hand from the Admin tab's batch.
-- **Not yet built:** penalty decay, the 3-point streak bonus display, the 48-hour hold notice on wallet changes in the node.
+- **Not yet built:** the 48-hour hold notice on wallet changes in the node.

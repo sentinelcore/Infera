@@ -140,6 +140,33 @@ pub async fn run(cfg: Config, engine: Engine, key: SigningKey, state: State) -> 
         });
     }
 
+    #[cfg(unix)]
+    {
+        let ctx = ctx.clone();
+        tokio::spawn(async move {
+            let Ok(mut term) = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) else { return };
+            term.recv().await;
+            let running = ctx.state.lock().unwrap().job.is_some();
+            if running {
+                {
+                    let mut s = ctx.state.lock().unwrap();
+                    s.draining = true;
+                    s.quit_after_job = true;
+                    s.log("System asked Infera to stop: finishing the current job (up to 25 s)");
+                }
+                tokio::time::sleep(Duration::from_secs(25)).await;
+                if ctx.state.lock().unwrap().job.is_some() {
+                    stop_now(&ctx.state, true);
+                    tokio::time::sleep(Duration::from_millis(500)).await;
+                }
+            } else {
+                send(&ctx.state, json!({"t": "bye", "reason": "drain_complete"}));
+                tokio::time::sleep(Duration::from_millis(300)).await;
+            }
+            let _ = ctx.quit.send(true);
+        });
+    }
+
     tokio::spawn(governor(ctx.clone()));
     tokio::spawn(remote_stats(ctx.clone()));
 
@@ -431,6 +458,7 @@ async fn governor(ctx: Arc<Ctx>) {
         }
         let others = (total - ours / cores).max(0.0);
         let ac = on_ac_power();
+        let input_idle = crate::idle::input_idle();
 
         let changed = {
             let mut s = ctx.state.lock().unwrap();
@@ -453,6 +481,10 @@ async fn governor(ctx: Arc<Ctx>) {
                 "suspended by Infera (see dashboard)"
             } else if ctx.cfg.governor.require_ac && ac == Some(false) {
                 "on battery"
+            } else if ctx.cfg.governor.idle_minutes > 0.0
+                && input_idle.map(|d| d.as_secs_f64() < ctx.cfg.governor.idle_minutes * 60.0).unwrap_or(false)
+            {
+                "you're using the computer"
             } else if others > ctx.cfg.governor.max_other_cpu {
                 "computer is in use"
             } else {

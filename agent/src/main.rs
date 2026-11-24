@@ -1,8 +1,10 @@
 //! Infera node – serves AI inference from an idle laptop or desktop.
 mod config;
 mod engine;
+mod idle;
 mod node;
 mod seal;
+mod service;
 mod ui;
 
 use anyhow::{bail, Result};
@@ -57,6 +59,8 @@ enum Cmd {
     },
     /// Show configuration and class
     Status,
+    /// Start Infera automatically when you log in: install | uninstall | status
+    Service { action: String },
 }
 
 #[tokio::main]
@@ -90,6 +94,7 @@ async fn main() -> Result<()> {
             Ok(())
         }
         Cmd::Run { ask } => run(ask).await,
+        Cmd::Service { action } => service::run(&action),
         Cmd::Status => {
             let c = config::load()?;
             println!("Server:   {}\nDevice:   {} ({})\nModel:    {} ({} B params)\nMode:     {}", c.server, c.device_id, c.name, c.engine.model_id, c.engine.params_b, c.mode);
