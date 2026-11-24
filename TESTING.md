@@ -99,7 +99,7 @@ New jobs start only after 5 minutes without keyboard or mouse use (change `idle_
 | "Stop now", or Ctrl-C twice | Job pay lost, 2× its value debited, −10 dependability |
 | Computer crashes or Wi-Fi drops mid-job | Job pay lost, −5 dependability (first 2 a week not debited) |
 
-**Get paid:** add a USDT wallet on the dashboard (Tron TRC-20 has the lowest fees). Earnings are held 3–14 days depending on dependability, then paid weekly once your available balance is $10 or more.
+**Get paid:** add a USDT wallet on the dashboard (Tron TRC-20 has the lowest fees), then prove it's yours: sign the message shown in your wallet app (MetaMask, TronLink, Phantom: Sign message; no transaction, no fee) and paste the signature. Earnings are held 3–14 days depending on dependability, then paid weekly once your available balance is $10 or more.
 
 ## 2b. Contributors: share an Android phone
 
@@ -126,7 +126,7 @@ Any OpenAI SDK works with `base_url = https://<your domain>/v1`. Extra fields:
 
 ## 4. Operator: weekly USDT payouts
 
-1. Dashboard → **Admin** → enter the admin token → **Load batch**. It lists owners with $10+ available whose wallet has passed the 48-hour hold. CSV export: `GET /api/admin/payouts?format=csv` with `Authorization: Bearer <admin token>`.
+1. Dashboard → **Admin** → enter the admin token → **Load batch**. It lists owners with $10+ available whose wallet has passed the 48-hour hold and is verified. **Held payouts** lists the rest with the reason: wallet not proven (for TON or wallets that can't sign, send a small test transfer, then click *Mark wallet verified*), identity check due above $600 lifetime (`INFERA_KYC_THRESHOLD_USD`), or address on a sanctions list (never pay these; lists refresh daily). CSV export: `GET /api/admin/payouts?format=csv` with `Authorization: Bearer <admin token>`.
 2. Buy the total in USDT on your exchange or OTC desk and send it from the treasury wallet (or upload the CSV to Fireblocks or BitGo as a batch).
 3. Paste each transaction hash and click **Mark sent**. This records the payout in the ledger and lowers the owner's balance.
 

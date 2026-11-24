@@ -66,6 +66,7 @@ func main() {
 	go dep.DecayLoop()
 	go gw.BatchWorker()
 	go mon.Watch(gw)
+	go RunSanctions()
 	api := &API{st: st, hub: hub, cfg: cfg, inviteCode: os.Getenv("INFERA_INVITE_CODE"), adminToken: os.Getenv("INFERA_ADMIN_TOKEN"),
 		starterCents: int64(envFloat("INFERA_STARTER_CREDITS_USD", 5) * 100)}
 
@@ -116,6 +117,8 @@ func main() {
 	mux.HandleFunc("POST /api/admin/payouts/mark-sent", api.MarkPaid)
 	mux.HandleFunc("POST /api/admin/credits", api.GrantCredits)
 	mux.HandleFunc("POST /api/owner/appeal", api.FileAppeal)
+	mux.HandleFunc("POST /api/owner/payout-address/verify", api.VerifyWallet)
+	mux.HandleFunc("POST /api/admin/verify", api.AdminVerify)
 	mux.HandleFunc("GET /api/admin/appeals", api.AdminAppeals)
 	mux.HandleFunc("POST /api/admin/appeals/resolve", api.AdminAppeals)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })

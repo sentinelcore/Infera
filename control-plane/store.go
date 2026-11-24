@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -174,6 +175,7 @@ func OpenStore(path string) (*Store, error) {
 		if err := st.MigrateBatch(); err != nil {
 			return nil, err
 		}
+		st.MigrateWallet()
 		if err := st.MigrateAppeals(); err != nil {
 			return nil, err
 		}
@@ -197,6 +199,7 @@ func OpenStore(path string) (*Store, error) {
 	if err := st.MigrateBatch(); err != nil {
 		return nil, err
 	}
+	st.MigrateWallet()
 	if err := st.MigrateAppeals(); err != nil {
 		return nil, err
 	}
@@ -545,6 +548,7 @@ type PayoutLine struct {
 	Network   string `json:"network"`
 	Address   string `json:"address"`
 	Amount    int64  `json:"amount"`
+	Hold      string `json:"hold,omitempty"` // why this owner can't be paid yet (G14)
 }
 
 func (s *Store) PayoutCandidates(min int64) []PayoutLine {
@@ -570,10 +574,25 @@ func (s *Store) PayoutCandidates(min int64) []PayoutLine {
 		}
 		b := s.OwnerBalance(a.id)
 		if b.Available >= min {
-			out = append(out, PayoutLine{a.id, a.email, a.net, a.addr, b.Available})
+			out = append(out, PayoutLine{a.id, a.email, a.net, a.addr, b.Available, s.payoutHold(a.id, a.addr, b.Available)})
 		}
 	}
 	return out
+}
+
+// payoutHold says why a payout must wait: sanctions, unproven wallet, or identity check due.
+func (s *Store) payoutHold(accountID, addr string, amount int64) string {
+	if sanctions.Blocked(addr) {
+		return "blocked: address is on a sanctions list"
+	}
+	ws := s.Wallet(accountID)
+	if ws.VerifiedAt == 0 && os.Getenv("INFERA_REQUIRE_WALLET_PROOF") != "0" {
+		return "wallet not verified (owner signs the message on the dashboard, or verify after a test transfer)"
+	}
+	if ws.IdentityVerifiedAt == 0 && s.TotalPaid(accountID)+amount > kycThreshold() {
+		return fmt.Sprintf("identity check needed (lifetime payouts above $%.0f)", float64(kycThreshold())/microUSD)
+	}
+	return ""
 }
 
 func (s *Store) RecordPayout(accountID string, amount int64, network, address, tx string) error {

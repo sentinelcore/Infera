@@ -162,6 +162,7 @@ func (a *API) Owner(w http.ResponseWriter, r *http.Request) {
 		"today":     a.st.OwnerJobStats(acct.ID),
 		"ledger":    a.st.RecentLedger(acct.ID, 50),
 		"penalties": a.st.RecentScoreEvents(acct.ID, 50),
+		"wallet":    a.st.Wallet(acct.ID),
 	})
 }
 
@@ -208,8 +209,15 @@ func (a *API) PayoutAddress(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 400, "that doesn't look like a USDT address on "+in.Network)
 		return
 	}
+	if sanctions.Blocked(in.Address) {
+		apiError(w, 400, "this address can't receive payouts")
+		return
+	}
 	a.st.SetPayoutAddress(acct.ID, in.Network, in.Address)
-	writeJSON(w, map[string]any{"ok": true, "note": "Payouts to this address start after a 48-hour safety hold."})
+	ch := walletChallenge(acct.ID, in.Network, in.Address)
+	a.st.SetWalletChallenge(acct.ID, ch)
+	writeJSON(w, map[string]any{"ok": true, "challenge": ch,
+		"note": "Now prove the wallet is yours: sign the message below in your wallet app (MetaMask: Sign message, TronLink: Sign message, Phantom: Sign message) and paste the signature. Payouts start after a 48-hour safety hold."})
 }
 
 // GET /api/customer (customer) -> credits and recent charges
@@ -239,7 +247,15 @@ func (a *API) PayoutBatch(w http.ResponseWriter, r *http.Request) {
 	if minUSD <= 0 {
 		minUSD = 10
 	}
-	lines := a.st.PayoutCandidates(int64(minUSD * microUSD))
+	all := a.st.PayoutCandidates(int64(minUSD * microUSD))
+	var lines, held []PayoutLine
+	for _, l := range all {
+		if l.Hold != "" {
+			held = append(held, l)
+		} else {
+			lines = append(lines, l)
+		}
+	}
 	if r.URL.Query().Get("format") == "csv" {
 		w.Header().Set("Content-Type", "text/csv")
 		cw := csv.NewWriter(w)
@@ -250,7 +266,7 @@ func (a *API) PayoutBatch(w http.ResponseWriter, r *http.Request) {
 		cw.Flush()
 		return
 	}
-	writeJSON(w, map[string]any{"min_usd": minUSD, "lines": lines})
+	writeJSON(w, map[string]any{"min_usd": minUSD, "lines": lines, "held": held})
 }
 
 // POST /api/admin/payouts/mark-sent {account_id, amount_usdt, network, address, tx_hash}

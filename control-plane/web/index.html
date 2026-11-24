@@ -170,6 +170,14 @@ td.num { font-variant-numeric: tabular-nums; font-family: var(--mono); }
           <label for="p-addr">USDT address</label><input id="p-addr" autocomplete="off">
           <button class="primary" id="p-save">Save wallet</button>
           <p class="muted" id="p-current"></p>
+          <div id="p-proof" hidden>
+            <p><b>Prove this wallet is yours.</b> In your wallet app choose <i>Sign message</i> (MetaMask, TronLink, Phantom…), paste the message below, sign it, then paste the signature here. It costs nothing and sends no transaction.</p>
+            <pre id="p-msg" style="white-space:pre-wrap"></pre>
+            <button class="ghost" id="p-copy">Copy message</button>
+            <label for="p-sig">Signature</label><input id="p-sig" autocomplete="off" placeholder="0x…">
+            <button class="primary" id="p-verify">Verify wallet</button>
+            <p class="muted">TON wallets, or if your wallet can't sign messages: we'll verify it with a small test transfer instead.</p>
+          </div>
         </div>
       </div>
 
@@ -267,6 +275,12 @@ td.num { font-variant-numeric: tabular-nums; font-family: var(--mono); }
     <div class="table-wrap"><table>
       <thead><tr><th>Contributor</th><th>Network</th><th>Address</th><th>USDT</th><th>Tx hash</th><th></th></tr></thead>
       <tbody id="a-rows"></tbody>
+    </table></div>
+    <h2>Held payouts</h2>
+    <p class="lede">Owners who are due a payout but can't be paid yet: wallet not proven, identity check due above the threshold, or address on a sanctions list (never pay these).</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Contributor</th><th>Network</th><th>Address</th><th>USDT</th><th>Why held</th><th></th></tr></thead>
+      <tbody id="a-held"></tbody>
     </table></div>
   </section>
 </div>
@@ -387,7 +401,10 @@ async function showOwner() {
     $("led-rows").innerHTML = (d.ledger || []).map(e => `<tr><td>${when(e.created_at)}</td><td>${esc(e.kind)}</td>
       <td class="num ${e.amount < 0 ? "neg" : ""}">${usd(e.amount)}</td><td>${e.kind === "earning" ? (e.release_at * 1000 > Date.now() ? "held until " + new Date(e.release_at * 1000).toLocaleDateString() : "yes") : ""}</td><td>${esc(e.note)}</td></tr>`).join("");
     const a = d.account;
-    $("p-current").textContent = a.payout_address ? `Current: ${a.payout_network} · ${a.payout_address}` : "No wallet yet.";
+    const wl = d.wallet || {};
+    $("p-current").textContent = a.payout_address ? `Current: ${a.payout_network} · ${a.payout_address} · ${wl.verified_at ? "verified ✓" : "not verified yet"}` : "No wallet yet.";
+    $("p-proof").hidden = !(a.payout_address && !wl.verified_at && wl.challenge);
+    $("p-msg").textContent = wl.challenge || "";
   } catch (e) { toast(e.message); }
 }
 $("o-code").onclick = async () => {
@@ -397,6 +414,11 @@ $("o-code").onclick = async () => {
     $("pair-link").href = `/pair/${r.code}`;
     $("pair-cmd").textContent = `Phone: open ${location.origin}/pair/${r.code} on the phone and tap "Open Infera and pair"\nComputer (with Ollama installed): infera setup ${r.code}`;
   } catch (e) { toast(e.message); }
+};
+$("p-copy").onclick = () => { navigator.clipboard.writeText($("p-msg").textContent).then(() => toast("Copied")); };
+$("p-verify").onclick = async () => {
+  try { const r = await call("/api/owner/payout-address/verify", { method: "POST", key: ownerKey, body: JSON.stringify({ signature: $("p-sig").value.trim() }) }); toast(r.note); showOwner(); }
+  catch (e) { toast(e.message); }
 };
 $("p-save").onclick = async () => {
   try { const r = await call("/api/owner/payout-address", { method: "POST", key: ownerKey, body: JSON.stringify({ network: $("p-net").value, address: $("p-addr").value }) }); toast(r.note); showOwner(); }
@@ -507,6 +529,14 @@ $("a-load").onclick = async () => {
       <td class="mono">${esc(l.address)}</td><td class="num">${(l.amount / 1e6).toFixed(2)}</td>
       <td><input id="tx-${i}" placeholder="paste tx hash"></td><td><button class="ghost" data-i="${i}">Mark sent</button></td></tr>`).join("")
       : `<tr><td colspan="6" class="muted">Nobody is due a payout.</td></tr>`;
+    const held = r.held || [];
+    $("a-held").innerHTML = held.map(l => `<tr><td>${esc(l.email)}<div class="muted mono">${esc(l.account_id)}</div></td><td>${esc(l.network)}</td>
+      <td class="mono">${esc(l.address)}</td><td class="num">${(l.amount / 1e6).toFixed(2)}</td><td>${esc(l.hold)}</td>
+      <td>${l.hold.startsWith("blocked") ? "" : `<button class="ghost" data-acc="${esc(l.account_id)}" data-what="${l.hold.startsWith("wallet") ? "wallet" : "identity"}">${l.hold.startsWith("wallet") ? "Mark wallet verified (test transfer OK)" : "Mark identity checked"}</button>`}</td></tr>`).join("");
+    $("a-held").querySelectorAll("button").forEach(b => b.onclick = async () => {
+      try { await call("/api/admin/verify", { method: "POST", key: tok, body: JSON.stringify({ account_id: b.dataset.acc, [b.dataset.what]: true }) }); toast("Saved"); $("a-load").click(); }
+      catch (e) { toast(e.message); }
+    });
     $("a-rows").querySelectorAll("button").forEach(b => b.onclick = async () => {
       const l = lines[b.dataset.i];
       try { await call("/api/admin/payouts/mark-sent", { method: "POST", key: tok, body: JSON.stringify({ account_id: l.account_id, amount_usdt: +(l.amount / 1e6).toFixed(2), network: l.network, address: l.address, tx_hash: $("tx-" + b.dataset.i).value }) }); toast("Recorded"); $("a-load").click(); }
