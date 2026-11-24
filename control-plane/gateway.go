@@ -29,6 +29,7 @@ type Config struct {
 	FallbackKey   string
 	FallbackModel string
 	EmbedPrice    float64 // USD per 1M input tokens for embeddings
+	BatchDiscount float64 // fraction off for queued batch jobs
 	FirstToken    time.Duration
 	JobDeadline   time.Duration
 }
@@ -67,6 +68,7 @@ type chatRequest struct {
 	jobType     string            // "" (chat) or "embeddings"
 	Temperature *float64          `json:"temperature"`
 	rerun       bool              // this job is a verification re-run
+	queued      bool              // came through the batch queue
 }
 
 func apiError(w http.ResponseWriter, code int, msg string) {
@@ -355,10 +357,16 @@ func (g *Gateway) abort(dev *DeviceRow, jobID, cause string, estPay float64, evi
 // settlePartial pays for work done when the customer disconnects: no penalty to the owner.
 // jobCost prices a job: chat by input and output tokens, embeddings by input tokens.
 func (g *Gateway) jobCost(req chatRequest, tin, tout int) int64 {
+	var c int64
 	if req.jobType == "embeddings" {
-		return int64(math.Ceil(float64(tin) / 1e6 * g.cfg.EmbedPrice * microUSD))
+		c = int64(math.Ceil(float64(tin) / 1e6 * g.cfg.EmbedPrice * microUSD))
+	} else {
+		c = g.cfg.cost(req.Model, tin, tout)
 	}
-	return g.cfg.cost(req.Model, tin, tout)
+	if req.queued { // batch API: cheaper because it can wait for an idle device
+		c = int64(math.Ceil(float64(c) * (1 - g.cfg.BatchDiscount)))
+	}
+	return c
 }
 
 func (g *Gateway) settlePartial(acct *Account, dev *DeviceRow, jobID string, req chatRequest, estIn, pieces int, band Band, note string) {

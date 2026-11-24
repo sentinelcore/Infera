@@ -100,6 +100,17 @@ if [ -n "${EMBED:-}" ]; then
   curl -s "localhost:$PORT/v1/embeddings" -H "Authorization: Bearer $CUST" -d "{\"model\":\"$EMBED\",\"input\":[\"idle laptops\",\"serve AI\"]}" \
     | python3 -c "import sys,json;d=json.load(sys.stdin);assert len(d['data'])==2 and len(d['data'][0]['embedding'])>0,d;print('   2 vectors of', len(d['data'][0]['embedding']), 'dims')" || { echo "TEST FAILED (embeddings)"; exit 1; }
 fi
+echo "   Batch queue check …"
+BODY="{\"requests\":[{\"model\":\"$MODEL\",\"max_tokens\":30,\"messages\":[{\"role\":\"user\",\"content\":\"Name a colour.\"}]},{\"model\":\"$MODEL\",\"max_tokens\":30,\"messages\":[{\"role\":\"user\",\"content\":\"Name a fruit.\"}]}"
+[ -n "${EMBED:-}" ] && BODY="$BODY,{\"model\":\"$EMBED\",\"input\":\"batched text\"}"
+BODY="$BODY]}"
+IDS=$(curl -s "localhost:$PORT/v1/batch" -H "Authorization: Bearer $CUST" -d "$BODY" | python3 -c "import sys,json;print(' '.join(json.load(sys.stdin)['ids']))")
+for _ in $(seq 1 60); do
+  LEFT=0; for id in $IDS; do S=$(curl -s "localhost:$PORT/v1/batch/$id" -H "Authorization: Bearer $CUST" | python3 -c "import sys,json;print(json.load(sys.stdin)['status'])"); [ "$S" = "done" ] || LEFT=$((LEFT+1)); [ "$S" = "failed" ] && { echo "TEST FAILED (batch job $id failed)"; exit 1; }; done
+  [ $LEFT -eq 0 ] && break; sleep 2
+done
+[ $LEFT -eq 0 ] || { echo "TEST FAILED (batch jobs still waiting)"; exit 1; }
+echo "   $(echo $IDS | wc -w) batch jobs done"
 echo "ALL LOCAL TESTS PASSED"
 
 cat <<INFO

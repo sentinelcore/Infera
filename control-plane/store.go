@@ -165,6 +165,9 @@ func OpenStore(path string) (*Store, error) {
 		db.Exec(`ALTER TABLE score_events ADD COLUMN IF NOT EXISTS decayed_30 BIGINT NOT NULL DEFAULT 0`)
 		db.Exec(`ALTER TABLE score_events ADD COLUMN IF NOT EXISTS decayed_90 BIGINT NOT NULL DEFAULT 0`)
 		st := &Store{db: db, pg: true}
+		if err := st.MigrateBatch(); err != nil {
+			return nil, err
+		}
 		return st, st.MigrateGrowth()
 	}
 	db, err := sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)")
@@ -179,6 +182,9 @@ func OpenStore(path string) (*Store, error) {
 	db.Exec(`ALTER TABLE score_events ADD COLUMN decayed_30 INTEGER NOT NULL DEFAULT 0`)
 	db.Exec(`ALTER TABLE score_events ADD COLUMN decayed_90 INTEGER NOT NULL DEFAULT 0`)
 	st := &Store{db: db}
+	if err := st.MigrateBatch(); err != nil {
+		return nil, err
+	}
 	return st, st.MigrateGrowth()
 }
 

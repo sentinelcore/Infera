@@ -39,6 +39,7 @@ func main() {
 		Prices:        map[string]Price{},
 		DefaultPrice:  Price{In: envFloat("INFERA_PRICE_IN", 0.10), Out: envFloat("INFERA_PRICE_OUT", 0.30)},
 		EmbedPrice:    envFloat("INFERA_PRICE_EMBED", 0.02),
+		BatchDiscount: envFloat("INFERA_BATCH_DISCOUNT", 0.5),
 		FallbackURL:   os.Getenv("INFERA_FALLBACK_URL"),
 		FallbackKey:   os.Getenv("INFERA_FALLBACK_KEY"),
 		FallbackModel: os.Getenv("INFERA_FALLBACK_MODEL"),
@@ -61,6 +62,7 @@ func main() {
 	gw.rerun = &Rerun{gw: gw, rate: envFloat("INFERA_RERUN_RATE", 0.03)}
 	go NewCanary(gw, time.Duration(envFloat("INFERA_CANARY_MINUTES", 30)*float64(time.Minute))).Loop()
 	go dep.DecayLoop()
+	go gw.BatchWorker()
 	api := &API{st: st, hub: hub, cfg: cfg, inviteCode: os.Getenv("INFERA_INVITE_CODE"), adminToken: os.Getenv("INFERA_ADMIN_TOKEN"),
 		starterCents: int64(envFloat("INFERA_STARTER_CREDITS_USD", 5) * 100)}
 
@@ -74,6 +76,9 @@ func main() {
 	mux.HandleFunc("POST /v1/chat/completions", gw.ChatCompletions)
 	mux.HandleFunc("GET /v1/models", gw.Models)
 	mux.HandleFunc("POST /v1/embeddings", gw.Embeddings)
+	mux.HandleFunc("POST /v1/batch", gw.BatchSubmit)
+	mux.HandleFunc("GET /v1/batch", gw.BatchList)
+	mux.HandleFunc("GET /v1/batch/{id}", gw.BatchGet)
 	mux.HandleFunc("GET /ws/node", hub.ServeNode)
 	mux.HandleFunc("POST /api/signup", api.Signup)
 	mux.HandleFunc("POST /api/pair-code", api.PairCode)
