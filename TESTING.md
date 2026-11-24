@@ -81,7 +81,7 @@ infera bench      # shows your class (A, B or C); below 10 tokens/s you get no j
 infera run        # or: infera run --ask   (offer card for every job)
 ```
 
-Open `http://127.0.0.1:7777` for the local page: earnings, online toggle, offer cards with a 30-second countdown, and the safe stop button.
+Open `http://127.0.0.1:7777` for the local page: earnings, online toggle, offer cards with a 30-second countdown, the safe stop button, and **auto-approve limits** (minimum pay per job, minimum pay per hour, longest job). Jobs outside the limits come as offer cards. On the phone: **Auto-approve limits…** on the main screen.
 
 **Desktop app:** `infera tray` runs the node with a menu-bar (macOS) or system-tray (Windows, Linux) icon: green when online, amber while working, grey when paused. The menu has Go online/offline, Ask before every job, Finish current job then go offline, Open Infera, and Quit. In ask mode, a new offer shows a notification and opens the offer card.
 

@@ -12,7 +12,7 @@ Audited 2026-11-24. ✅ built · 🟡 partial · ⬜ not built. Priority: P1 nex
 | G6 | Node | Re-benchmark on driver/OS/hardware change, monthly, or live speed drift > 20%; server moves a device down a class when it under-delivers | ✅ | P1 |
 | G7 | Node | `models`: download from our storage on unmetered networks, SHA-256 + signature check, disk quota | 🟡 SHA-256 check (catalog `sha256` or Hugging Face X-Linked-Etag), one-model quota + free-space check on phones; desktops use Ollama digests. Own storage + signatures later | P2 |
 | G8 | Node | `updater`: signed update manifest, silent update when idle; staged rollout with auto-halt on crashes | 🟡 silent update when idle from CI manifest with SHA-256 (Linux, Windows). Signed manifest + staged rollout later | P2 |
-| G9 | Offers | Auto-approve limits beyond min pay (max duration, min pay per hour, charging-only, Wi-Fi-only on desktop); scheduler learns declined job types | 🟡 (min pay only) | P2 |
+| G9 | Offers | Auto-approve limits beyond min pay (max duration, min pay per hour, charging-only, Wi-Fi-only on desktop); scheduler learns declined job types | ✅ min pay, min pay/hour, max minutes on phone (dialog) and desktop (local page); outside limits → offer card. Server moves devices that declined a job type 3× in 24 h to the back of the queue for that type. Desktop charging/Wi-Fi rules already in the governor | P2 |
 | G10 | Dependability | One-tap appeal; repeated suspensions within 30 days → removal; quit warning with exact cost in tray | 🟡 | P2 |
 | G11 | Jobs | **Transcription API** (`/v1/audio/transcriptions`, Whisper on phones and laptops) | ⬜ | P2 |
 | G12 | Scheduler | Hedged interactive requests (two devices, first answer wins) | ⬜ | P2 |

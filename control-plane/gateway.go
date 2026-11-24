@@ -137,7 +137,7 @@ func (g *Gateway) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 	sw := newStreamWriter(w, req.Stream, jobID, req.Model)
 
 	tried := 0
-	for _, n := range g.hub.Candidates(req.Model, req.Privacy, req.InferaBatch) {
+	for _, n := range g.hub.CandidatesFor(req.Model, req.Privacy, req.InferaBatch, req.typeName()) {
 		if tried >= 5 {
 			break
 		}
@@ -160,6 +160,17 @@ func (g *Gateway) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	apiError(w, 503, fmt.Sprintf("no device is serving %q at privacy level %q right now; try again shortly or use GET /v1/models", req.Model, req.Privacy))
+}
+
+// typeName is the job type shown on offer cards: chat, batch_chat or embeddings.
+func (req chatRequest) typeName() string {
+	if req.jobType != "" {
+		return req.jobType
+	}
+	if req.InferaBatch {
+		return "batch_chat"
+	}
+	return "chat"
 }
 
 type runResult int
@@ -187,13 +198,7 @@ func (g *Gateway) runOnDevice(ctx context.Context, n *Node, acct *Account, jobID
 	if n.Mode == "ask" {
 		ttl = 30
 	}
-	jobType := "chat"
-	if req.InferaBatch {
-		jobType = "batch_chat"
-	}
-	if req.jobType != "" {
-		jobType = req.jobType
-	}
+	jobType := req.typeName()
 	n.Send(Msg{T: "offer", JobID: jobID, JobType: jobType, Model: req.Model, EstTokens: estIn + req.MaxTokens, EstPay: estPay, TTL: ttl, Privacy: req.Privacy})
 
 	// 1. Wait for accept / decline.
@@ -208,13 +213,20 @@ wait:
 			return runClientGone
 		case <-timer.C:
 			n.Send(Msg{T: "offer_expired", JobID: jobID})
+			if n.Mode == "ask" {
+				n.NoteOffer(jobType, false) // the owner let the card run out
+			}
 			return runNotAccepted // declining or timing out an offer is free
 		case m := <-inbox:
 			switch m.T {
 			case "accept":
+				n.NoteOffer(jobType, true)
 				accept = m
 				break wait
 			case "decline", "lost":
+				if m.Reason == "user_declined" {
+					n.NoteOffer(jobType, false)
+				}
 				return runNotAccepted
 			}
 		}
@@ -619,7 +631,7 @@ func (g *Gateway) Embeddings(w http.ResponseWriter, r *http.Request) {
 	sw := newStreamWriter(w, false, jobID, in.Model)
 	sw.embed = true
 	tried := 0
-	for _, n := range g.hub.Candidates(in.Model, in.Privacy, true) {
+	for _, n := range g.hub.CandidatesFor(in.Model, in.Privacy, true, "embeddings") {
 		if tried >= 5 {
 			break
 		}

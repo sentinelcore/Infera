@@ -18,6 +18,7 @@ pub async fn serve(state: State, port: u16) {
         .route("/api/decide", post(decide))
         .route("/api/online", post(set_online))
         .route("/api/mode", post(set_mode))
+        .route("/api/limits", post(set_limits))
         .route("/api/finish-then-offline", post(finish_then_offline))
         .route("/api/stop-now", post(stop))
         .route("/api/pause", post(pause))
@@ -92,6 +93,21 @@ async fn set_mode(AxState(st): AxState<State>, h: HeaderMap, Json(m): Json<Mode>
         s.log(if m.mode == "auto" { "Auto-approve on" } else { "Ask for every job" });
     }
     push_state(&st);
+    Ok(Json(json!({"ok": true})))
+}
+
+async fn set_limits(AxState(st): AxState<State>, h: HeaderMap, Json(l): Json<crate::config::Limits>) -> Result<Json<serde_json::Value>, StatusCode> {
+    guard(&h)?;
+    if [l.min_pay_usd, l.min_pay_per_hour_usd, l.max_minutes].iter().any(|v| !v.is_finite() || *v < 0.0) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    if let Ok(mut c) = crate::config::load() {
+        c.limits = l.clone();
+        let _ = crate::config::save(&c);
+    }
+    let mut s = st.lock().unwrap();
+    s.limits = l;
+    s.log("Auto-approve limits saved");
     Ok(Json(json!({"ok": true})))
 }
 
@@ -186,7 +202,9 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--accent);outlin
  <div class="warn" id="stopwarn" hidden></div></div>
 <div class="card"><div class="row"><span class="k">Pause new jobs</span><span id="pauseinfo" class="k"></span></div>
  <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="sec" style="width:auto" id="p60">1 hour</button><button class="sec" style="width:auto" id="ptom">Until tomorrow</button><button class="sec" style="width:auto" id="pres">Resume</button></div></div>
-<div class="card"><div class="row"><span class="k">Job approval</span><select id="mode"><option value="auto">Auto-approve</option><option value="ask">Ask for every job</option></select></div></div>
+<div class="card"><div class="row"><span class="k">Job approval</span><select id="mode"><option value="auto">Auto-approve</option><option value="ask">Ask for every job</option></select></div>
+ <div class="k" style="margin-top:8px">Auto-approve only jobs within these limits (empty = no limit). Others come as offers.</div>
+ <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px"><input id="lpay" inputmode="decimal" placeholder="Min $ per job" style="flex:1;min-width:110px"><input id="lhour" inputmode="decimal" placeholder="Min $ per hour" style="flex:1;min-width:110px"><input id="lmin" inputmode="decimal" placeholder="Max minutes" style="flex:1;min-width:110px"><button class="sec" style="width:auto" id="lsave">Save</button></div></div>
 <div class="card"><div class="k">Activity</div><div class="log" id="log"></div></div>
 </div><script>
 const $=id=>document.getElementById(id);
@@ -215,6 +233,9 @@ $("p60").onclick=()=>post("/api/pause",{minutes:60}).then(tick);
 $("ptom").onclick=()=>post("/api/pause",{minutes:-1}).then(tick);
 $("pres").onclick=()=>post("/api/pause",{minutes:0}).then(tick);
 $("online").onclick=()=>post("/api/online",{online:!S.online}).then(tick);
+let limitsShown=false;
+$("lsave").onclick=()=>{const n=id=>parseFloat($(id).value)||0;post("/api/limits",{min_pay_usd:n("lpay"),min_pay_per_hour_usd:n("lhour"),max_minutes:n("lmin")}).then(tick)};
+setInterval(()=>{if(!limitsShown&&S.limits){limitsShown=true;const v=x=>x>0?x:"";$("lpay").value=v(S.limits.min_pay_usd);$("lhour").value=v(S.limits.min_pay_per_hour_usd);$("lmin").value=v(S.limits.max_minutes)}},500);
 $("mode").onchange=e=>post("/api/mode",{mode:e.target.value}).then(tick);
 $("accept").onclick=()=>post("/api/decide",{accept:true}).then(tick);
 $("decline").onclick=()=>post("/api/decide",{accept:false}).then(tick);

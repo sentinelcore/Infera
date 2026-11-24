@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -321,5 +322,25 @@ func TestClassDemotion(t *testing.T) {
 	}
 	if classFor(9, 1.7, 0, 8, "", "android 15") != "M1" || classFor(2, 1, 0, 4, "", "android 14") != "unrated" {
 		t.Fatal("phone classes wrong")
+	}
+}
+
+func TestDeclinedJobTypesGoLast(t *testing.T) {
+	a := &Node{ID: "a"}
+	b := &Node{ID: "b"}
+	for i := 0; i < 3; i++ {
+		a.NoteOffer("batch_chat", false)
+	}
+	if !a.Avoids("batch_chat") || a.Avoids("chat") || b.Avoids("batch_chat") {
+		t.Fatal("three declines of one type should mark only that type")
+	}
+	c := []*Node{a, b}
+	sort.SliceStable(c, func(i, j int) bool { return !c[i].Avoids("batch_chat") && c[j].Avoids("batch_chat") })
+	if c[0].ID != "b" {
+		t.Fatal("device that keeps declining should be offered last")
+	}
+	a.NoteOffer("batch_chat", true)
+	if a.Avoids("batch_chat") {
+		t.Fatal("an accept should clear the decline count")
 	}
 }

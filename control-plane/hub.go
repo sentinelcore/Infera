@@ -68,7 +68,8 @@ type Node struct {
 	Status   string
 	Online   bool
 	TPS      float64
-	quitting bool // owner asked to quit (bye: owner_quit) – a running job stopped now is an owner action
+	quitting bool                   // owner asked to quit (bye: owner_quit) – a running job stopped now is an owner action
+	declines map[string]*declineLog // job type -> recent owner declines (G9: learn what an owner doesn't want)
 
 	send chan Msg
 	jobs map[string]chan Msg // running or offered job -> inbox
@@ -82,6 +83,51 @@ type Hub struct {
 }
 
 func NewHub(st *Store) *Hub { return &Hub{st: st, nodes: map[string]*Node{}} }
+
+type declineLog struct {
+	n    int
+	last time.Time
+}
+
+// NoteOffer records how the owner answered an offer of this job type. Declines (or letting an
+// "ask" card run out) count up; an accept clears the count.
+func (n *Node) NoteOffer(jobType string, accepted bool) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if n.declines == nil {
+		n.declines = map[string]*declineLog{}
+	}
+	if accepted {
+		delete(n.declines, jobType)
+		return
+	}
+	d := n.declines[jobType]
+	if d == nil {
+		d = &declineLog{}
+		n.declines[jobType] = d
+	}
+	if time.Since(d.last) > 24*time.Hour {
+		d.n = 0
+	}
+	d.n++
+	d.last = time.Now()
+}
+
+// Avoids reports whether the owner declined this job type 3+ times in the last 24 hours.
+func (n *Node) Avoids(jobType string) bool {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	d := n.declines[jobType]
+	return d != nil && d.n >= 3 && time.Since(d.last) < 24*time.Hour
+}
+
+// CandidatesFor is Candidates with devices whose owner keeps declining this job type moved
+// to the back: they're only offered the job when nobody else can take it.
+func (h *Hub) CandidatesFor(model, privacy string, batch bool, jobType string) []*Node {
+	c := h.Candidates(model, privacy, batch)
+	sort.SliceStable(c, func(i, j int) bool { return !c[i].Avoids(jobType) && c[j].Avoids(jobType) })
+	return c
+}
 
 var classRank = map[string]int{"A": 5, "B": 4, "C": 3, "M1": 2, "M2": 1}
 var privacyRank = map[string]int{"sandboxed": 1, "sealed": 2, "confidential": 3}

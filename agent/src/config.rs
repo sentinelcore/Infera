@@ -119,11 +119,34 @@ impl Default for GovernorConfig {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct Limits {
     /// Auto-approve only jobs paying at least this much (USD); others become offer cards. 0 = no limit.
     #[serde(default)]
     pub min_pay_usd: f64,
+    /// Auto-approve only jobs paying at least this much per hour of work (USD). 0 = no limit.
+    #[serde(default)]
+    pub min_pay_per_hour_usd: f64,
+    /// Auto-approve only jobs expected to take at most this many minutes. 0 = no limit.
+    #[serde(default)]
+    pub max_minutes: f64,
+}
+
+impl Limits {
+    /// Why an offer falls outside the auto-approve limits (it then becomes an offer card), or None.
+    pub fn outside(&self, pay_usd: f64, minutes: f64) -> Option<String> {
+        if self.min_pay_usd > 0.0 && pay_usd < self.min_pay_usd {
+            return Some(format!("pays ${pay_usd:.4}, below your ${:.4} minimum", self.min_pay_usd));
+        }
+        let per_hour = if minutes > 0.0 { pay_usd / minutes * 60.0 } else { f64::MAX };
+        if self.min_pay_per_hour_usd > 0.0 && per_hour < self.min_pay_per_hour_usd {
+            return Some(format!("pays ${per_hour:.2}/hour, below your ${:.2}/hour minimum", self.min_pay_per_hour_usd));
+        }
+        if self.max_minutes > 0.0 && minutes > self.max_minutes {
+            return Some(format!("takes about {minutes:.1} min, longer than your {:.0} min limit", self.max_minutes));
+        }
+        None
+    }
 }
 
 pub fn dir() -> PathBuf {

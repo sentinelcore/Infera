@@ -63,6 +63,8 @@ pub struct Shared {
     pub remote: Value,
     pub bench: Value,
     pub model_id: String,
+    /// Auto-approve limits (editable from the local page).
+    pub limits: crate::config::Limits,
     pub events: VecDeque<String>,
     #[serde(skip)]
     pub decision: Option<oneshot::Sender<bool>>,
@@ -356,9 +358,13 @@ async fn handle_offer(ctx: Arc<Ctx>, m: Value) {
     }
     let tps = ctx.cfg.bench.as_ref().map(|b| b.tokens_per_s).unwrap_or(10.0).max(1.0);
     let est_minutes = est_tokens / tps / 60.0;
-    let below_limit = ctx.cfg.limits.min_pay_usd > 0.0 && est_pay < ctx.cfg.limits.min_pay_usd;
+    let limits = ctx.state.lock().unwrap().limits.clone();
+    let outside = limits.outside(est_pay, est_minutes);
+    if let (true, Some(why)) = (mode == "auto", &outside) {
+        ctx.state.lock().unwrap().log(format!("Offer needs your answer: it {why}"));
+    }
 
-    let accepted = if mode == "auto" && !below_limit {
+    let accepted = if mode == "auto" && outside.is_none() {
         true
     } else {
         // Uber-style offer card on the local page; no answer before the countdown ends = decline.

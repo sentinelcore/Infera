@@ -38,6 +38,16 @@ data class Offer(
     fun secondsLeft(): Int = (ttlSeconds - (System.currentTimeMillis() - receivedAt) / 1000).toInt().coerceAtLeast(0)
 }
 
+/** Auto-approve limits: an offer outside them becomes an offer card even in auto mode. 0 = no limit. */
+data class AutoLimits(val minPayUsd: Double = 0.0, val minPerHourUsd: Double = 0.0, val maxMinutes: Double = 0.0) {
+    fun outside(o: Offer): String? = when {
+        minPayUsd > 0 && o.estPayUsd < minPayUsd -> "pays $%.4f, below your $%.4f minimum".format(o.estPayUsd, minPayUsd)
+        minPerHourUsd > 0 && o.estSeconds > 0 && o.perHourUsd < minPerHourUsd -> "pays $%.2f/hour, below your $%.2f/hour minimum".format(o.perHourUsd, minPerHourUsd)
+        maxMinutes > 0 && o.estSeconds / 60 > maxMinutes -> "takes about %.1f min, longer than your %.0f min limit".format(o.estSeconds / 60, maxMinutes)
+        else -> null
+    }
+}
+
 data class Bench(val tokensPerSecond: Double, val paramsB: Double, val ramGb: Double, val klass: String)
 
 /** What the UI shows; updated on every change. */
@@ -75,6 +85,7 @@ class Node(
     private val ticker = Executors.newSingleThreadScheduledExecutor()
     private val payloads = ConcurrentHashMap<String, (Triple<String, String, String>) -> Unit>()
     private val cancels = ConcurrentHashMap<String, AtomicBoolean>()
+    @Volatile var limits = AutoLimits()
     @Volatile private var decision: ((Boolean) -> Unit)? = null
     @Volatile private var drainThenOffline = false
     @Volatile private var sentState = ""
@@ -157,7 +168,9 @@ class Node(
         val estTokens = m["est_tokens"]?.jsonPrimitive?.doubleOrNull ?: 0.0
         val offer = Offer(jobId, m.s("job_type").ifEmpty { "chat" }, model, m["est_pay_usd"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
             estTokens / bench.tokensPerSecond.coerceAtLeast(1.0), m["ttl_s"]?.jsonPrimitive?.intOrNull ?: 30)
-        val accepted = if (status.mode == "auto") true else {
+        val why = limits.outside(offer)
+        if (status.mode == "auto" && why != null) log("Offer needs your answer: it $why")
+        val accepted = if (status.mode == "auto" && why == null) true else {
             val latch = CountDownLatch(1)
             var answer = false
             decision = { a -> answer = a; latch.countDown() }

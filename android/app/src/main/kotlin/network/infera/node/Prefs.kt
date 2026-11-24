@@ -19,6 +19,11 @@ class Prefs(ctx: Context) {
     var enabled: Boolean get() = p.getBoolean("enabled", false); set(v) = p.edit().putBoolean("enabled", v).apply()
     var workWithScreenOn: Boolean get() = p.getBoolean("screen_on_ok", false); set(v) = p.edit().putBoolean("screen_on_ok", v).apply()
 
+    var minPayUsd: Float get() = p.getFloat("min_pay", 0f); set(v) = p.edit().putFloat("min_pay", v).apply()
+    var minPerHourUsd: Float get() = p.getFloat("min_per_hour", 0f); set(v) = p.edit().putFloat("min_per_hour", v).apply()
+    var maxMinutes: Float get() = p.getFloat("max_minutes", 0f); set(v) = p.edit().putFloat("max_minutes", v).apply()
+    val limits: AutoLimits get() = AutoLimits(minPayUsd.toDouble(), minPerHourUsd.toDouble(), maxMinutes.toDouble())
+
     val paired: Boolean get() = deviceId.isNotEmpty() && token.isNotEmpty()
     val ready: Boolean get() = paired && modelPath.isNotEmpty() && klass.isNotEmpty() && klass != "unrated"
     val pairing: Pairing get() = Pairing(server, deviceId, token)

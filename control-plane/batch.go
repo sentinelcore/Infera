@@ -220,7 +220,7 @@ func (g *Gateway) dispatchBatch() int {
 	busy := map[string]bool{}
 	for _, j := range jobs {
 		var dev *Node
-		for _, n := range g.hub.Candidates(j.Model, "sandboxed", true) {
+		for _, n := range g.hub.CandidatesFor(j.Model, "sandboxed", true, "batch_chat") {
 			if !busy[n.ID] {
 				dev = n
 				break

@@ -57,6 +57,7 @@ class NodeService : Service() {
             val nd = Node(prefs.pairing, prefs.identity, eng, Bench(prefs.tps.toDouble(), prefs.paramsB.toDouble(), ram, prefs.klass),
                 "android ${Build.VERSION.RELEASE} ${Build.SUPPORTED_ABIS.firstOrNull() ?: ""} ${Build.MODEL}", { rules.check() }, ::onStatus)
             nd.setMode(prefs.mode)
+            nd.limits = prefs.limits
             node = nd
             nd.start()
         } catch (e: Throwable) {

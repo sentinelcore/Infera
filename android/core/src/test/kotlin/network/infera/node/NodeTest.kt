@@ -10,6 +10,8 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.File
 import java.net.ServerSocket
 import kotlin.test.AfterTest
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -103,5 +105,15 @@ class NodeTest {
         node.stop()
         println("phone node OK: $text1 | events=${last.events.take(3)}")
         check(pairing.deviceId.isNotEmpty() && id.publicKeyB64.isNotEmpty())
+    }
+
+    @Test
+    fun autoLimitsTurnOffersIntoCards() {
+        val o = Offer("j", "chat", "m", estPayUsd = 0.002, estSeconds = 120.0, ttlSeconds = 30)
+        assertNull(AutoLimits().outside(o))
+        assertNotNull(AutoLimits(minPayUsd = 0.01).outside(o))
+        assertNotNull(AutoLimits(minPerHourUsd = 1.0).outside(o)) // 0.002 per 2 min = $0.06/hour
+        assertNotNull(AutoLimits(maxMinutes = 1.0).outside(o))
+        assertNull(AutoLimits(minPayUsd = 0.001, minPerHourUsd = 0.05, maxMinutes = 3.0).outside(o))
     }
 }

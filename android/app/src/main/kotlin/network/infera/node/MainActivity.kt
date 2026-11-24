@@ -300,6 +300,23 @@ class MainActivity : Activity() {
         return md.digest().joinToString("") { "%02x".format(it) }
     }
 
+    private fun editLimits() {
+        fun f(v: Float) = if (v > 0) v.toString() else ""
+        val pay = field("Minimum pay per job, USD (e.g. 0.001)", f(prefs.minPayUsd), number = true)
+        val hour = field("Minimum pay per hour, USD (e.g. 0.20)", f(prefs.minPerHourUsd), number = true)
+        val mins = field("Longest job, minutes (e.g. 5)", f(prefs.maxMinutes), number = true)
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(8), dp(20), 0); addView(pay); addView(hour); addView(mins)
+            addView(text("Leave empty for no limit.", 12f, color = Color.GRAY)) }
+        android.app.AlertDialog.Builder(this).setTitle("Auto-approve limits").setView(box)
+            .setPositiveButton("Save") { _, _ ->
+                prefs.minPayUsd = pay.text.toString().toFloatOrNull() ?: 0f
+                prefs.minPerHourUsd = hour.text.toString().toFloatOrNull() ?: 0f
+                prefs.maxMinutes = mins.text.toString().toFloatOrNull() ?: 0f
+                NodeService.node?.limits = prefs.limits
+                render()
+            }.setNegativeButton("Cancel", null).show()
+    }
+
     private fun refreshRemote() {
         if (System.currentTimeMillis() / 1000 % 15 != 0L) return
         Thread {
@@ -359,7 +376,14 @@ class MainActivity : Activity() {
             setOnCheckedChangeListener { _, on -> prefs.mode = if (on) "ask" else "auto"; n?.setMode(prefs.mode) } }
         val screen = Switch(this).apply { text = "Also work while the screen is on (Charge Mode)"; isChecked = prefs.workWithScreenOn
             setOnCheckedChangeListener { _, on -> prefs.workWithScreenOn = on } }
-        root.addView(card(ask, screen, text("Jobs run only while charging, on Wi-Fi, above 50% battery and not warm.", 12f, color = Color.GRAY)))
+        val lim = prefs.limits
+        val limText = if (lim == AutoLimits()) "Auto-approve: every job" else listOfNotNull(
+            if (lim.minPayUsd > 0) "min $%.4f".format(lim.minPayUsd) else null,
+            if (lim.minPerHourUsd > 0) "min $%.2f/hour".format(lim.minPerHourUsd) else null,
+            if (lim.maxMinutes > 0) "max %.0f min".format(lim.maxMinutes) else null,
+        ).joinToString(" · ", "Auto-approve only: ")
+        root.addView(card(ask, screen, text(limText, 13f), button("Auto-approve limits…", primary = false) { editLimits() },
+            text("Jobs run only while charging, on Wi-Fi, above 50% battery and not warm. Jobs outside your limits come as offers to accept or decline.", 12f, color = Color.GRAY)))
         if (running) root.addView(button("Stop the Infera service", primary = false) {
             startService(android.content.Intent(this, NodeService::class.java).setAction(NodeService.ACTION_STOP))
             ui.postDelayed({ render() }, 800)
