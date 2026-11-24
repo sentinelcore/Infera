@@ -1,4 +1,4 @@
-# DePINClaw Execution Plan
+# Infera Execution Plan
 
 The plan runs on two parallel tracks. Track A sells inference from week 2, using rented capacity at first. Track B builds the contributor network and moves paid traffic onto it as nodes come online. The same API and customers serve both tracks, so revenue does not wait for supply.
 
@@ -21,8 +21,8 @@ Timeline: 24 weeks to public launch. Weeks are relative to kickoff.
 
 **Accounts to open (lead times vary)**
 - Apple Developer (Organization), Google Play Console, and a Windows code-signing certificate (EV preferred, for SmartScreen reputation).
-- Stripe (plus Stripe Connect for later payouts), and a domain with Cloudflare.
-- X account `@DePINClaw`, Discord server, and a Telegram group.
+- Stripe for customer payments; an exchange or custody account (e.g. Kraken, OKX, Fireblocks or BitGo) for buying and sending USDT; a domain with Cloudflare.
+- X account `@Infera`, Discord server, and a Telegram group.
 
 **Exit criteria:** first paid API call; waitlist live; grant applications submitted.
 
@@ -81,7 +81,8 @@ Timeline: 24 weeks to public launch. Weeks are relative to kickoff.
 - Confidential level on phones with Android protected VMs; Sealed level via Play Integrity.
 - Phone workloads: embeddings, Whisper-small **Transcription API**, and 1–3B batch chat.
 - Earnings v1: points convert to a USD balance in the ledger from real job revenue (operator share of e.g. 70%, a config value).
-- Payouts v1: Stripe Connect (fiat) and USDC on Solana or Base, weekly, above the threshold, with KYC at the payout threshold.
+- Payouts v1: weekly USDT batches to owners' wallets (Tron TRC-20 default; other networks optional), with sanctions screening and identity checks at the payout threshold (`ARCHITECTURE.md` §8.1).
+- Dependability score and penalties (forfeit, debit, holds, pay multiplier, suspension) live in the ledger (`ARCHITECTURE.md` §3.4).
 - Play Integrity attestation for Android nodes.
 
 **Revenue track**

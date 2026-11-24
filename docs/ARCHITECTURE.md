@@ -1,4 +1,4 @@
-# DePINClaw Architecture
+# Infera Architecture
 
 A network where laptops, desktops and phones serve AI inference on idle capacity. Contributors install once, and the app runs only when the device is idle, then pauses itself. Customers call one OpenAI-compatible API.
 
@@ -17,7 +17,7 @@ A network where laptops, desktops and phones serve AI inference on idle capacity
  │  live state of nodes                         Fireworks, DeepInfra, Vast/RunPod) │
  │       │                                                                        │
  │  Verifier ── canary prompts, redundant re-runs, reputation scores               │
- │  Ledger (Postgres) ── signed receipts → points → USD/USDC payouts → on-chain    │
+ │  Ledger (Postgres) ── signed receipts → points → USDT payouts → on-chain        │
  │  Model CDN (Cloudflare R2) ── signed GGUF/MLX model files                       │
  │  Update server ── signed agent/app updates                                     │
  └───────────────▲─────────────────────────────────────▲──────────────────────────┘
@@ -66,7 +66,7 @@ One library, compiled for Windows, macOS, Linux, Android (JNI via `uniffi`) and 
 - **Installers:** `.msi` (Windows, code-signed), `.dmg` (macOS, Developer ID and notarized), `.deb`/`.rpm`/AppImage (Linux).
 - **Autostart at login:** Tauri autostart plugin, launchd LaunchAgent on macOS, Run key on Windows, XDG autostart on Linux.
 - **Silent auto-update:** Tauri updater with signed manifests.
-- **Headless install** for servers and always-on desktops: `curl -fsSL https://get.depinclaw.xyz | sh` installs a systemd (Linux) or launchd (macOS) service, and pairs with `depinclaw login`.
+- **Headless install** for servers and always-on desktops: `curl -fsSL https://get.infera.xyz | sh` installs a systemd (Linux) or launchd (macOS) service, and pairs with `infera login`.
 
 ### 2.3 Android app
 - Kotlin UI plus the Rust core and llama.cpp via JNI.
@@ -98,13 +98,13 @@ One library, compiled for Windows, macOS, Linux, Android (JNI via `uniffi`) and 
 **Infra:** Fly.io or Hetzner and AWS in 3 regions (US-East, EU-West, AP-Southeast), Cloudflare (DNS, WAF, R2 for models and updates), Postgres (Neon or RDS), Redis (Upstash or ElastiCache), and Grafana/Prometheus with Sentry.
 
 ### 2.6 Web
-- `depinclaw.xyz`: landing page, waitlist with referral codes, and downloads.
-- `app.depinclaw.xyz`: contributor dashboard (devices, uptime, earnings, leaderboard) and customer console (API keys, usage, billing).
+- `infera.xyz`: landing page, waitlist with referral codes, and downloads.
+- `app.infera.xyz`: contributor dashboard (devices, uptime, earnings, leaderboard) and customer console (API keys, usage, billing).
 - Built in Next.js, deployed on Vercel or Cloudflare Pages.
 
 ## 3. Install-and-forget rules (governor)
 
-The node works only when **all** of these are true, and pauses within 1 second when any becomes false.
+The node accepts **new** jobs only when **all** of these are true. When one becomes false (for example the owner comes back), it stops taking new jobs within 1 second, but a job already accepted runs to completion at low priority. Accepted jobs are the owner's responsibility (§3.4). Only hard limits stop a running job: critical temperature, battery below 15%, or the owner pressing "Stop now" (which counts as an owner abort).
 
 | Rule | Desktop / laptop | Android | iOS |
 |---|---|---|---|
@@ -180,7 +180,7 @@ RUNS  now · charging
 **Dispatch rules**
 - Offers go only to devices that are ready right now (governor rules met), so an accepted job runs immediately.
 - One device at a time, best match in the class first. 30-second countdown (configurable per job type, 15–60 s). No answer counts as a decline.
-- A decline sends the offer to the next best device in the same class. Declines never lower reputation. The scheduler learns which job types an owner declines and offers fewer of them.
+- A decline sends the offer to the next best device in the same class. Declining is free and never lowers reputation or dependability. The scheduler learns which job types an owner declines and offers fewer of them. Once accepted, finishing the job is the owner's responsibility (§3.4).
 - Real-time chat goes only to auto-approve devices.
 - Home screen has a Go online / Go offline toggle, today's earnings and job count.
 - Delivery: Android high-priority notification with Accept / Decline actions and a countdown; iOS time-sensitive notification with actions, sent only in Charge Mode; full-screen card when the app is open; tray pop-up on desktops.
@@ -205,6 +205,51 @@ Every job runs inside a sealed sandbox. The device owner, the app interface, the
 - The customer sets the minimum level per request with the API field `privacy` (`confidential` | `sealed` | `sandboxed`). Higher levels cost more.
 - Sandbox lock-down: only signed engines and models; network only to our relay; swap off or encrypted; no crash dumps with job data; refuses to start on rooted, jailbroken or debugged devices.
 - Attestation sources: Android key attestation and Play Integrity, AVF protected-VM attestation; App Attest on iPhone and Mac; TPM and measured boot on Windows (for device identity); GPU/CPU attestation reports on partner servers.
+
+## 3.4 Dependability and penalties
+
+Once a device accepts a job, the owner is responsible for it finishing. Every device has a **dependability score** (0–100), separate from the correctness reputation used by the verifier. New devices start at 70 (probation).
+
+**When a job stops midway, the cause decides the penalty**
+
+| Cause | Detected by | Penalty |
+|---|---|---|
+| **Owner action:** app quit or force-stopped, "Stop now" pressed, device shut down or put to sleep, went offline mid-job, network turned off | Agent shutdown hook, OS power events, heartbeat lost after the app's own quit signal | Job pay forfeited · debit of 2× the job's value · dependability −10 |
+| **Accepted but not delivered:** no first token within the deadline, or job not finished by its deadline | Scheduler timers | Job pay forfeited · debit of 1× the job's value · dependability −8 |
+| **Device or connection failure:** Wi-Fi drop, crash, out of memory, thermal or low-battery cut-off | Heartbeat loss without a quit signal, crash report, governor log | Job pay forfeited · dependability −5 · no debit for the first 2 per week, 1× debit after that |
+| **Wrong result:** failed canary or re-run mismatch | Verifier | Job pay forfeited · debit of 3× · reputation and dependability −15 |
+| **Not the owner's fault:** our server outage, a known bug in our app (crash signature matches), customer cancelled | Incident flag, crash signature list | No penalty; owner paid for work done |
+
+**How penalties are applied**
+1. **Forfeit:** the stopped job pays nothing.
+2. **Debit:** taken from pending (held) earnings first, then from the available balance. A balance can go negative; future earnings pay it off before any payout.
+3. **Withholding:** earnings are held before they can be paid out, longer for lower scores.
+4. **Earning potential:** lower scores get fewer and lower-value offers and a lower pay multiplier.
+5. **Suspension:** for repeated owner aborts.
+
+| Dependability | Earnings hold | Pay multiplier | Offers |
+|---|---|---|---|
+| 90–100 | 3 days | 1.00× | All job types allowed by class, first in line |
+| 70–89 (new devices start at 70) | 7 days | 0.95× | All job types, normal priority |
+| 50–69 | 14 days | 0.85× | Batch jobs only, low priority |
+| 30–49 | 30 days | 0.70× | Low-value batch jobs only |
+| Below 30 | Payouts frozen | — | Suspended 72 hours, then back at 30 on probation |
+
+- **Fast suspension:** 3 owner-action aborts in 24 hours triggers a 24-hour suspension. Repeated suspensions within 30 days lead to removal, and pending earnings are forfeited to cover debits.
+
+**Earning dependability back**
+- +1 per job completed on time (+0.5 for jobs under 1 minute), up to +5 per day.
+- +3 bonus for every 50 completed jobs in a row without an abort.
+- Penalties older than 30 days count at half weight; older than 90 days, they are dropped from the score.
+
+**Fairness and protection for owners**
+- **Finish then stop:** a "Finish current job, then go offline" button never costs anything.
+- **Warning before quitting:** if a job is running, the app warns first, e.g. "A job is running (about 40 s left). Quitting now costs $0.08 and 10 dependability points."
+- **Every penalty is visible:** the earnings screen shows the job, the cause, the evidence and the amount. A one-tap appeal re-checks the logs.
+- **First-week grace:** in the first 7 days, device-failure stops are never debited.
+- Penalty rules are part of the contributor terms accepted at sign-up.
+
+**Ledger effect:** a penalty is a ledger entry (`forfeit`, `debit`, `hold_extension`, `multiplier_change`, `suspension`) linked to the job and its evidence, so every balance can be re-computed from its history.
 
 ## 4. Node ↔ control-plane protocol (JSON over WSS, protobuf later)
 
@@ -252,9 +297,33 @@ Customer pays (Stripe card/credits, later x402/USDC)
   → gateway meters tokens → scheduler assigns node → node returns signed receipt
   → ledger: revenue split, e.g. operator 70% / protocol 30% (config value)
   → beta: points + USD balance in Postgres
-  → payout: Stripe Connect (fiat) or USDC on Solana/Base, weekly, above a minimum threshold
+  → penalties and holds applied (§3.4)
+  → payout: USDT to the owner's wallet, weekly, above a minimum threshold (fiat via Stripe Connect as an option)
   → later: on-chain anchoring of receipt batches, token rewards for supply bootstrapping
 ```
+
+### 8.1 USDT payouts
+
+Owners are paid in USDT, so payouts work in any country without manual bank transfers.
+
+**Flow**
+1. Customers pay in fiat (Stripe) or stablecoins.
+2. Treasury buys USDT weekly to cover the payouts due, through an exchange or OTC desk account with API withdrawals.
+3. USDT sits in a custody wallet: a hot wallet funded only with the current week's payouts, and the rest in cold storage or multisig.
+4. Every week the ledger produces the payout batch: owners whose available (unheld) balance is above the threshold.
+5. A payout worker sends the batch, records each transaction hash in the ledger, and notifies the owner with a link to the transaction.
+
+**Owner setup**
+- The owner adds a USDT address in the app and picks the network: **Tron (TRC-20)** for the lowest fees, or Ethereum L2s, BNB Chain, Polygon, Solana or TON.
+- **Address check:** the owner signs a message with the wallet, or confirms a tiny test transfer.
+- Address changes trigger a 48-hour payout hold, to protect against account takeover.
+
+**Rules**
+- Minimum payout, e.g. $10, so network fees stay small. Fees are absorbed on Tron and shown up front on other networks.
+- Identity check at a cumulative payout threshold, e.g. $600 per year. Wallet addresses are screened against sanctions lists before each batch.
+- **Custody and payout tooling options:** Fireblocks or BitGo (custody with batch sends and spending policies), exchange APIs (Kraken, OKX, Binance) for buying and withdrawing, or a self-run wallet with multisig for the cold reserve.
+- **Controls:** daily send limits on the hot wallet, two-person approval for batches above a set size, and alerts on failed or unusual sends.
+- Get legal advice on money-transmission and stablecoin rules for each launch country before the first real payout.
 
 ## 9. Repository layout
 

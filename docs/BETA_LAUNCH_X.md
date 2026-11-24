@@ -4,7 +4,7 @@ The goal is to recruit contributors (supply) and API users (demand) from X in wa
 
 ## 1. Setup (week 0–1)
 
-- **Profile:** `@DePINClaw`. The bio reads "Your idle laptop, desktop or phone serves AI inference. Install once, earn while you sleep. Beta waitlist ↓", with a link to the waitlist.
+- **Profile:** `@Infera`. The bio reads "Your idle laptop, desktop or phone serves AI inference. Install once, earn while you sleep. Beta waitlist ↓", with a link to the waitlist.
 - **Pinned post:** the launch thread (§3).
 - **Waitlist form** asks for: X handle, device type (NVIDIA GPU / AMD GPU / Mac M-series + RAM / Windows laptop / Android / iPhone), country, and whether they are a contributor, a developer, or both.
 - **Referral link per sign-up:** each referral moves the person up the waitlist and earns bonus points at launch.
@@ -25,7 +25,7 @@ Developers get API access at every wave with free starter credits, given in exch
 ## 3. Launch thread (post in week 1)
 
 > 1/ Your laptop, desktop and phone sit idle ~20 hours a day.
-> We're building DePINClaw: a network where idle devices serve AI inference and their owners get paid.
+> We're building Infera: a network where idle devices serve AI inference and their owners get paid.
 > Install once. It runs when you're away, plugged in and idle. It pauses the moment you're back.
 >
 > 2/ How it works:

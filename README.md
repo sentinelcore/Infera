@@ -1,4 +1,4 @@
-# DePINClaw
+# Infera
 
 A network where laptops, desktops and phones serve AI inference on idle capacity. Contributors install once and earn; developers call one OpenAI-compatible API.
 

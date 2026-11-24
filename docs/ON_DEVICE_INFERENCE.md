@@ -1,6 +1,6 @@
 # On-Device Inference: Engines, Techniques and Models
 
-Research into the newest ways to run language models on phones, laptops and desktops, and how DePINClaw uses them. Researched November 2026. Most speed figures are self-reported by each project, so the benchmark step (`ARCHITECTURE.md` §3.1) re-measures everything on the contributor's own device before it is used.
+Research into the newest ways to run language models on phones, laptops and desktops, and how Infera uses them. Researched November 2026. Most speed figures are self-reported by each project, so the benchmark step (`ARCHITECTURE.md` §3.1) re-measures everything on the contributor's own device before it is used.
 
 ## 1. smolmaxxing (added to this repo)
 
@@ -20,7 +20,7 @@ Research into the newest ways to run language models on phones, laptops and desk
 
 **Techniques we can use**
 
-| Technique | What it does | Use in DePINClaw |
+| Technique | What it does | Use in Infera |
 |---|---|---|
 | Expert pager | For mixture-of-experts (MoE) models, keeps popular experts in RAM and reads the rest from flash on demand, prefetching the next layer's | Lets 8 GB phones serve 35B MoE models for batch jobs; new benchmark step measures flash speed |
 | Cache-aware routing | Nudges the router toward experts already in RAM (+0.5–2% perplexity for +15–20% speed on the phone) | Off for verified jobs by default; allowed only on job types whose customer accepts it, since it changes outputs and affects result checks |
@@ -37,7 +37,7 @@ Research into the newest ways to run language models on phones, laptops and desk
 
 ## 2. Inference engines
 
-| Engine | Best on | Why use it | Role in DePINClaw |
+| Engine | Best on | Why use it | Role in Infera |
 |---|---|---|---|
 | **llama.cpp** | Everything (CPU, CUDA, Vulkan, Metal) | Portable baseline, GGUF models | Default engine on every platform |
 | **llama.cpp + smolmaxxing patch** | ARM phones, TV boxes, low-RAM devices | Expert pager, flash streaming, 1-bit kernels | Android engine for MoE-from-flash and 1-bit models |

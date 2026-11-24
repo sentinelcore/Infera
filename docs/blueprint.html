@@ -1,4 +1,4 @@
-<title>DePINClaw Blueprint</title>
+<title>Infera Blueprint</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -168,6 +168,16 @@ td.yes { color: var(--accent); font-weight: 500; }
 .speeds .axis { display: flex; justify-content: space-between; margin-left: 212px; margin-right: 122px; font-family: var(--font-mono); font-size: 0.7rem; color: var(--muted); }
 @media (max-width: 560px) { .sp { grid-template-columns: 1fr; gap: 4px; } .speeds .axis { margin: 0; } }
 
+/* Dependability bands */
+.dep { display: flex; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); min-height: 64px; }
+.dep .band { padding: 10px; display: grid; gap: 2px; align-content: center; font-size: 0.78rem; min-width: 0; border-right: 1px solid var(--line); }
+.dep .band:last-child { border-right: 0; }
+.dep .band b { font-family: var(--font-mono); font-size: 0.8rem; }
+.dep .band span { color: var(--muted); line-height: 1.3; }
+.dep .b0 { background: var(--alert-soft); } .dep .b1 { background: var(--money-soft); } .dep .b2 { background: var(--surface-2); }
+.dep .b3 { background: var(--accent-soft); } .dep .b4 { background: var(--accent-soft); box-shadow: inset 0 0 0 2px var(--accent); }
+@media (max-width: 640px) { .dep { flex-direction: column; } .dep .band { width: 100% !important; border-right: 0; border-bottom: 1px solid var(--line); } }
+
 /* Checklist */
 .check { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
 .check li { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; }
@@ -195,7 +205,7 @@ html { scroll-behavior: smooth; }
 
 <header class="top">
   <span class="label">Build blueprint · v1</span>
-  <h1>DePINClaw Blueprint</h1>
+  <h1>Infera Blueprint</h1>
   <p class="lede">Laptops, desktops and phones serve AI inference while their owners are away. Contributors install the app once and get paid for verified work. Developers call one OpenAI-compatible API.</p>
   <div class="facts">
     <div class="fact"><b>Install and forget</b><span>Runs only when the device is idle, plugged in and cool. Pauses within one second when you're back.</span></div>
@@ -211,6 +221,7 @@ html { scroll-behavior: smooth; }
   <a href="#classes">Benchmark and classes</a>
   <a href="#install-forget">Install and forget</a>
   <a href="#approval">Job offers</a>
+  <a href="#dependability">Dependability</a>
   <a href="#request">Life of a request</a>
   <a href="#money">Money flow</a>
   <a href="#trust">Trust</a>
@@ -227,10 +238,10 @@ html { scroll-behavior: smooth; }
   <div class="head">
     <span class="label">01 · The idea</span>
     <h2>The big picture</h2>
-    <p class="intro">Developers send AI requests to the DePINClaw cloud. The cloud picks an idle device that can answer, the device streams the answer back, and the device owner earns a share of what the developer paid. When no device fits, the request goes to rented GPUs so the customer is always served.</p>
+    <p class="intro">Developers send AI requests to the Infera cloud. The cloud picks an idle device that can answer, the device streams the answer back, and the device owner earns a share of what the developer paid. When no device fits, the request goes to rented GPUs so the customer is always served.</p>
   </div>
   <div class="figure">
-    <svg viewBox="0 0 900 300" role="img" aria-label="Developers send requests to the DePINClaw cloud, which routes them to idle desktops, laptops and phones, or to rented GPUs as fallback. Money flows from developers to device owners.">
+    <svg viewBox="0 0 900 300" role="img" aria-label="Developers send requests to the Infera cloud, which routes them to idle desktops, laptops and phones, or to rented GPUs as fallback. Money flows from developers to device owners.">
       <defs>
         <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head-acc"/></marker>
         <marker id="m1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="head-money"/></marker>
@@ -242,7 +253,7 @@ html { scroll-behavior: smooth; }
       <text x="110" y="154" text-anchor="middle" class="t-sub">apps, agents, OpenRouter</text>
       <!-- cloud -->
       <rect x="320" y="80" width="230" height="120" rx="12" class="box-acc"/>
-      <text x="435" y="118" text-anchor="middle" class="t-title">DePINClaw cloud</text>
+      <text x="435" y="118" text-anchor="middle" class="t-title">Infera cloud</text>
       <text x="435" y="142" text-anchor="middle" class="t-sub">API · scheduler · checks</text>
       <text x="435" y="162" text-anchor="middle" class="t-sub">ledger · payouts</text>
       <!-- devices -->
@@ -764,9 +775,67 @@ html { scroll-behavior: smooth; }
 
 
 <!-- 5. Request lifecycle -->
+<!-- Dependability -->
+<section id="dependability">
+  <div class="head">
+    <span class="label">07 · Accountability</span>
+    <h2>Dependability and penalties</h2>
+    <p class="intro">Declining an offer is always free. Once a device accepts a job, finishing it is the owner's responsibility. If the owner comes back to the device, it stops taking new jobs but finishes the one it is running. Every device has a dependability score from 0 to 100; new devices start at 70. Stopping a job midway costs money and score, depending on the cause.</p>
+  </div>
+
+  <div class="dep" role="img" aria-label="Dependability bands: below 30 suspended; 30 to 49, 30-day hold and 0.70 pay; 50 to 69, 14-day hold and 0.85 pay; 70 to 89, 7-day hold and 0.95 pay; 90 to 100, 3-day hold and full pay.">
+    <div class="band b0" style="width:30%"><b>0–29</b><span>Suspended · payouts frozen</span></div>
+    <div class="band b1" style="width:20%"><b>30–49</b><span>30-day hold · 0.70× pay</span></div>
+    <div class="band b2" style="width:20%"><b>50–69</b><span>14-day hold · 0.85× pay</span></div>
+    <div class="band b3" style="width:20%"><b>70–89</b><span>7-day hold · 0.95× pay</span></div>
+    <div class="band b4" style="width:10%"><b>90+</b><span>3 days · 1.0×</span></div>
+  </div>
+  <p class="note">Bands drawn to scale on the 0–100 score. New devices start at 70. Lower bands also get fewer and lower-value offers: 50–69 batch jobs only, 30–49 low-value batch only.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Why the job stopped</th><th>Examples</th><th>Penalty</th></tr></thead>
+      <tbody>
+        <tr><td><b>Owner action</b></td><td>App quit, "Stop now", device shut down or put to sleep, went offline, network turned off</td><td>Job pay forfeited · debit 2× job value · −10 score</td></tr>
+        <tr><td><b>Accepted, not delivered</b></td><td>No first token in time, missed the deadline</td><td>Forfeit · debit 1× · −8</td></tr>
+        <tr><td><b>Device or connection failure</b></td><td>Wi-Fi drop, crash, out of memory, heat or low-battery cut-off</td><td>Forfeit · −5 · first 2 a week not debited, then 1×</td></tr>
+        <tr><td><b>Wrong result</b></td><td>Failed test prompt or re-run mismatch</td><td>Forfeit · debit 3× · −15</td></tr>
+        <tr><td><b>Not the owner's fault</b></td><td>Our outage, known bug in our app, customer cancelled</td><td>No penalty · paid for work done</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="grid-3">
+    <div class="card"><span class="tag">HOW IT'S COLLECTED</span><h3>Penalty tools</h3>
+      <ul>
+        <li><b>Forfeit:</b> the stopped job pays nothing</li>
+        <li><b>Debit:</b> from held earnings first, then the balance; a negative balance is paid off before any payout</li>
+        <li><b>Hold:</b> longer earnings hold at lower scores</li>
+        <li><b>Earning potential:</b> lower pay multiplier, fewer offers</li>
+        <li><b>Suspension:</b> 3 owner aborts in 24 h = 24 h off; repeat offenders removed</li>
+      </ul>
+    </div>
+    <div class="card"><span class="tag">WINNING IT BACK</span><h3>Recovery</h3>
+      <ul>
+        <li>+1 per job finished on time (+0.5 under 1 min), up to +5 a day</li>
+        <li>+3 for every 50 jobs in a row without an abort</li>
+        <li>Penalties count half after 30 days, drop off after 90</li>
+      </ul>
+    </div>
+    <div class="card"><span class="tag">FAIR TO OWNERS</span><h3>Protections</h3>
+      <ul>
+        <li>"Finish current job, then go offline" never costs anything</li>
+        <li>Warning before quitting: "Quitting now costs $0.08 and 10 points"</li>
+        <li>Every penalty shows the job, cause and evidence, with one-tap appeal</li>
+        <li>First 7 days: device failures are never debited</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
 <section id="request">
   <div class="head">
-    <span class="label">07 · Runtime</span>
+    <span class="label">08 · Runtime</span>
     <h2>Life of a request</h2>
     <p class="intro">One customer request, start to finish. If the device drops part-way, the scheduler re-sends the job to another device or to rented GPUs, and the customer just sees the answer.</p>
   </div>
@@ -818,7 +887,7 @@ html { scroll-behavior: smooth; }
 <!-- 6. Money -->
 <section id="money">
   <div class="head">
-    <span class="label">08 · Payments</span>
+    <span class="label">09 · Payments</span>
     <h2>Money flow</h2>
     <p class="intro">Customers pay for what they use. Each completed job's revenue is split between the device owner and the protocol, and owners are paid weekly once they pass a minimum balance.</p>
   </div>
@@ -831,7 +900,7 @@ html { scroll-behavior: smooth; }
     <div class="arrow" aria-hidden="true">→</div>
     <div class="step"><b>Ledger splits</b><span>Owner share and protocol share</span></div>
     <div class="arrow" aria-hidden="true">→</div>
-    <div class="step"><b>Weekly payout</b><span>Bank (Stripe Connect) or USDC on Solana / Base</span></div>
+    <div class="step"><b>Weekly USDT payout</b><span>Sent to the owner's wallet, Tron (TRC-20) by default</span></div>
   </div>
   <div class="split" role="img" aria-label="Revenue split: 70% to device owner, 30% to protocol">
     <div class="op">70% device owner</div>
@@ -842,18 +911,35 @@ html { scroll-behavior: smooth; }
       <thead><tr><th>Stage</th><th>How owners are paid</th></tr></thead>
       <tbody>
         <tr><td><b>Beta</b></td><td>Points plus a USD balance in our ledger, earned only from verified jobs</td></tr>
-        <tr><td><b>Phase 3 onward</b></td><td>Real weekly payouts in cash or USDC, with identity check at the payout threshold</td></tr>
+        <tr><td><b>Phase 3 onward</b></td><td>Weekly USDT payouts to the owner's wallet, after penalties and holds, with identity check at the payout threshold</td></tr>
         <tr><td><b>Phase 5</b></td><td>Receipt batches recorded on-chain; token rewards top up earnings while demand grows</td></tr>
       </tbody>
     </table>
   </div>
   <p class="note">The 70/30 split is a setting in the ledger and can be changed.</p>
+  <h3>How USDT payouts work</h3>
+  <div class="flow">
+    <div class="step"><b>Customers pay</b><span>Card via Stripe, or stablecoins</span></div>
+    <div class="arrow" aria-hidden="true">→</div>
+    <div class="step"><b>Treasury buys USDT</b><span>Weekly, enough for payouts due, via exchange or OTC account</span></div>
+    <div class="arrow" aria-hidden="true">→</div>
+    <div class="step"><b>Hot wallet</b><span>Holds only this week's payouts; the rest in cold storage</span></div>
+    <div class="arrow" aria-hidden="true">→</div>
+    <div class="step"><b>Batch send</b><span>Owners above $10, after holds and penalties; sanctions screened</span></div>
+    <div class="arrow" aria-hidden="true">→</div>
+    <div class="step"><b>Owner notified</b><span>With the transaction link; hash stored in the ledger</span></div>
+  </div>
+  <div class="grid-3">
+    <div class="card"><span class="tag">OWNER SETUP</span><h3>Wallet</h3><ul><li>Add a USDT address and network: Tron (lowest fees), Ethereum L2s, BNB, Polygon, Solana or TON</li><li>Prove it by signing a message or a tiny test transfer</li><li>Changing the address pauses payouts for 48 h</li></ul></div>
+    <div class="card"><span class="tag">TOOLING</span><h3>Custody and sending</h3><ul><li>Fireblocks or BitGo: custody, batch sends, spending policies</li><li>Or exchange APIs (Kraken, OKX, Binance) to buy and withdraw</li><li>Multisig cold reserve</li></ul></div>
+    <div class="card"><span class="tag">CONTROLS</span><h3>Safety</h3><ul><li>Daily send limits on the hot wallet</li><li>Two-person approval for large batches</li><li>Identity check above $600 a year; legal check per country before first payout</li></ul></div>
+  </div>
 </section>
 
 <!-- 7. Trust -->
 <section id="trust">
   <div class="head">
-    <span class="label">09 · Safety</span>
+    <span class="label">10 · Safety</span>
     <h2>Trust and privacy</h2>
   </div>
   <div class="grid-3">
@@ -892,7 +978,7 @@ html { scroll-behavior: smooth; }
 <!-- Secure sandbox -->
 <section id="privacy">
   <div class="head">
-    <span class="label">10 · Privacy</span>
+    <span class="label">11 · Privacy</span>
     <h2>Secure job sandbox</h2>
     <p class="intro">Every job runs inside a sealed sandbox on the device. The job arrives encrypted with a key that only the sandbox holds, so the owner, the app's own interface and our relay servers see only metadata: category, size, time and earnings. The prompt and the answer never touch the disk and are wiped from memory when the job ends.</p>
   </div>
@@ -988,7 +1074,7 @@ html { scroll-behavior: smooth; }
 <!-- 8. Models -->
 <section id="models">
   <div class="head">
-    <span class="label">11 · Workloads</span>
+    <span class="label">12 · Workloads</span>
     <h2>Models and job types</h2>
     <p class="intro">Each device keeps one or two models ready, chosen by its class. Slow or unreliable devices still earn by serving batch, embedding and transcription jobs that don't need an instant answer.</p>
   </div>
@@ -1009,7 +1095,7 @@ html { scroll-behavior: smooth; }
 <!-- Engines and models -->
 <section id="engines">
   <div class="head">
-    <span class="label">12 · Research</span>
+    <span class="label">13 · Research</span>
     <h2>Inference engines and on-device research</h2>
     <p class="intro">The node app is not tied to one engine. Each engine plugs in through the same adapter, and the install benchmark tests every engine available on the device and picks the fastest one per model. Recent on-device work, smolmaxxing in particular, lets ordinary phones run far bigger models than their RAM suggests.</p>
   </div>
@@ -1029,7 +1115,7 @@ html { scroll-behavior: smooth; }
 
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Engine</th><th>Best on</th><th>Role in DePINClaw</th></tr></thead>
+      <thead><tr><th>Engine</th><th>Best on</th><th>Role in Infera</th></tr></thead>
       <tbody>
         <tr><td><b>llama.cpp</b></td><td>Everything: CPU, CUDA, Vulkan, Metal</td><td>Default engine on every platform</td></tr>
         <tr><td><b>llama.cpp + smolmaxxing</b></td><td>ARM phones, low-RAM devices</td><td>Android engine for big MoE models from flash and 1-bit models</td></tr>
@@ -1067,7 +1153,7 @@ html { scroll-behavior: smooth; }
 <!-- 9. Roadmap -->
 <section id="roadmap">
   <div class="head">
-    <span class="label">13 · Execution</span>
+    <span class="label">14 · Execution</span>
     <h2>Roadmap: build and revenue side by side</h2>
     <p class="intro">Green bars are what gets built. Amber bars are the revenue sources added in the same window. Revenue starts in week 2 on rented capacity and moves onto community devices as they come online.</p>
   </div>
@@ -1152,7 +1238,7 @@ html { scroll-behavior: smooth; }
 <!-- 10. Beta -->
 <section id="beta">
   <div class="head">
-    <span class="label">14 · Go to market</span>
+    <span class="label">15 · Go to market</span>
     <h2>Beta on X</h2>
     <p class="intro">Contributors and developers join through a waitlist linked from X. Each wave opens only when the previous one hits its quality targets. Bars are drawn to scale against the 2,000-person wave.</p>
   </div>
@@ -1179,7 +1265,7 @@ html { scroll-behavior: smooth; }
 
   <h3>Launch thread</h3>
   <div class="post">
-    <p><span class="n">1/</span> Your laptop, desktop and phone sit idle ~20 hours a day. We're building DePINClaw: a network where idle devices serve AI inference and their owners get paid. Install once. It runs when you're away, plugged in and idle. It pauses the moment you're back.</p>
+    <p><span class="n">1/</span> Your laptop, desktop and phone sit idle ~20 hours a day. We're building Infera: a network where idle devices serve AI inference and their owners get paid. Install once. It runs when you're away, plugged in and idle. It pauses the moment you're back.</p>
     <p><span class="n">2/</span> How it works: install the app (Windows / Mac / Linux, Android next, iPhone after). It benchmarks your device and picks the right model. Developers send AI requests through our API. Your device serves them and you earn for each verified job.</p>
     <p><span class="n">3/</span> Safe by design: it only runs our signed inference engine and signed models. No arbitrary code, no mining.</p>
     <p><span class="n">4/</span> Developers: OpenAI-compatible API, cheaper batch and embeddings pricing. Free beta credits.</p>
@@ -1209,7 +1295,7 @@ html { scroll-behavior: smooth; }
 <!-- 11. Week 1 -->
 <section id="week1">
   <div class="head">
-    <span class="label">15 · Start here</span>
+    <span class="label">16 · Start here</span>
     <h2>Week-1 checklist</h2>
     <p class="intro">Ticks are saved in your browser only.</p>
   </div>
@@ -1234,12 +1320,12 @@ html { scroll-behavior: smooth; }
 (function () {
   var boxes = document.querySelectorAll('.check input[type=checkbox]');
   var saved = {};
-  try { saved = JSON.parse(localStorage.getItem('depinclaw-week1') || '{}') || {}; } catch (e) { saved = {}; }
+  try { saved = JSON.parse(localStorage.getItem('infera-week1') || '{}') || {}; } catch (e) { saved = {}; }
   boxes.forEach(function (b) {
     if (saved[b.id]) b.checked = true;
     b.addEventListener('change', function () {
       saved[b.id] = b.checked;
-      try { localStorage.setItem('depinclaw-week1', JSON.stringify(saved)); } catch (e) {}
+      try { localStorage.setItem('infera-week1', JSON.stringify(saved)); } catch (e) {}
     });
   });
 })();
