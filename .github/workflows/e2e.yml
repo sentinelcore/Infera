@@ -1,0 +1,43 @@
+# End-to-end test on real Linux and Mac machines with a real model (Ollama, qwen3:0.6b):
+# builds the server and node, pairs, serves requests, checks streaming and earnings.
+name: e2e
+on:
+  push:
+    paths: ["agent/**", "control-plane/**", "scripts/**", ".github/workflows/e2e.yml"]
+  workflow_dispatch:
+jobs:
+  local-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.24" }
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Linux desktop libraries (tray)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libxdo-dev libayatana-appindicator3-dev
+      - name: Install Ollama and a small model
+        run: |
+          if [ "$RUNNER_OS" = "macOS" ]; then brew install ollama; else curl -fsSL https://ollama.com/install.sh | sh; fi
+          (ollama serve > ollama.log 2>&1 &)
+          for i in $(seq 1 30); do curl -sf localhost:11434/api/tags && break; sleep 1; done
+          ollama pull qwen3:0.6b
+      - name: Local test with a real model
+        env: { INFERA_PARAMS_B: "0.6" }
+        run: ./scripts/local-test.sh
+      - name: Tray app starts (macOS menu bar)
+        if: runner.os == 'macOS'
+        run: |
+          export INFERA_HOME="$PWD/.local-test/node-home"
+          ./scripts/local-test.sh --stop || true
+          (agent/target/release/infera tray > tray.log 2>&1 &)
+          sleep 15
+          pgrep -f "infera tray" && grep -E "Connected|Local page" tray.log
+      - name: Logs
+        if: always()
+        run: tail -40 .local-test/*.log tray.log ollama.log 2>/dev/null || true

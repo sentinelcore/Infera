@@ -58,7 +58,7 @@ fi
 if [ -n "${TAG:-}" ]; then
   MODEL=$(echo "$TAG" | tr ':' '-')
   echo "   Using Ollama model $TAG as \"$MODEL\""
-  "$NODE" engine --url http://127.0.0.1:11434 --model "$MODEL" --engine-model "$TAG" --params-b 2 >/dev/null
+  "$NODE" engine --url http://127.0.0.1:11434 --model "$MODEL" --engine-model "$TAG" --params-b "${INFERA_PARAMS_B:-2}" >/dev/null
 else
   echo "   Using the stand-in engine (fake answers). Install Ollama and pull a model to test a real one."
   python3 "$ROOT/tools/mock_engine.py" 18090 0.03 > "$WORK/mock.log" 2>&1 &
@@ -81,9 +81,18 @@ for _ in $(seq 1 120); do grep -q "Connected to" "$WORK/node.log" 2>/dev/null &&
 sleep 3
 
 echo "6/6 Sending a test request through your computer …"
-curl -s "localhost:$PORT/v1/chat/completions" -H "Authorization: Bearer $CUST" \
-  -d "{\"model\":\"$MODEL\",\"max_tokens\":40,\"messages\":[{\"role\":\"user\",\"content\":\"Say hello in one sentence.\"}]}" \
-  | python3 -c "import sys,json;d=json.load(sys.stdin);print('   Reply:', d['choices'][0]['message']['content'].strip()[:200] if 'choices' in d else d)"
+REPLY=$(curl -s "localhost:$PORT/v1/chat/completions" -H "Authorization: Bearer $CUST" \
+  -d "{\"model\":\"$MODEL\",\"max_tokens\":60,\"messages\":[{\"role\":\"user\",\"content\":\"Say hello in one sentence.\"}]}")
+if ! echo "$REPLY" | python3 -c "import sys,json;d=json.load(sys.stdin);c=d['choices'][0]['message']['content'];assert c.strip();print('   Reply:', c.strip()[:200])"; then
+  echo "TEST FAILED: $REPLY"; echo "--- node log"; tail -20 "$WORK/node.log"; echo "--- server log"; tail -20 "$WORK/server.log"; exit 1
+fi
+echo "   Streaming check …"
+STREAM=$(curl -sN "localhost:$PORT/v1/chat/completions" -H "Authorization: Bearer $CUST" \
+  -d "{\"model\":\"$MODEL\",\"stream\":true,\"max_tokens\":20,\"messages\":[{\"role\":\"user\",\"content\":\"Count to five.\"}]}")
+echo "$STREAM" | grep -q '"finish_reason":"stop"' || { echo "TEST FAILED (stream): $STREAM"; exit 1; }
+echo "   Earnings check …"
+curl -s "localhost:$PORT/api/owner" -H "Authorization: Bearer $OWN" | python3 -c "import sys,json;d=json.load(sys.stdin);h=d['balance']['held'];assert h>0,d;print('   Owner earned (held):',h,'micro-USD')" || { echo "TEST FAILED (earnings)"; exit 1; }
+echo "ALL LOCAL TESTS PASSED"
 
 cat <<INFO
 
