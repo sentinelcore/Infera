@@ -48,7 +48,7 @@ fn unit_path() -> std::path::PathBuf {
 fn install(exe: &str) -> Result<()> {
     let home = crate::config::dir();
     let unit = format!(
-        "[Unit]\nDescription=Infera node\nAfter=network-online.target\n\n[Service]\nExecStart={exe} {}\nEnvironment=INFERA_HOME={}\nRestart=on-failure\nRestartSec=10\nTimeoutStopSec=40\n\n[Install]\nWantedBy=graphical-session.target default.target\n",
+        "[Unit]\nDescription=Infera node\nAfter=network-online.target\n\n[Service]\nExecStart={exe} {}\nEnvironment=INFERA_HOME={}\nEnvironment=INFERA_SERVICE=1\nRestart=on-failure\nRestartSec=10\nTimeoutStopSec=40\n\n[Install]\nWantedBy=graphical-session.target default.target\n",
         mode(),
         home.display()
     );
@@ -97,7 +97,7 @@ fn install(exe: &str) -> Result<()> {
 <plist version="1.0"><dict>
   <key>Label</key><string>{LABEL}</string>
   <key>ProgramArguments</key><array><string>{exe}</string><string>{}</string></array>
-  <key>EnvironmentVariables</key><dict><key>INFERA_HOME</key><string>{}</string></dict>
+  <key>EnvironmentVariables</key><dict><key>INFERA_HOME</key><string>{}</string><key>INFERA_SERVICE</key><string>1</string></dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
   <key>ExitTimeOut</key><integer>40</integer>

@@ -10,6 +10,7 @@ mod setup;
 #[cfg(feature = "tray")]
 mod tray;
 mod ui;
+mod updater;
 
 use anyhow::{bail, Result};
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
@@ -101,7 +102,9 @@ fn main() -> Result<()> {
             bail!("this build has no tray support; use `infera run`");
         }
     }
-    tokio::runtime::Runtime::new()?.block_on(async_main(cli))
+    let r = tokio::runtime::Runtime::new()?.block_on(async_main(cli));
+    updater::finish();
+    r
 }
 
 async fn async_main(cli: Cli) -> Result<()> {
@@ -164,7 +167,7 @@ pub async fn pair(code: String, server: String, name: String) -> Result<()> {
     if !status.is_success() {
         bail!("{}", v["error"]["message"].as_str().unwrap_or("pairing failed"));
     }
-    let mut c = config::load().unwrap_or_default();
+    let mut c = config::load().unwrap_or_else(|_| config::Config { auto_update: true, ..Default::default() });
     c.server = server.trim_end_matches('/').to_string();
     c.device_id = v["device_id"].as_str().unwrap_or_default().into();
     c.token = v["token"].as_str().unwrap_or_default().into();
@@ -225,13 +228,14 @@ pub async fn run_with(ask: bool, state: node::State) -> Result<()> {
         s.ui_port = c.governor.ui_port;
     }
     tokio::spawn(ui::serve(state.clone(), c.governor.ui_port));
+    tokio::spawn(updater::run(state.clone(), c.auto_update));
     node::run(c, engine, key, state).await
 }
 
 fn print_bench(b: &engine::BenchResult) {
     println!(
-        "CPU:      {} ({} cores), {:.1} GB RAM\nGPU:      {} ({:.1} GB)\nSpeed:    {:.1} tokens/s on {} ({} B), first token {} ms\nClass:    {} – {}",
-        b.cpu, b.cores, b.ram_gb, b.gpu, b.vram_gb, b.tokens_per_s, b.model_id, b.params_b, b.first_token_ms, b.class, b.reason
+        "Build:    {}\nCPU:      {} ({} cores), {:.1} GB RAM\nGPU:      {} ({:.1} GB)\nSpeed:    {:.1} tokens/s on {} ({} B), first token {} ms\nClass:    {} – {}",
+        if updater::build() > 0 { updater::build().to_string() } else { "dev".to_string() }, b.cpu, b.cores, b.ram_gb, b.gpu, b.vram_gb, b.tokens_per_s, b.model_id, b.params_b, b.first_token_ms, b.class, b.reason
     );
 }
 

@@ -23,6 +23,13 @@ pub struct Config {
     pub limits: Limits,
     #[serde(default)]
     pub bench: Option<crate::engine::BenchResult>,
+    /// Install newer test builds automatically (when idle).
+    #[serde(default = "yes")]
+    pub auto_update: bool,
+}
+
+fn yes() -> bool {
+    true
 }
 
 fn default_mode() -> String {

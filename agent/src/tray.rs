@@ -205,6 +205,7 @@ pub fn main(ask: bool) -> Result<()> {
 
         if done.load(Ordering::SeqCst) && failed.lock().unwrap().is_none() {
             tray.take();
+            crate::updater::finish();
             *control_flow = ControlFlow::Exit;
         }
     });
