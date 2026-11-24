@@ -5,6 +5,8 @@ mod idle;
 mod node;
 mod seal;
 mod service;
+#[cfg(feature = "tray")]
+mod tray;
 mod ui;
 
 use anyhow::{bail, Result};
@@ -59,13 +61,32 @@ enum Cmd {
     },
     /// Show configuration and class
     Status,
+    /// Run with a menu-bar / system-tray icon (desktop app mode)
+    Tray {
+        #[arg(long)]
+        ask: bool,
+    },
     /// Start Infera automatically when you log in: install | uninstall | status
     Service { action: String },
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     let cli = Cli::parse();
+    // The tray must own the main thread (macOS requirement); everything else runs on tokio.
+    if let Cmd::Tray { ask } = &cli.cmd {
+        let ask = *ask;
+        #[cfg(feature = "tray")]
+        return tray::main(ask);
+        #[cfg(not(feature = "tray"))]
+        {
+            let _ = ask;
+            bail!("this build has no tray support; use `infera run`");
+        }
+    }
+    tokio::runtime::Runtime::new()?.block_on(async_main(cli))
+}
+
+async fn async_main(cli: Cli) -> Result<()> {
     match cli.cmd {
         Cmd::Pair { code, server, name } => pair(code, server, name).await,
         Cmd::Engine { url, llama_server, gguf, model, engine_model, params_b } => {
@@ -95,6 +116,7 @@ async fn main() -> Result<()> {
         }
         Cmd::Run { ask } => run(ask).await,
         Cmd::Service { action } => service::run(&action),
+        Cmd::Tray { .. } => unreachable!("handled before the runtime starts"),
         Cmd::Status => {
             let c = config::load()?;
             println!("Server:   {}\nDevice:   {} ({})\nModel:    {} ({} B params)\nMode:     {}", c.server, c.device_id, c.name, c.engine.model_id, c.engine.params_b, c.mode);
@@ -135,6 +157,15 @@ async fn pair(code: String, server: String, name: String) -> Result<()> {
 }
 
 async fn run(ask: bool) -> Result<()> {
+    run_with(ask, new_state()).await
+}
+
+pub fn new_state() -> node::State {
+    Arc::new(Mutex::new(node::Shared { online: true, status: "starting".into(), ..Default::default() }))
+}
+
+/// Starts the engine, benchmarks if needed, then serves jobs until quit. `state` is shared with the tray.
+pub async fn run_with(ask: bool, state: node::State) -> Result<()> {
     let mut c = config::load()?;
     if c.device_id.is_empty() {
         bail!("this device is not paired – run `infera pair <code> --server <url>`");
@@ -155,14 +186,14 @@ async fn run(ask: bool) -> Result<()> {
         println!("This device is below the minimum for paid jobs with this model. Try a smaller model with `infera engine`.");
     }
     let key = config::identity()?;
-    let state: node::State = Arc::new(Mutex::new(node::Shared {
-        online: true,
-        mode: c.mode.clone(),
-        status: "paused".into(),
-        model_id: c.engine.model_id.clone(),
-        bench: serde_json::to_value(&c.bench).unwrap_or_default(),
-        ..Default::default()
-    }));
+    {
+        let mut s = state.lock().unwrap();
+        s.mode = c.mode.clone();
+        s.status = "paused".into();
+        s.model_id = c.engine.model_id.clone();
+        s.bench = serde_json::to_value(&c.bench).unwrap_or_default();
+        s.ui_port = c.governor.ui_port;
+    }
     tokio::spawn(ui::serve(state.clone(), c.governor.ui_port));
     node::run(c, engine, key, state).await
 }

@@ -52,6 +52,9 @@ pub struct Shared {
     pub sent: String,
     pub draining: bool,
     pub quit_after_job: bool,
+    /// Set by the tray's Quit: finish any running job, then exit.
+    pub quit_requested: bool,
+    pub ui_port: u16,
     pub job: Option<JobView>,
     pub offer: Option<OfferView>,
     pub hub: Value,
@@ -164,6 +167,36 @@ pub async fn run(cfg: Config, engine: Engine, key: SigningKey, state: State) -> 
                 tokio::time::sleep(Duration::from_millis(300)).await;
             }
             let _ = ctx.quit.send(true);
+        });
+    }
+
+    // Quit requested from the tray: same as Ctrl-C once.
+    {
+        let ctx = ctx.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_millis(300)).await;
+                let (req, running) = {
+                    let s = ctx.state.lock().unwrap();
+                    (s.quit_requested, s.job.is_some())
+                };
+                if !req {
+                    continue;
+                }
+                if running {
+                    let mut s = ctx.state.lock().unwrap();
+                    if !s.quit_after_job {
+                        s.draining = true;
+                        s.quit_after_job = true;
+                        s.log("Quitting after the current job finishes");
+                    }
+                } else {
+                    send(&ctx.state, json!({"t": "bye", "reason": "drain_complete"}));
+                    tokio::time::sleep(Duration::from_millis(300)).await;
+                    let _ = ctx.quit.send(true);
+                    return;
+                }
+            }
         });
     }
 

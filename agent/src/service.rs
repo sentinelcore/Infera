@@ -18,6 +18,18 @@ pub fn run(action: &str) -> Result<()> {
     }
 }
 
+/// Desktop sessions get the menu-bar / tray app; headless machines run the plain node.
+fn mode() -> &'static str {
+    let gui = cfg!(any(target_os = "macos", target_os = "windows"))
+        || std::env::var_os("DISPLAY").is_some()
+        || std::env::var_os("WAYLAND_DISPLAY").is_some();
+    if gui && cfg!(feature = "tray") {
+        "tray"
+    } else {
+        "run"
+    }
+}
+
 fn sh(cmd: &str, args: &[&str]) -> Result<String> {
     let o = Command::new(cmd).args(args).output().with_context(|| format!("couldn't run {cmd}"))?;
     let out = format!("{}{}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr));
@@ -36,7 +48,8 @@ fn unit_path() -> std::path::PathBuf {
 fn install(exe: &str) -> Result<()> {
     let home = crate::config::dir();
     let unit = format!(
-        "[Unit]\nDescription=Infera node\nAfter=network-online.target\n\n[Service]\nExecStart={exe} run\nEnvironment=INFERA_HOME={}\nRestart=on-failure\nRestartSec=10\nTimeoutStopSec=40\n\n[Install]\nWantedBy=default.target\n",
+        "[Unit]\nDescription=Infera node\nAfter=network-online.target\n\n[Service]\nExecStart={exe} {}\nEnvironment=INFERA_HOME={}\nRestart=on-failure\nRestartSec=10\nTimeoutStopSec=40\n\n[Install]\nWantedBy=graphical-session.target default.target\n",
+        mode(),
         home.display()
     );
     let p = unit_path();
@@ -83,7 +96,7 @@ fn install(exe: &str) -> Result<()> {
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
   <key>Label</key><string>{LABEL}</string>
-  <key>ProgramArguments</key><array><string>{exe}</string><string>run</string></array>
+  <key>ProgramArguments</key><array><string>{exe}</string><string>{}</string></array>
   <key>EnvironmentVariables</key><dict><key>INFERA_HOME</key><string>{}</string></dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
@@ -92,6 +105,7 @@ fn install(exe: &str) -> Result<()> {
   <key>StandardErrorPath</key><string>{}</string>
 </dict></plist>
 "#,
+        mode(),
         home.display(),
         log.display(),
         log.display()
@@ -125,7 +139,7 @@ fn status() -> Result<()> {
 
 #[cfg(target_os = "windows")]
 fn install(exe: &str) -> Result<()> {
-    let tr = format!("\"{exe}\" run");
+    let tr = format!("\"{exe}\" {}", mode());
     sh("schtasks", &["/Create", "/TN", "Infera Node", "/TR", &tr, "/SC", "ONLOGON", "/RL", "LIMITED", "/F"])?;
     let _ = sh("schtasks", &["/Run", "/TN", "Infera Node"]);
     println!("Infera now starts when you log in (Task Scheduler: \"Infera Node\").");

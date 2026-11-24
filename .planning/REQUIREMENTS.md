@@ -14,7 +14,7 @@ Status: ✅ done · 🔨 in progress · ⬜ not started
 | NODE-06 | Idle rules: CPU load from other programs, mains power | ✅ |
 | NODE-07 | Idle rules: keyboard/mouse inactivity | ✅ |
 | NODE-08 | Start at login as a background service (`infera service install`) | ✅ |
-| NODE-09 | Tray app (Tauri) with installers | ⬜ Phase 3 |
+| NODE-09 | Tray app (menu-bar/system tray) | ✅ tray done; signed .dmg/.msi installers ⬜ |
 | CP-01 | OpenAI-compatible `/v1/chat/completions` with streaming | ✅ |
 | CP-02 | Sealed jobs (X25519 + ChaCha20-Poly1305), Ed25519 receipts | ✅ |
 | CP-03 | Scheduler by model, privacy, class, dependability, mode | ✅ |

@@ -83,7 +83,9 @@ infera run        # or: infera run --ask   (offer card for every job)
 
 Open `http://127.0.0.1:7777` for the local page: earnings, online toggle, offer cards with a 30-second countdown, and the safe stop button.
 
-**Install and forget:** `infera service install` starts the node every time you log in (systemd on Linux, a LaunchAgent on macOS, Task Scheduler on Windows). `infera service uninstall` removes it. If the computer shuts down or logs out mid-job, the node gets up to 25 seconds to finish the job first.
+**Desktop app:** `infera tray` runs the node with a menu-bar (macOS) or system-tray (Windows, Linux) icon: green when online, amber while working, grey when paused. The menu has Go online/offline, Ask before every job, Finish current job then go offline, Open Infera, and Quit. In ask mode, a new offer shows a notification and opens the offer card.
+
+**Install and forget:** `infera service install` starts the node (as the tray app on desktops) every time you log in (systemd on Linux, a LaunchAgent on macOS, Task Scheduler on Windows). `infera service uninstall` removes it. If the computer shuts down or logs out mid-job, the node gets up to 25 seconds to finish the job first.
 
 New jobs start only after 5 minutes without keyboard or mouse use (change `idle_minutes` in `~/.infera/config.toml`; Linux needs `xprintidle` installed on X11, otherwise only CPU load is used).
 
@@ -146,6 +148,6 @@ Tested end to end with the stand-in engine (`tools/mock_engine.py`):
 - **Privacy:** jobs are encrypted between the gateway and the node process, but the node hands the prompt to a normal local engine (Ollama, llama-server), so a contributor who inspects their own engine could read it. Every device is therefore at the `sandboxed` level. **Tell beta developers not to send sensitive data.** The attested sandbox (sealed and confidential levels) comes in later phases.
 - **Trust:** the device class comes from the node's own benchmark. Test prompts (every 30 minutes per idle device, `INFERA_CANARY_MINUTES`) catch nodes that answer wrongly, but there are no re-runs of customer jobs yet.
 - **Idle rules:** CPU load from other programs, mains power, and keyboard/mouse inactivity (macOS, Windows, Linux X11 with `xprintidle`). Fullscreen games aren't detected separately.
-- **No tray app yet:** the node is a command-line program with a local web page; `infera service install` makes it start at login.
+- **Tray app, not a full installer:** `infera tray` gives a menu-bar/tray icon, but there's no .dmg/.msi with a signed app bundle yet; installation is the one-line script.
 - **Payments:** developers get admin-granted credits (no Stripe yet). USDT payouts are sent by hand from the Admin tab's batch.
 - **Not yet built:** the 48-hour hold notice on wallet changes in the node.
