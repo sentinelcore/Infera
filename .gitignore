@@ -4,3 +4,7 @@ agent/target/
 *.db-shm
 .env
 /.local-test/
+android/.gradle/
+android/build/
+android/*/build/
+android/local.properties

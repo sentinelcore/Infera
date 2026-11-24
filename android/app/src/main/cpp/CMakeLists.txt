@@ -1,0 +1,30 @@
+cmake_minimum_required(VERSION 3.22)
+project(infera_engine CXX C)
+set(CMAKE_CXX_STANDARD 17)
+
+# llama.cpp is pinned as a git submodule at the repository root.
+set(LLAMA_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../third_party/llama.cpp)
+set(LLAMA_BUILD_COMMON OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_SERVER OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+set(LLAMA_CURL OFF CACHE BOOL "" FORCE)
+set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+add_subdirectory(${LLAMA_DIR} llama-build)
+
+add_library(infera_engine SHARED infera_engine.cpp jni_bridge.cpp)
+target_include_directories(infera_engine PRIVATE ${LLAMA_DIR}/include)
+target_link_libraries(infera_engine PRIVATE llama)
+if (ANDROID)
+    target_link_libraries(infera_engine PRIVATE log android)
+endif()
+
+# Host test (desktop only): cmake -DINFERA_HOST_TEST=ON
+option(INFERA_HOST_TEST "Build a desktop test binary" OFF)
+if (INFERA_HOST_TEST)
+    add_executable(engine_test engine_test.cpp infera_engine.cpp)
+    target_include_directories(engine_test PRIVATE ${LLAMA_DIR}/include)
+    target_link_libraries(engine_test PRIVATE llama)
+endif()

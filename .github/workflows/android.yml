@@ -1,0 +1,27 @@
+name: android
+on:
+  push:
+    paths: ["android/**", "third_party/**", ".github/workflows/android.yml", "control-plane/**"]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: true }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "17" }
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.24" }
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: "8.14.3" }
+      - name: Build control plane (for the core tests)
+        run: cd control-plane && go build -o "$RUNNER_TEMP/infera-server" .
+      - name: Core tests against the real server
+        run: INFERA_SERVER_BIN="$RUNNER_TEMP/infera-server" gradle -p android :core:test
+      - name: Build the APK
+        run: gradle -p android :app:assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: infera-android-debug
+          path: android/app/build/outputs/apk/debug/*.apk

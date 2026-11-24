@@ -1,3 +1,6 @@
 [submodule "third_party/smolmaxxing"]
 	path = third_party/smolmaxxing
 	url = https://github.com/hyperionaidev/smolmaxxing.git
+[submodule "third_party/llama.cpp"]
+	path = third_party/llama.cpp
+	url = https://github.com/ggml-org/llama.cpp.git
