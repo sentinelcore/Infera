@@ -106,6 +106,7 @@ class MainActivity : Activity() {
     private fun render() {
         root.removeAllViews()
         root.addView(text("Infera", 26f, true))
+        root.addView(text("Version ${BuildConfig.VERSION_NAME} · built ${BuildConfig.BUILD_TIME}", 11f, color = Color.GRAY))
         when {
             !prefs.paired -> renderPair()
             !prefs.ready -> renderModel()
