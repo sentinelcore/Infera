@@ -2,6 +2,7 @@
 mod config;
 mod engine;
 mod idle;
+mod limits;
 mod node;
 mod seal;
 mod service;

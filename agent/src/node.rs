@@ -52,6 +52,8 @@ pub struct Shared {
     pub sent: String,
     pub draining: bool,
     pub quit_after_job: bool,
+    /// Owner pause: no new jobs until this unix time.
+    pub paused_until: u64,
     /// Set by the tray's Quit: finish any running job, then exit.
     pub quit_requested: bool,
     pub ui_port: u16,
@@ -518,6 +520,8 @@ async fn governor(ctx: Arc<Ctx>) {
     let mut sys = sysinfo::System::new();
     let me = sysinfo::get_current_pid().ok();
     let mut last_sent = Instant::now() - Duration::from_secs(60);
+    let mut tick: u64 = 0;
+    let mut last_gpu: Option<(f32, f32)> = None;
     loop {
         sys.refresh_cpu_usage();
         sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
@@ -532,6 +536,13 @@ async fn governor(ctx: Arc<Ctx>) {
         let others = (total - ours / cores).max(0.0);
         let ac = on_ac_power();
         let input_idle = crate::idle::input_idle();
+        sys.refresh_memory();
+        let free_ram = if sys.total_memory() > 0 { sys.available_memory() as f32 * 100.0 / sys.total_memory() as f32 } else { 100.0 };
+        let gpu = if tick % 3 == 0 { crate::limits::nvidia() } else { last_gpu };
+        last_gpu = gpu;
+        tick += 1;
+        let fullscreen = crate::limits::fullscreen_busy().unwrap_or(false);
+        let gcfg = &ctx.cfg.governor;
 
         let changed = {
             let mut s = ctx.state.lock().unwrap();
@@ -546,8 +557,13 @@ async fn governor(ctx: Arc<Ctx>) {
                 }
             }
             let suspended = s.hub["suspended_until"].as_u64().map(|u| u > unix()).unwrap_or(false);
+            let paused_by_owner = s.paused_until > unix();
             let reason = if !s.online {
                 "you are offline"
+            } else if paused_by_owner {
+                "paused by you"
+            } else if !crate::limits::within_hours(&gcfg.allowed_hours) {
+                "outside your allowed hours"
             } else if s.draining {
                 "finishing up"
             } else if suspended {
@@ -558,6 +574,14 @@ async fn governor(ctx: Arc<Ctx>) {
                 && input_idle.map(|d| d.as_secs_f64() < ctx.cfg.governor.idle_minutes * 60.0).unwrap_or(false)
             {
                 "you're using the computer"
+            } else if fullscreen {
+                "a game or fullscreen app is running"
+            } else if s.job.is_none() && gpu.map(|(u, _)| u > gcfg.max_other_gpu).unwrap_or(false) {
+                "the GPU is busy with another program"
+            } else if gpu.map(|(_, t)| t >= gcfg.max_gpu_temp).unwrap_or(false) {
+                "the GPU is hot"
+            } else if free_ram < gcfg.min_free_ram {
+                "memory is low"
             } else if others > ctx.cfg.governor.max_other_cpu {
                 "computer is in use"
             } else {

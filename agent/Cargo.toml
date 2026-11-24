@@ -14,6 +14,7 @@ anyhow = "1"
 axum = "0.7"
 base64 = "0.22"
 chacha20poly1305 = "0.10"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 clap = { version = "4", features = ["derive"] }
 dirs = "5"
 ed25519-dalek = { version = "2", features = ["rand_core"] }
@@ -45,4 +46,4 @@ lto = "thin"
 strip = true
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59", features = ["Win32_UI_Input_KeyboardAndMouse", "Win32_System_SystemInformation", "Win32_System_Console"] }
+windows-sys = { version = "0.59", features = ["Win32_UI_Input_KeyboardAndMouse", "Win32_System_SystemInformation", "Win32_System_Console", "Win32_UI_Shell"] }

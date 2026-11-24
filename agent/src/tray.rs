@@ -78,9 +78,12 @@ pub fn main(ask: bool) -> Result<()> {
     let ask_item = CheckMenuItem::new("Ask before every job", true, ask, None);
     let open_item = MenuItem::new("Open Infera…", true, None);
     let finish = MenuItem::new("Finish current job, then go offline", false, None);
+    let pause1 = MenuItem::new("Pause new jobs for 1 hour", true, None);
+    let pause_tom = MenuItem::new("Pause until tomorrow", true, None);
+    let resume = MenuItem::new("Resume", false, None);
     let quit = MenuItem::new("Quit Infera", true, None);
     let menu = Menu::new();
-    menu.append_items(&[&status, &today, &PredefinedMenuItem::separator(), &toggle, &ask_item, &finish, &open_item, &PredefinedMenuItem::separator(), &quit])?;
+    menu.append_items(&[&status, &today, &PredefinedMenuItem::separator(), &toggle, &ask_item, &pause1, &pause_tom, &resume, &finish, &open_item, &PredefinedMenuItem::separator(), &quit])?;
 
     let mut tray = None;
     let mut look = Look::Paused;
@@ -118,6 +121,24 @@ pub fn main(ask: bool) -> Result<()> {
                 let mut s = state.lock().unwrap();
                 s.draining = true;
                 s.log("Finishing the current job, then going offline");
+            } else if ev.id == pause1.id() || ev.id == pause_tom.id() || ev.id == resume.id() {
+                let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+                {
+                    let mut s = state.lock().unwrap();
+                    s.paused_until = if ev.id == pause1.id() {
+                        now + 3600
+                    } else if ev.id == pause_tom.id() {
+                        crate::limits::next_midnight()
+                    } else {
+                        0
+                    };
+                    if s.job.is_none() && s.paused_until > 0 {
+                        s.status = "paused".into();
+                    }
+                    let m = if s.paused_until > 0 { "Paused for new jobs" } else { "Resumed" };
+                    s.log(m);
+                }
+                push_state(&state);
             } else if ev.id == open_item.id() {
                 let _ = open::that(&page);
             } else if ev.id == quit.id() {
@@ -157,6 +178,8 @@ pub fn main(ask: bool) -> Result<()> {
         today.set_text(&today_text);
         toggle.set_text(if online { "Go offline" } else { "Go online" });
         finish.set_enabled(has_job);
+        let paused = state.lock().unwrap().paused_until > std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+        resume.set_enabled(paused);
         ask_item.set_checked(mode == "ask");
         if new_look != look {
             look = new_look;

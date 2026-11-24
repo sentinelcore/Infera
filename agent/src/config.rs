@@ -69,6 +69,28 @@ pub struct GovernorConfig {
     /// Take new jobs only after this many minutes without keyboard or mouse input (0 = ignore input).
     #[serde(default = "default_idle_minutes")]
     pub idle_minutes: f64,
+    /// Pause new jobs when the GPU is hotter than this (°C; NVIDIA via nvidia-smi).
+    #[serde(default = "default_gpu_temp")]
+    pub max_gpu_temp: f32,
+    /// Pause new jobs when other programs (games, video) use more of the GPU than this (%).
+    #[serde(default = "default_gpu_busy")]
+    pub max_other_gpu: f32,
+    /// Pause new jobs when free memory is below this share of total RAM (%).
+    #[serde(default = "default_free_ram")]
+    pub min_free_ram: f32,
+    /// Only take jobs in these local hours, e.g. "22-7" (overnight). Empty = any time.
+    #[serde(default)]
+    pub allowed_hours: String,
+}
+
+fn default_gpu_temp() -> f32 {
+    80.0
+}
+fn default_gpu_busy() -> f32 {
+    20.0
+}
+fn default_free_ram() -> f32 {
+    15.0
 }
 
 fn default_idle_minutes() -> f64 {
@@ -77,7 +99,16 @@ fn default_idle_minutes() -> f64 {
 
 impl Default for GovernorConfig {
     fn default() -> Self {
-        Self { max_other_cpu: 35.0, require_ac: true, ui_port: 7777, idle_minutes: 5.0 }
+        Self {
+            max_other_cpu: 35.0,
+            require_ac: true,
+            ui_port: 7777,
+            idle_minutes: 5.0,
+            max_gpu_temp: default_gpu_temp(),
+            max_other_gpu: default_gpu_busy(),
+            min_free_ram: default_free_ram(),
+            allowed_hours: String::new(),
+        }
     }
 }
 

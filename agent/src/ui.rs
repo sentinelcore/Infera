@@ -20,6 +20,7 @@ pub async fn serve(state: State, port: u16) {
         .route("/api/mode", post(set_mode))
         .route("/api/finish-then-offline", post(finish_then_offline))
         .route("/api/stop-now", post(stop))
+        .route("/api/pause", post(pause))
         .with_state(state.clone());
     match tokio::net::TcpListener::bind(("127.0.0.1", port)).await {
         Ok(l) => {
@@ -110,6 +111,31 @@ async fn finish_then_offline(AxState(st): AxState<State>, h: HeaderMap) -> Resul
     Ok(Json(json!({"ok": true})))
 }
 
+#[derive(Deserialize)]
+struct Pause {
+    /// minutes to pause; 0 = resume; -1 = until tomorrow (local midnight)
+    minutes: i64,
+}
+async fn pause(AxState(st): AxState<State>, h: HeaderMap, Json(p): Json<Pause>) -> Result<Json<serde_json::Value>, StatusCode> {
+    guard(&h)?;
+    {
+        let mut s = st.lock().unwrap();
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+        s.paused_until = match p.minutes {
+            0 => 0,
+            m if m < 0 => crate::limits::next_midnight(),
+            m => now + (m as u64) * 60,
+        };
+        let msg = if s.paused_until == 0 { "Resumed".to_string() } else { format!("Paused for new jobs for {} min", (s.paused_until.saturating_sub(now)) / 60) };
+        s.log(msg);
+        if s.job.is_none() && s.paused_until > 0 {
+            s.status = "paused".into();
+        }
+    }
+    push_state(&st);
+    Ok(Json(json!({"ok": true})))
+}
+
 async fn stop(AxState(st): AxState<State>, h: HeaderMap) -> Result<Json<serde_json::Value>, StatusCode> {
     guard(&h)?;
     stop_now(&st, false);
@@ -158,6 +184,8 @@ button:focus-visible,select:focus-visible{outline:2px solid var(--accent);outlin
  <button class="sec" id="finish">Finish this job, then go offline</button>
  <button class="sec danger" id="stopnow">Stop now</button>
  <div class="warn" id="stopwarn" hidden></div></div>
+<div class="card"><div class="row"><span class="k">Pause new jobs</span><span id="pauseinfo" class="k"></span></div>
+ <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="sec" style="width:auto" id="p60">1 hour</button><button class="sec" style="width:auto" id="ptom">Until tomorrow</button><button class="sec" style="width:auto" id="pres">Resume</button></div></div>
 <div class="card"><div class="row"><span class="k">Job approval</span><select id="mode"><option value="auto">Auto-approve</option><option value="ask">Ask for every job</option></select></div></div>
 <div class="card"><div class="k">Activity</div><div class="log" id="log"></div></div>
 </div><script>
@@ -181,7 +209,11 @@ async function tick(){try{S=await (await fetch("/api/state")).json();}catch(e){r
  const j=S.job;$("jobcard").hidden=!j;
  if(j){$("jobinfo").textContent=j.model+" · earns ~$"+j.est_pay_usd.toFixed(4);$("jobt").textContent=j.running_s+"s";
   $("stopwarn").hidden=false;$("stopwarn").textContent="Stopping now loses this job's pay, debits 2× its value (~$"+(j.est_pay_usd*2).toFixed(4)+") and costs 10 dependability points.";}
+ $("pauseinfo").textContent=S.paused_until*1000>Date.now()?"until "+new Date(S.paused_until*1000).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}):"";
  $("log").textContent=(S.events||[]).join("\n");}
+$("p60").onclick=()=>post("/api/pause",{minutes:60}).then(tick);
+$("ptom").onclick=()=>post("/api/pause",{minutes:-1}).then(tick);
+$("pres").onclick=()=>post("/api/pause",{minutes:0}).then(tick);
 $("online").onclick=()=>post("/api/online",{online:!S.online}).then(tick);
 $("mode").onchange=e=>post("/api/mode",{mode:e.target.value}).then(tick);
 $("accept").onclick=()=>post("/api/decide",{accept:true}).then(tick);
