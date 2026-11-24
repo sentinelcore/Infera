@@ -6,10 +6,13 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"fmt"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -56,10 +59,7 @@ func TestReceiptSignature(t *testing.T) {
 }
 
 func TestPenalties(t *testing.T) {
-	st, err := OpenStore(filepath.Join(t.TempDir(), "t.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	st := mustStore(t)
 	acct, _, _ := st.CreateAccount("o@x.dev", "owner", 0)
 	code, _ := st.CreatePairCode(acct.ID)
 	id, _, err := st.ConsumePairCode(code, "box", "pk", "linux")
@@ -100,7 +100,7 @@ func TestPenalties(t *testing.T) {
 }
 
 func TestDecay(t *testing.T) {
-	st, _ := OpenStore(filepath.Join(t.TempDir(), "t.db"))
+	st := mustStore(t)
 	acct, _, _ := st.CreateAccount("o@x.dev", "owner", 0)
 	code, _ := st.CreatePairCode(acct.ID)
 	id, _, _ := st.ConsumePairCode(code, "box", "pk", "linux")
@@ -124,7 +124,7 @@ func TestDecay(t *testing.T) {
 }
 
 func TestCanaryJudging(t *testing.T) {
-	st, _ := OpenStore(filepath.Join(t.TempDir(), "t.db"))
+	st := mustStore(t)
 	acct, _, _ := st.CreateAccount("o@x.dev", "owner", 0)
 	code, _ := st.CreatePairCode(acct.ID)
 	id, _, _ := st.ConsumePairCode(code, "box", "pk", "linux")
@@ -144,7 +144,7 @@ func TestCanaryJudging(t *testing.T) {
 }
 
 func TestStripeWebhook(t *testing.T) {
-	st, _ := OpenStore(filepath.Join(t.TempDir(), "t.db"))
+	st := mustStore(t)
 	acct, _, _ := st.CreateAccount("d@x.dev", "customer", 0)
 	b := &Billing{st: st, secretKey: "sk_test", whSecret: "whsec_test"}
 	body := []byte(`{"id":"evt_1","type":"checkout.session.completed","data":{"object":{"id":"cs_1","payment_status":"paid","amount_total":2500,"currency":"usd","metadata":{"account_id":"` + acct.ID + `"}}}}`)
@@ -170,4 +170,40 @@ func TestStripeWebhook(t *testing.T) {
 	if a.Credits != 25*microUSD {
 		t.Fatalf("credits %d, want $25 credited once", a.Credits)
 	}
+}
+
+// testStore uses SQLite, or a fresh Postgres schema when INFERA_TEST_DATABASE_URL is set.
+func testStore(t *testing.T) (*Store, error) {
+	url := os.Getenv("INFERA_TEST_DATABASE_URL")
+	if url == "" {
+		return OpenStore(filepath.Join(t.TempDir(), "t.db"))
+	}
+	schema := "t_" + randomHex(6)
+	admin, err := sql.Open("pgx", url)
+	if err != nil {
+		return nil, err
+	}
+	defer admin.Close()
+	if _, err := admin.Exec("CREATE SCHEMA " + schema); err != nil {
+		return nil, err
+	}
+	t.Cleanup(func() {
+		if a, err := sql.Open("pgx", url); err == nil {
+			a.Exec("DROP SCHEMA " + schema + " CASCADE")
+			a.Close()
+		}
+	})
+	sep := "?"
+	if strings.Contains(url, "?") {
+		sep = "&"
+	}
+	return OpenStore(url + sep + "search_path=" + schema)
+}
+
+func mustStore(t *testing.T) *Store {
+	st, err := testStore(t)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return st
 }

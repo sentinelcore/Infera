@@ -43,7 +43,7 @@ func NewCanary(gw *Gateway, interval time.Duration) *Canary {
 // EnsureCanaryAccount returns the internal account that pays for canaries.
 func EnsureCanaryAccount(st *Store) (*Account, error) {
 	var id string
-	if err := st.db.QueryRow(`SELECT id FROM accounts WHERE email='canary@infera.internal'`).Scan(&id); err == nil {
+	if err := st.queryRow(`SELECT id FROM accounts WHERE email='canary@infera.internal'`).Scan(&id); err == nil {
 		return st.AccountByID(id)
 	}
 	a, _, err := st.CreateAccount("canary@infera.internal", "customer", 0)
@@ -124,7 +124,7 @@ func (g *Gateway) judgeCanary(dev *DeviceRow, jobID, output, expect string, jobV
 	if pass {
 		return
 	}
-	rows, err := g.st.db.Query(`SELECT cause FROM score_events WHERE device_id=? AND cause IN ('canary_pass','canary_fail') ORDER BY id DESC LIMIT 3`, dev.ID)
+	rows, err := g.st.query(`SELECT cause FROM score_events WHERE device_id=? AND cause IN ('canary_pass','canary_fail') ORDER BY id DESC LIMIT 3`, dev.ID)
 	if err != nil {
 		return
 	}

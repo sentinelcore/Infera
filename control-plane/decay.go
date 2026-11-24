@@ -23,7 +23,7 @@ func (d *Dependability) DecayOnce(t int64) int {
 		created  int64
 		d30, d90 int
 	}
-	rows, err := d.st.db.Query(`SELECT id, device_id, delta, created_at, decayed_30, decayed_90 FROM score_events
+	rows, err := d.st.query(`SELECT id, device_id, delta, created_at, decayed_30, decayed_90 FROM score_events
 	  WHERE delta < 0 AND ((decayed_30 = 0 AND created_at <= ?) OR (decayed_90 = 0 AND created_at <= ?))`, t-30*86400, t-90*86400)
 	if err != nil {
 		return 0
@@ -42,12 +42,12 @@ func (d *Dependability) DecayOnce(t int64) int {
 		if e.d30 == 0 && e.created <= t-30*86400 {
 			back += -e.delta / 2
 			stage = "30 days"
-			d.st.db.Exec(`UPDATE score_events SET decayed_30=1 WHERE id=?`, e.id)
+			d.st.exec(`UPDATE score_events SET decayed_30=1 WHERE id=?`, e.id)
 		}
 		if e.d90 == 0 && e.created <= t-90*86400 {
 			back += -e.delta / 2
 			stage = "90 days"
-			d.st.db.Exec(`UPDATE score_events SET decayed_90=1 WHERE id=?`, e.id)
+			d.st.exec(`UPDATE score_events SET decayed_90=1 WHERE id=?`, e.id)
 		}
 		dev, err := d.st.Device(e.device)
 		if err != nil || back == 0 {

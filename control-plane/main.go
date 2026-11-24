@@ -30,7 +30,7 @@ func envFloat(k string, def float64) float64 {
 }
 
 func main() {
-	st, err := OpenStore(env("INFERA_DB", "infera.db"))
+	st, err := OpenStore(env("INFERA_DATABASE_URL", env("DATABASE_URL", env("INFERA_DB", "infera.db"))))
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -10,13 +10,44 @@ import (
 	"strings"
 	"time"
 
+	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
 )
 
 // Money is stored as integer micro-USD (1 USD = 1_000_000).
 const microUSD = 1_000_000
 
-type Store struct{ db *sql.DB }
+// Store works with SQLite (local and small deployments) or Postgres (INFERA_DATABASE_URL=postgres://…).
+type Store struct {
+	db *sql.DB
+	pg bool
+}
+
+// rebind turns ? placeholders into $1, $2 … for Postgres.
+func (s *Store) rebind(q string) string {
+	if !s.pg {
+		return q
+	}
+	var b strings.Builder
+	n := 0
+	for _, r := range q {
+		if r == '?' {
+			n++
+			fmt.Fprintf(&b, "$%d", n)
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+func (s *Store) exec(q string, args ...any) (sql.Result, error) {
+	return s.db.Exec(s.rebind(q), args...)
+}
+func (s *Store) query(q string, args ...any) (*sql.Rows, error) {
+	return s.db.Query(s.rebind(q), args...)
+}
+func (s *Store) queryRow(q string, args ...any) *sql.Row { return s.db.QueryRow(s.rebind(q), args...) }
 
 const schema = `
 CREATE TABLE IF NOT EXISTS accounts (
@@ -109,7 +140,32 @@ CREATE INDEX IF NOT EXISTS ledger_account ON ledger(account_id);
 CREATE INDEX IF NOT EXISTS score_device ON score_events(device_id);
 `
 
+// OpenStore opens Postgres when path is a postgres:// URL, otherwise a SQLite file.
 func OpenStore(path string) (*Store, error) {
+	if strings.HasPrefix(path, "postgres://") || strings.HasPrefix(path, "postgresql://") {
+		db, err := sql.Open("pgx", path)
+		if err != nil {
+			return nil, err
+		}
+		db.SetMaxOpenConns(10)
+		var perr error
+		for i := 0; i < 30; i++ { // the database may still be starting
+			if perr = db.Ping(); perr == nil {
+				break
+			}
+			time.Sleep(2 * time.Second)
+		}
+		if perr != nil {
+			return nil, fmt.Errorf("postgres: %w", perr)
+		}
+		pgSchema := strings.NewReplacer("INTEGER PRIMARY KEY AUTOINCREMENT", "BIGSERIAL PRIMARY KEY", "INTEGER", "BIGINT", "REAL", "DOUBLE PRECISION").Replace(schema)
+		if _, err := db.Exec(pgSchema); err != nil {
+			return nil, fmt.Errorf("schema: %w", err)
+		}
+		db.Exec(`ALTER TABLE score_events ADD COLUMN IF NOT EXISTS decayed_30 BIGINT NOT NULL DEFAULT 0`)
+		db.Exec(`ALTER TABLE score_events ADD COLUMN IF NOT EXISTS decayed_90 BIGINT NOT NULL DEFAULT 0`)
+		return &Store{db: db, pg: true}, nil
+	}
 	db, err := sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)")
 	if err != nil {
 		return nil, err
@@ -157,7 +213,7 @@ func (s *Store) CreateAccount(email, kind string, credits int64) (*Account, stri
 	}
 	key := prefix + randomHex(24)
 	a := &Account{ID: "acc_" + randomHex(8), Email: strings.TrimSpace(email), Kind: kind, Credits: credits, CreatedAt: now()}
-	_, err := s.db.Exec(`INSERT INTO accounts(id,email,kind,key_hash,credits,created_at) VALUES(?,?,?,?,?,?)`,
+	_, err := s.exec(`INSERT INTO accounts(id,email,kind,key_hash,credits,created_at) VALUES(?,?,?,?,?,?)`,
 		a.ID, a.Email, a.Kind, hashSecret(key), a.Credits, a.CreatedAt)
 	if err != nil {
 		return nil, "", err
@@ -170,7 +226,7 @@ func (s *Store) CreateAccount(email, kind string, credits int64) (*Account, stri
 
 func (s *Store) AccountByKey(key string) (*Account, error) {
 	a := &Account{}
-	err := s.db.QueryRow(`SELECT id,email,kind,credits,payout_network,payout_address,payout_address_set_at,created_at FROM accounts WHERE key_hash=?`, hashSecret(key)).
+	err := s.queryRow(`SELECT id,email,kind,credits,payout_network,payout_address,payout_address_set_at,created_at FROM accounts WHERE key_hash=?`, hashSecret(key)).
 		Scan(&a.ID, &a.Email, &a.Kind, &a.Credits, &a.PayoutNetwork, &a.PayoutAddress, &a.PayoutAddressSetAt, &a.CreatedAt)
 	if err != nil {
 		return nil, err
@@ -180,7 +236,7 @@ func (s *Store) AccountByKey(key string) (*Account, error) {
 
 func (s *Store) AccountByID(id string) (*Account, error) {
 	a := &Account{}
-	err := s.db.QueryRow(`SELECT id,email,kind,credits,payout_network,payout_address,payout_address_set_at,created_at FROM accounts WHERE id=?`, id).
+	err := s.queryRow(`SELECT id,email,kind,credits,payout_network,payout_address,payout_address_set_at,created_at FROM accounts WHERE id=?`, id).
 		Scan(&a.ID, &a.Email, &a.Kind, &a.Credits, &a.PayoutNetwork, &a.PayoutAddress, &a.PayoutAddressSetAt, &a.CreatedAt)
 	if err != nil {
 		return nil, err
@@ -189,7 +245,7 @@ func (s *Store) AccountByID(id string) (*Account, error) {
 }
 
 func (s *Store) AdjustCredits(accountID string, delta int64) error {
-	_, err := s.db.Exec(`UPDATE accounts SET credits=credits+? WHERE id=?`, delta, accountID)
+	_, err := s.exec(`UPDATE accounts SET credits=credits+? WHERE id=?`, delta, accountID)
 	return err
 }
 
@@ -198,7 +254,7 @@ func (s *Store) CreditFromStripe(sessionID, accountID string, amount int64) erro
 	if _, err := s.AccountByID(accountID); err != nil {
 		return fmt.Errorf("unknown account %s", accountID)
 	}
-	res, err := s.db.Exec(`INSERT OR IGNORE INTO stripe_payments(session_id,account_id,amount,created_at) VALUES(?,?,?,?)`, sessionID, accountID, amount, now())
+	res, err := s.exec(`INSERT INTO stripe_payments(session_id,account_id,amount,created_at) VALUES(?,?,?,?) ON CONFLICT (session_id) DO NOTHING`, sessionID, accountID, amount, now())
 	if err != nil {
 		return err
 	}
@@ -212,7 +268,7 @@ func (s *Store) CreditFromStripe(sessionID, accountID string, amount int64) erro
 }
 
 func (s *Store) SetPayoutAddress(accountID, network, address string) error {
-	_, err := s.db.Exec(`UPDATE accounts SET payout_network=?, payout_address=?, payout_address_set_at=? WHERE id=?`, network, address, now(), accountID)
+	_, err := s.exec(`UPDATE accounts SET payout_network=?, payout_address=?, payout_address_set_at=? WHERE id=?`, network, address, now(), accountID)
 	return err
 }
 
@@ -220,7 +276,7 @@ func (s *Store) CreatePairCode(ownerID string) (string, error) {
 	b := make([]byte, 4)
 	rand.Read(b)
 	code := fmt.Sprintf("%06d", (uint32(b[0])<<24|uint32(b[1])<<16|uint32(b[2])<<8|uint32(b[3]))%1000000)
-	_, err := s.db.Exec(`INSERT OR REPLACE INTO pair_codes(code,owner_id,expires_at) VALUES(?,?,?)`, code, ownerID, now()+15*60)
+	_, err := s.exec(`INSERT INTO pair_codes(code,owner_id,expires_at) VALUES(?,?,?) ON CONFLICT (code) DO UPDATE SET owner_id=excluded.owner_id, expires_at=excluded.expires_at`, code, ownerID, now()+15*60)
 	return code, err
 }
 
@@ -228,14 +284,14 @@ func (s *Store) CreatePairCode(ownerID string) (string, error) {
 func (s *Store) ConsumePairCode(code, name, pubkey, platform string) (string, string, error) {
 	var ownerID string
 	var exp int64
-	err := s.db.QueryRow(`SELECT owner_id, expires_at FROM pair_codes WHERE code=?`, code).Scan(&ownerID, &exp)
+	err := s.queryRow(`SELECT owner_id, expires_at FROM pair_codes WHERE code=?`, code).Scan(&ownerID, &exp)
 	if err != nil || exp < now() {
 		return "", "", errors.New("pairing code is wrong or expired; create a new one on the dashboard")
 	}
-	s.db.Exec(`DELETE FROM pair_codes WHERE code=?`, code)
+	s.exec(`DELETE FROM pair_codes WHERE code=?`, code)
 	id := "dev_" + randomHex(8)
 	token := "idt_" + randomHex(24)
-	_, err = s.db.Exec(`INSERT INTO devices(id,owner_id,name,token_hash,pubkey,platform,created_at) VALUES(?,?,?,?,?,?,?)`,
+	_, err = s.exec(`INSERT INTO devices(id,owner_id,name,token_hash,pubkey,platform,created_at) VALUES(?,?,?,?,?,?,?)`,
 		id, ownerID, name, hashSecret(token), pubkey, platform, now())
 	return id, token, err
 }
@@ -257,16 +313,16 @@ func scanDevice(sc interface{ Scan(...any) error }) (*DeviceRow, error) {
 }
 
 func (s *Store) DeviceAuth(id, token string) (*DeviceRow, error) {
-	row := s.db.QueryRow(`SELECT `+deviceCols+` FROM devices WHERE id=? AND token_hash=?`, id, hashSecret(token))
+	row := s.queryRow(`SELECT `+deviceCols+` FROM devices WHERE id=? AND token_hash=?`, id, hashSecret(token))
 	return scanDevice(row)
 }
 
 func (s *Store) Device(id string) (*DeviceRow, error) {
-	return scanDevice(s.db.QueryRow(`SELECT `+deviceCols+` FROM devices WHERE id=?`, id))
+	return scanDevice(s.queryRow(`SELECT `+deviceCols+` FROM devices WHERE id=?`, id))
 }
 
 func (s *Store) DevicesByOwner(ownerID string) ([]*DeviceRow, error) {
-	rows, err := s.db.Query(`SELECT `+deviceCols+` FROM devices WHERE owner_id=? ORDER BY created_at`, ownerID)
+	rows, err := s.query(`SELECT `+deviceCols+` FROM devices WHERE owner_id=? ORDER BY created_at`, ownerID)
 	if err != nil {
 		return nil, err
 	}
@@ -283,41 +339,41 @@ func (s *Store) DevicesByOwner(ownerID string) ([]*DeviceRow, error) {
 }
 
 func (s *Store) UpdateDeviceProfile(id, platform, class, privacy, bench, models string) error {
-	_, err := s.db.Exec(`UPDATE devices SET platform=?, class=?, privacy_level=?, bench=?, models=?, last_seen=? WHERE id=?`,
+	_, err := s.exec(`UPDATE devices SET platform=?, class=?, privacy_level=?, bench=?, models=?, last_seen=? WHERE id=?`,
 		platform, class, privacy, bench, models, now(), id)
 	return err
 }
 
 func (s *Store) TouchDevice(id string) {
-	s.db.Exec(`UPDATE devices SET last_seen=? WHERE id=?`, now(), id)
+	s.exec(`UPDATE devices SET last_seen=? WHERE id=?`, now(), id)
 }
 
 func (s *Store) SetDeviceScore(id string, score float64, streak int, suspendedUntil int64) error {
-	_, err := s.db.Exec(`UPDATE devices SET dependability=?, streak=?, suspended_until=? WHERE id=?`, score, streak, suspendedUntil, id)
+	_, err := s.exec(`UPDATE devices SET dependability=?, streak=?, suspended_until=? WHERE id=?`, score, streak, suspendedUntil, id)
 	return err
 }
 
 func (s *Store) AddLedger(accountID, deviceID, jobID, kind string, amount, releaseAt int64, note string) error {
-	_, err := s.db.Exec(`INSERT INTO ledger(account_id,device_id,job_id,kind,amount,release_at,note,created_at) VALUES(?,?,?,?,?,?,?,?)`,
+	_, err := s.exec(`INSERT INTO ledger(account_id,device_id,job_id,kind,amount,release_at,note,created_at) VALUES(?,?,?,?,?,?,?,?)`,
 		accountID, deviceID, jobID, kind, amount, releaseAt, note, now())
 	return err
 }
 
 func (s *Store) AddScoreEvent(deviceID, jobID, cause string, delta float64, evidence string) error {
-	_, err := s.db.Exec(`INSERT INTO score_events(device_id,job_id,cause,delta,evidence,created_at) VALUES(?,?,?,?,?,?)`,
+	_, err := s.exec(`INSERT INTO score_events(device_id,job_id,cause,delta,evidence,created_at) VALUES(?,?,?,?,?,?)`,
 		deviceID, jobID, cause, delta, evidence, now())
 	return err
 }
 
 func (s *Store) CountScoreEvents(deviceID, cause string, since int64) int {
 	var n int
-	s.db.QueryRow(`SELECT COUNT(*) FROM score_events WHERE device_id=? AND cause=? AND created_at>=?`, deviceID, cause, since).Scan(&n)
+	s.queryRow(`SELECT COUNT(*) FROM score_events WHERE device_id=? AND cause=? AND created_at>=?`, deviceID, cause, since).Scan(&n)
 	return n
 }
 
 func (s *Store) SumScoreDelta(deviceID, cause string, since int64) float64 {
 	var v sql.NullFloat64
-	s.db.QueryRow(`SELECT SUM(delta) FROM score_events WHERE device_id=? AND cause=? AND created_at>=?`, deviceID, cause, since).Scan(&v)
+	s.queryRow(`SELECT CAST(SUM(delta) AS DOUBLE PRECISION) FROM score_events WHERE device_id=? AND cause=? AND created_at>=?`, deviceID, cause, since).Scan(&v)
 	return v.Float64
 }
 
@@ -331,12 +387,12 @@ type Balance struct {
 func (s *Store) OwnerBalance(accountID string) Balance {
 	var b Balance
 	t := now()
-	s.db.QueryRow(`SELECT
-	  COALESCE(SUM(CASE WHEN kind='earning' AND release_at<=? THEN amount
-	                    WHEN kind IN ('debit','payout') THEN amount ELSE 0 END),0),
-	  COALESCE(SUM(CASE WHEN kind='earning' AND release_at>? THEN amount ELSE 0 END),0),
-	  COALESCE(SUM(CASE WHEN kind='payout' THEN -amount ELSE 0 END),0),
-	  COALESCE(SUM(CASE WHEN kind='debit' THEN -amount ELSE 0 END),0)
+	s.queryRow(`SELECT
+	  CAST(COALESCE(SUM(CASE WHEN kind='earning' AND release_at<=? THEN amount
+	                    WHEN kind IN ('debit','payout') THEN amount ELSE 0 END),0) AS BIGINT),
+	  CAST(COALESCE(SUM(CASE WHEN kind='earning' AND release_at>? THEN amount ELSE 0 END),0) AS BIGINT),
+	  CAST(COALESCE(SUM(CASE WHEN kind='payout' THEN -amount ELSE 0 END),0) AS BIGINT),
+	  CAST(COALESCE(SUM(CASE WHEN kind='debit' THEN -amount ELSE 0 END),0) AS BIGINT)
 	  FROM ledger WHERE account_id=?`, t, t, accountID).Scan(&b.Available, &b.Held, &b.Paid, &b.Penalties)
 	return b
 }
@@ -352,7 +408,7 @@ type LedgerEntry struct {
 }
 
 func (s *Store) RecentLedger(accountID string, limit int) []LedgerEntry {
-	rows, err := s.db.Query(`SELECT kind,amount,job_id,device_id,release_at,note,created_at FROM ledger WHERE account_id=? ORDER BY id DESC LIMIT ?`, accountID, limit)
+	rows, err := s.query(`SELECT kind,amount,job_id,device_id,release_at,note,created_at FROM ledger WHERE account_id=? ORDER BY id DESC LIMIT ?`, accountID, limit)
 	if err != nil {
 		return nil
 	}
@@ -376,7 +432,7 @@ type ScoreEvent struct {
 }
 
 func (s *Store) RecentScoreEvents(ownerID string, limit int) []ScoreEvent {
-	rows, err := s.db.Query(`SELECT e.device_id,e.job_id,e.cause,e.delta,e.evidence,e.created_at FROM score_events e
+	rows, err := s.query(`SELECT e.device_id,e.job_id,e.cause,e.delta,e.evidence,e.created_at FROM score_events e
 	  JOIN devices d ON d.id=e.device_id WHERE d.owner_id=? AND e.cause NOT IN ('completed','canary_pass') ORDER BY e.id DESC LIMIT ?`, ownerID, limit)
 	if err != nil {
 		return nil
@@ -392,13 +448,13 @@ func (s *Store) RecentScoreEvents(ownerID string, limit int) []ScoreEvent {
 }
 
 func (s *Store) InsertJob(id, customerID, deviceID, model, route string) error {
-	_, err := s.db.Exec(`INSERT INTO jobs(id,customer_id,device_id,model,route,status,started_at) VALUES(?,?,?,?,?,?,?)`,
+	_, err := s.exec(`INSERT INTO jobs(id,customer_id,device_id,model,route,status,started_at) VALUES(?,?,?,?,?,?,?)`,
 		id, customerID, deviceID, model, route, "running", now())
 	return err
 }
 
 func (s *Store) FinishJob(id, status string, tin, tout int, charge, ownerPay int64, cause, receipt string) error {
-	_, err := s.db.Exec(`UPDATE jobs SET status=?, tokens_in=?, tokens_out=?, charge=?, owner_pay=?, abort_cause=?, receipt=?, finished_at=? WHERE id=?`,
+	_, err := s.exec(`UPDATE jobs SET status=?, tokens_in=?, tokens_out=?, charge=?, owner_pay=?, abort_cause=?, receipt=?, finished_at=? WHERE id=?`,
 		status, tin, tout, charge, ownerPay, cause, receipt, now(), id)
 	return err
 }
@@ -411,7 +467,7 @@ type JobStats struct {
 func (s *Store) OwnerJobStats(ownerID string) JobStats {
 	var st JobStats
 	start := time.Now().Truncate(24 * time.Hour).Unix()
-	s.db.QueryRow(`SELECT COUNT(*), COALESCE(SUM(owner_pay),0) FROM jobs j JOIN devices d ON d.id=j.device_id
+	s.queryRow(`SELECT COUNT(*), CAST(COALESCE(SUM(owner_pay),0) AS BIGINT) FROM jobs j JOIN devices d ON d.id=j.device_id
 	  WHERE d.owner_id=? AND j.status='done' AND j.finished_at>=?`, ownerID, start).Scan(&st.Today, &st.EarnToday)
 	return st
 }
@@ -427,7 +483,7 @@ type PayoutLine struct {
 }
 
 func (s *Store) PayoutCandidates(min int64) []PayoutLine {
-	rows, err := s.db.Query(`SELECT id,email,payout_network,payout_address,payout_address_set_at FROM accounts WHERE kind='owner' AND payout_address!=''`)
+	rows, err := s.query(`SELECT id,email,payout_network,payout_address,payout_address_set_at FROM accounts WHERE kind='owner' AND payout_address!=''`)
 	if err != nil {
 		return nil
 	}
@@ -457,7 +513,7 @@ func (s *Store) PayoutCandidates(min int64) []PayoutLine {
 
 func (s *Store) RecordPayout(accountID string, amount int64, network, address, tx string) error {
 	id := "pay_" + randomHex(8)
-	if _, err := s.db.Exec(`INSERT INTO payouts(id,account_id,amount,network,address,status,tx_hash,created_at) VALUES(?,?,?,?,?,?,?,?)`,
+	if _, err := s.exec(`INSERT INTO payouts(id,account_id,amount,network,address,status,tx_hash,created_at) VALUES(?,?,?,?,?,?,?,?)`,
 		id, accountID, amount, network, address, "sent", tx, now()); err != nil {
 		return err
 	}
