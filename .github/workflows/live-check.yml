@@ -4,14 +4,13 @@ name: live-check
 on:
   push:
     branches: ["ccr-13fb360c-2cnfc4"]
-    paths: ["control-plane/**"]
+    paths: ["control-plane/**", ".github/workflows/live-check.yml"]
   schedule: [{ cron: "17 * * * *" }]
   workflow_dispatch:
 jobs:
   check:
-    if: vars.INFERA_PUBLIC_URL != ''
     runs-on: ubuntu-latest
-    env: { URL: "${{ vars.INFERA_PUBLIC_URL }}" }
+    env: { URL: "${{ vars.INFERA_PUBLIC_URL || 'https://control-plane-production-11856175.up.railway.app' }}" }
     steps:
       - name: Wait for Railway to redeploy after a push
         if: github.event_name == 'push'

@@ -18,8 +18,9 @@
 - Test builds: every push refreshes the "Infera test build" pre-release (APK + desktop nodes).
 - Railway: `control-plane/railway.json` + `docs/DEPLOY_RAILWAY.md`; server honours `$PORT`.
 
+- **Live on Railway:** https://control-plane-production-11856175.up.railway.app (project `infera`, service `control-plane`, volume at /data). Deployed from the branch by Claude via the Railway API; `live-check` workflow tests it.
+
 ## Next
-- Owner: one-time Railway setup (docs/DEPLOY_RAILWAY.md), then set INFERA_PUBLIC_URL variable in GitHub.
 - macOS checks run on GitHub's Mac runners instead of the owner's Mac mini (cloud sessions can't use the Mac yet).
 - Install the CI-built APK on an Android phone and test with a small GGUF model.
 - Stripe test keys → live checkout test.
