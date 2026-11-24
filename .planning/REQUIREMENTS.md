@@ -26,6 +26,7 @@ Status: ✅ done · 🔨 in progress · ⬜ not started
 | CP-07 | Penalty decay: half after 30 days, dropped after 90 | ✅ |
 | CP-08 | Stripe prepaid credits for developers | ✅ code done; needs Stripe test keys to verify live |
 | CP-09 | Postgres + multi-region | ✅ Postgres (Railway, private network); multi-region ⬜ |
+| GROW-01 | Home page: waitlist with referral codes (each referral = 1 day up), live stats, leaderboard, Share-on-X pages, admin invite waves | ✅ |
 | PAY-01 | USDT wallet with address checks and 48 h hold | ✅ |
 | PAY-02 | Weekly payout batch + mark sent | ✅ |
 | PAY-03 | USDT sending via partners (manual batch for now) | ⬜ manual by decision |

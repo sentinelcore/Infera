@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http/httptest"
 	"os"
@@ -237,5 +238,35 @@ func TestRerunPenalty(t *testing.T) {
 	r.mismatch(id, "disagreed", 0)
 	if d, _ := st.Device(id); d.Dependability != 55 {
 		t.Fatalf("two mismatches in five should penalize: %v", d.Dependability)
+	}
+}
+
+func TestWaitlistReferrals(t *testing.T) {
+	st := mustStore(t)
+	a := &API{st: st, hub: NewHub(st), adminToken: "adm"}
+	join := func(body string) WaitlistEntry {
+		r := httptest.NewRequest("POST", "/api/waitlist", strings.NewReader(body))
+		w := httptest.NewRecorder()
+		a.JoinWaitlist(w, r)
+		var e WaitlistEntry
+		json.Unmarshal(w.Body.Bytes(), &e)
+		return e
+	}
+	first := join(`{"email":"a@x.dev","kind":"contributor"}`)
+	second := join(`{"email":"b@x.dev","kind":"developer"}`)
+	if first.Position != 1 || second.Position != 2 {
+		t.Fatalf("positions %d %d", first.Position, second.Position)
+	}
+	join(`{"email":"c@x.dev","ref":"` + second.Code + `"}`)
+	again := join(`{"email":"b@x.dev"}`) // joining again returns the same spot
+	if again.Code != second.Code || again.Referrals != 1 || again.Position != 1 {
+		t.Fatalf("referral should move b to the front: %+v", again)
+	}
+	r := httptest.NewRequest("POST", "/api/admin/waitlist/invite", strings.NewReader(`{"count":1}`))
+	r.Header.Set("Authorization", "Bearer adm")
+	w := httptest.NewRecorder()
+	a.AdminWaitlist(w, r)
+	if !strings.Contains(w.Body.String(), "b@x.dev") {
+		t.Fatalf("invite batch should be b: %s", w.Body.String())
 	}
 }

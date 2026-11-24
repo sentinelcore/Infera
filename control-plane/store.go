@@ -164,7 +164,8 @@ func OpenStore(path string) (*Store, error) {
 		}
 		db.Exec(`ALTER TABLE score_events ADD COLUMN IF NOT EXISTS decayed_30 BIGINT NOT NULL DEFAULT 0`)
 		db.Exec(`ALTER TABLE score_events ADD COLUMN IF NOT EXISTS decayed_90 BIGINT NOT NULL DEFAULT 0`)
-		return &Store{db: db, pg: true}, nil
+		st := &Store{db: db, pg: true}
+		return st, st.MigrateGrowth()
 	}
 	db, err := sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)")
 	if err != nil {
@@ -177,7 +178,8 @@ func OpenStore(path string) (*Store, error) {
 	// Migrations for databases created by earlier builds (errors mean the column exists).
 	db.Exec(`ALTER TABLE score_events ADD COLUMN decayed_30 INTEGER NOT NULL DEFAULT 0`)
 	db.Exec(`ALTER TABLE score_events ADD COLUMN decayed_90 INTEGER NOT NULL DEFAULT 0`)
-	return &Store{db: db}, nil
+	st := &Store{db: db}
+	return st, st.MigrateGrowth()
 }
 
 func now() int64 { return time.Now().Unix() }

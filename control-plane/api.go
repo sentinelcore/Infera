@@ -109,12 +109,13 @@ type deviceView struct {
 	Models         []string `json:"models"`
 	LastSeen       int64    `json:"last_seen"`
 	Bench          any      `json:"bench"`
+	PublicTag      string   `json:"public_tag"`
 }
 
 func (a *API) viewDevice(d *DeviceRow) deviceView {
 	v := deviceView{ID: d.ID, Name: d.Name, Platform: d.Platform, Class: d.Class, PrivacyLevel: d.PrivacyLevel,
 		Dependability: d.Dependability, Band: BandFor(d.Dependability), Streak: d.Streak, SuspendedUntil: d.SuspendedUntil,
-		LastSeen: d.LastSeen, Status: "offline"}
+		LastSeen: d.LastSeen, Status: "offline", PublicTag: publicTag(d.ID)}
 	if d.Models != "" {
 		v.Models = strings.Split(d.Models, ",")
 	}
@@ -293,5 +294,7 @@ func (a *API) Network(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	a.hub.mu.Unlock()
-	writeJSON(w, map[string]any{"devices_online": online, "models": a.hub.OnlineModels()})
+	st := a.st.netStats()
+	writeJSON(w, map[string]any{"devices_online": online, "models": a.hub.OnlineModels(),
+		"jobs_today": st.JobsToday, "tokens_today": st.TokensToday, "devices_registered": st.Devices, "waitlist": st.Waitlist})
 }

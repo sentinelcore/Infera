@@ -63,14 +63,58 @@ td.num { font-variant-numeric: tabular-nums; font-family: var(--mono); }
   <header>
     <div class="logo">Infera<small id="netstat">connecting…</small></div>
     <nav role="tablist">
-      <button role="tab" data-tab="contribute" aria-selected="true">Contribute a device</button>
+      <button role="tab" data-tab="home" aria-selected="true">Home</button>
+      <button role="tab" data-tab="contribute">Contribute a device</button>
       <button role="tab" data-tab="dev">Developers</button>
       <button role="tab" data-tab="admin">Admin</button>
     </nav>
   </header>
 
+  <!-- HOME -->
+  <section id="tab-home">
+    <h2 style="font-size:clamp(1.8rem,4.5vw,2.6rem);margin-top:36px;max-width:22ch">Your idle laptop, desktop or phone serves AI. You get paid.</h2>
+    <p class="lede">Install once. Infera runs AI jobs only while your device is idle, plugged in and cool, pauses the moment you're back, and pays you weekly in USDT. Developers get an OpenAI-compatible API running on real community hardware.</p>
+    <div class="stats" id="net-stats">
+      <div class="stat"><div class="k">Devices online</div><div class="v" id="s-online">–</div></div>
+      <div class="stat"><div class="k">Jobs today</div><div class="v" id="s-jobs">–</div></div>
+      <div class="stat"><div class="k">Tokens today</div><div class="v" id="s-tokens">–</div></div>
+      <div class="stat"><div class="k">On the waitlist</div><div class="v" id="s-wait">–</div></div>
+    </div>
+    <div class="grid" style="margin-top:14px">
+      <div class="card" id="wl-form">
+        <h3>Join the beta</h3>
+        <p class="muted">The beta opens in waves. Every friend who joins with your link moves you up a day.</p>
+        <label for="wl-email">Email</label><input id="wl-email" type="email" autocomplete="email">
+        <label for="wl-x">X handle (optional)</label><input id="wl-x" placeholder="@you">
+        <label for="wl-kind">I want to</label>
+        <select id="wl-kind"><option value="contributor">Earn with my devices</option><option value="developer">Use the API</option><option value="both">Both</option></select>
+        <label for="wl-device">Main device (optional)</label><input id="wl-device" placeholder="e.g. RTX 4070 PC, M2 MacBook Air, Pixel 8">
+        <button class="primary" id="wl-join">Join the waitlist</button>
+      </div>
+      <div class="card" id="wl-done" hidden>
+        <h3>You're on the list</h3>
+        <div class="big" id="wl-pos">#–</div>
+        <p class="muted" id="wl-of"></p>
+        <label for="wl-link">Your referral link</label><input id="wl-link" readonly>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="primary" id="wl-copy">Copy link</button>
+          <a class="primary" id="wl-share" target="_blank" rel="noopener" style="margin-top:12px;padding:9px 16px;border-radius:8px;background:var(--fg);color:var(--bg);text-decoration:none;font-weight:600">Share on X</a>
+        </div>
+      </div>
+      <div class="card">
+        <h3>How it works</h3>
+        <p class="muted">1. Install the node (Windows, Mac, Linux) or the Android app.<br>2. It benchmarks your device and picks the right model.<br>3. Jobs arrive while you're away; accept automatically or one by one.<br>4. Earnings are held a few days, then paid weekly in USDT.</p>
+      </div>
+    </div>
+    <h2>Leaderboard · last 7 days</h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th>#</th><th>Device</th><th>Class</th><th>Jobs</th><th>Tokens</th><th>Dependability</th></tr></thead>
+      <tbody id="lb-rows"><tr><td colspan="6" class="muted">No jobs yet this week.</td></tr></tbody>
+    </table></div>
+  </section>
+
   <!-- CONTRIBUTE -->
-  <section id="tab-contribute">
+  <section id="tab-contribute" hidden>
     <div id="owner-signin">
       <h2>Earn from your idle computer</h2>
       <p class="lede">Create a contributor account, install the Infera node on your laptop or desktop, and pair it with a 6-digit code. Your device serves AI jobs while you're away and you're paid weekly in USDT.</p>
@@ -195,6 +239,14 @@ td.num { font-variant-numeric: tabular-nums; font-family: var(--mono); }
 
   <!-- ADMIN -->
   <section id="tab-admin" hidden>
+    <h2>Beta waitlist</h2>
+    <p class="lede">Invite the next wave: this marks the top of the queue as invited and lists their emails and X handles so you can send them the invite code.</p>
+    <div class="card">
+      <label for="w-count">How many to invite</label><input id="w-count" type="number" value="25" min="1" max="1000">
+      <button class="primary" id="w-invite">Invite next wave</button>
+      <button class="ghost" id="w-csv">Download full queue (CSV)</button>
+      <pre id="w-out" hidden></pre>
+    </div>
     <h2>Weekly USDT payout batch</h2>
     <p class="lede">Lists contributors whose available balance is above the minimum and whose wallet has passed the 48-hour hold. Send USDT from the treasury wallet, then record each transaction hash.</p>
     <div class="card">
@@ -229,14 +281,50 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<":
 // tabs
 document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   document.querySelectorAll("nav button").forEach(x => x.setAttribute("aria-selected", x === b));
-  ["contribute", "dev", "admin"].forEach(t => $("tab-" + t).hidden = t !== b.dataset.tab);
+  ["home", "contribute", "dev", "admin"].forEach(t => $("tab-" + t).hidden = t !== b.dataset.tab);
   location.hash = b.dataset.tab;
 });
 if (location.hash) document.querySelector(`nav button[data-tab="${location.hash.slice(1)}"]`)?.click();
 
 async function net() {
-  try { const n = await call("/api/network"); $("netstat").textContent = `${n.devices_online} devices online`; } catch (e) { $("netstat").textContent = "offline"; }
+  try {
+    const n = await call("/api/network");
+    $("netstat").textContent = `${n.devices_online} devices online`;
+    $("s-online").textContent = n.devices_online; $("s-jobs").textContent = n.jobs_today;
+    $("s-tokens").textContent = (n.tokens_today || 0).toLocaleString(); $("s-wait").textContent = n.waitlist;
+  } catch (e) { $("netstat").textContent = "offline"; }
 }
+async function leaderboard() {
+  try {
+    const d = await call("/api/leaderboard?days=7");
+    const rows = d.rows || [];
+    $("lb-rows").innerHTML = rows.length ? rows.map(r => `<tr><td class="num">${r.rank}</td><td class="mono">${esc(r.device)}</td><td>${esc(r.class)}</td>
+      <td class="num">${r.jobs}</td><td class="num">${r.tokens.toLocaleString()}</td><td class="num">${r.dependability.toFixed(1)}</td></tr>`).join("")
+      : `<tr><td colspan="6" class="muted">No jobs yet this week.</td></tr>`;
+  } catch (e) {}
+}
+leaderboard(); setInterval(leaderboard, 60000);
+
+// ---------- waitlist ----------
+const refFromURL = new URLSearchParams(location.search).get("ref") || "";
+function showSpot(e) {
+  store.set("infera-waitlist", e.referral_code);
+  $("wl-form").hidden = true; $("wl-done").hidden = false;
+  $("wl-pos").textContent = e.invited ? "Invited" : "#" + e.position;
+  $("wl-of").textContent = e.invited ? "Check your email or DMs for the invite code." : `of ${e.total} waiting · ${e.referrals} friend${e.referrals === 1 ? "" : "s"} joined with your link`;
+  const link = `${location.origin}/?ref=${e.referral_code}#home`;
+  $("wl-link").value = link;
+  $("wl-share").href = "https://x.com/intent/post?text=" + encodeURIComponent("I just joined the Infera beta: idle laptops, desktops and phones serving AI and earning USDT. Join with my link to move us both up:") + "&url=" + encodeURIComponent(link);
+}
+$("wl-join").onclick = async () => {
+  try {
+    const e = await call("/api/waitlist", { method: "POST", body: JSON.stringify({ email: $("wl-email").value, xhandle: $("wl-x").value, kind: $("wl-kind").value, device: $("wl-device").value, ref: refFromURL || store.get("infera-ref") }) });
+    showSpot(e);
+  } catch (e) { toast(e.message); }
+};
+$("wl-copy").onclick = () => { navigator.clipboard?.writeText($("wl-link").value).then(() => toast("Link copied"), () => { $("wl-link").select(); }); };
+if (refFromURL) store.set("infera-ref", refFromURL);
+(async () => { const c = store.get("infera-waitlist"); if (c) { try { showSpot(await call("/api/waitlist/" + c)); } catch (e) {} } })();
 net(); setInterval(net, 15000);
 
 // ---------- contributor ----------
@@ -271,7 +359,7 @@ async function showOwner() {
         <td>${esc(v.class)}<div class="muted">${esc(v.privacy_level)}</div></td>
         <td class="num">${v.dependability.toFixed(1)}<div class="muted">streak ${v.streak}</div></td>
         <td class="num">${v.band.suspended ? "frozen" : v.band.hold_days + " d · " + v.band.multiplier.toFixed(2) + "×"}${v.band.batch_only ? '<div class="muted">batch only</div>' : ""}</td>
-        <td class="mono">${esc((v.models || []).join(", "))}</td></tr>`;
+        <td class="mono">${esc((v.models || []).join(", "))}<div><a target="_blank" rel="noopener" href="https://x.com/intent/post?text=${encodeURIComponent("My idle device is earning by serving AI on Infera this week:")}&url=${encodeURIComponent(location.origin + "/s/" + v.public_tag)}">Share on X</a></div></td></tr>`;
     }).join("") : `<tr><td colspan="6" class="muted">No devices yet. Add one below.</td></tr>`;
     const pens = d.penalties || [];
     $("pen-rows").innerHTML = pens.length ? pens.map(p => `<tr><td>${when(p.created_at)}</td><td class="mono">${esc(p.device_id)}</td>
@@ -360,6 +448,21 @@ if (new URLSearchParams(location.search).get("paid")) toast("Payment received. Y
 if (custKey) showCust();
 
 // ---------- admin ----------
+$("w-invite").onclick = async () => {
+  try {
+    const r = await call("/api/admin/waitlist/invite", { method: "POST", key: $("a-token").value, body: JSON.stringify({ count: +$("w-count").value }) });
+    const list = r.entries || [];
+    $("w-out").hidden = false;
+    $("w-out").textContent = list.length ? `Invite code: ${r.invite_code || "(none set)"}\n\n` + list.map(e => `${e.position}. ${e.email}${e.x_handle ? "  @" + e.x_handle : ""}  (${e.kind})`).join("\n") : "Nobody left in the queue.";
+  } catch (e) { toast(e.message + " (enter the admin token below first)"); }
+};
+$("w-csv").onclick = async () => {
+  try {
+    const r = await fetch("/api/admin/waitlist?format=csv", { headers: { Authorization: "Bearer " + $("a-token").value } });
+    if (!r.ok) throw new Error("admin token required");
+    $("w-out").hidden = false; $("w-out").textContent = await r.text();
+  } catch (e) { toast(e.message); }
+};
 $("a-load").onclick = async () => {
   try {
     const tok = $("a-token").value;
