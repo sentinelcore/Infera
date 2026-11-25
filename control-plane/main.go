@@ -144,6 +144,8 @@ func main() {
 	// "/" is the public landing page; the dashboard (sign-up, devices, API keys) is /app.
 	mux.HandleFunc("GET /{$}", page("landing.html"))
 	mux.HandleFunc("GET /app", page("index.html"))
+	mux.HandleFunc("GET /terms", page("terms.html"))
+	mux.HandleFunc("GET /privacy-policy", page("privacy-policy.html"))
 	mux.Handle("GET /", http.FileServer(http.FS(sub)))
 
 	addr := env("INFERA_ADDR", ":8080")

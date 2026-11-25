@@ -42,4 +42,5 @@ Don't send secrets, personal data or anything confidential until the <code>seale
 <h2>Contributors (device owners)</h2>
 <p>We keep your email, device names, a hash of each device's own machine ID (to stop duplicate accounts), benchmark results, earnings, and your USDT payout address. Payout addresses are checked against sanctions lists. Identity checks apply above a lifetime payout threshold.</p>
 
-<p><a href="/performance">Performance</a> · <a href="/status">Status</a> · <a href="/">Infera</a></p></main></body></html>`
+<p>Operated by Greencircuit Innovations LLP, India · <a href="mailto:hello@valanor.network">hello@valanor.network</a></p>
+<p><a href="/privacy-policy">Privacy policy</a> · <a href="/terms">Terms</a> · <a href="/performance">Performance</a> · <a href="/status">Status</a> · <a href="/">Infera</a></p></main></body></html>`
