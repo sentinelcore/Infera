@@ -3,8 +3,9 @@ package network.infera.node
 /** On-device engine: llama.cpp through JNI (src/main/cpp). Loads GGUF models, the same files desktops use. */
 class LlamaEngine(path: String, override val modelId: String, threads: Int = bestThreads(),
                   override val parallel: Int = bestParallel()) : Engine {
-    // Each request gets its own context window; smaller when several run at once (memory).
-    private var handle: Long = nativeLoad(path, if (parallel > 1) 2048 else 4096, threads, parallel)
+    // Each request gets a 4096-token window (8-bit cache; the engine falls back to 2048 with a
+    // 16-bit cache if 8-bit isn't available).
+    private var handle: Long = nativeLoad(path, 4096, threads, parallel)
 
     fun interface TokenSink { fun onText(utf8: ByteArray): Boolean }
 
@@ -19,7 +20,7 @@ class LlamaEngine(path: String, override val modelId: String, threads: Int = bes
     fun close() { if (handle != 0L) nativeFree(handle); handle = 0 }
 
     companion object {
-        init { System.loadLibrary("infera_engine") }
+        init { NativeLib.variant }
         /** Threads = the phone's fast cores (prime + performance), not the slow efficiency ones. */
         fun bestThreads(): Int {
             val freqs = (0 until Runtime.getRuntime().availableProcessors()).mapNotNull { i ->

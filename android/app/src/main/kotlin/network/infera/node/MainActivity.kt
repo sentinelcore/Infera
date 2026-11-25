@@ -589,6 +589,7 @@ class MainActivity : Activity() {
             row("Model", "${prefs.modelId} (%.1f B)".format(prefs.paramsB)),
             row("Memory", "%.0f GB RAM".format(phoneRamGb())),
             row("Processor", (if (Build.VERSION.SDK_INT >= 31) Build.SOC_MODEL else Build.HARDWARE) + " · ${prefs.threads.takeIf { it > 0 } ?: LlamaEngine.bestThreads()} fast cores"),
+            row("Engine", if (NativeLib.variant == "i8mm") "Matrix-accelerated (i8mm)" else "Standard (dot-product)"),
             row("Tested", if (prefs.benchAt > 0) java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(prefs.benchAt)) else "–"),
         ))
         root.addView(heading("Jobs this phone can take"))

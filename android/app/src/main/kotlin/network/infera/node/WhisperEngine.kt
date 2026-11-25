@@ -22,7 +22,7 @@ class WhisperEngine(path: String, override val modelId: String, private val cach
     fun close() { if (handle != 0L) nativeFree(handle); handle = 0 }
 
     companion object {
-        init { System.loadLibrary("infera_engine") }
+        init { NativeLib.variant }
         @JvmStatic private external fun nativeLoad(path: String, threads: Int): Long
         @JvmStatic private external fun nativeTranscribe(h: Long, pcm: FloatArray, language: String, prompt: String): ByteArray
         @JvmStatic private external fun nativeFree(h: Long)

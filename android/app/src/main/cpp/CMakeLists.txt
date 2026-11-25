@@ -13,8 +13,17 @@ set(LLAMA_CURL OFF CACHE BOOL "" FORCE)
 set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
 # Phones: use the dot-product and fp16 instructions every arm64 phone since ~2018 has
 # (Cortex-A55/A75 and later). Without this, quantized models run several times slower.
+# A second build (module :engine-i8mm) adds the i8mm matrix instructions of newer chips
+# (Snapdragon 8 Gen 1+, Dimensity 9000+, Tensor G2+); the app loads it when the CPU has them.
+if (NOT DEFINED INFERA_LIB_NAME)
+    set(INFERA_LIB_NAME infera_engine)
+endif()
 if (ANDROID_ABI STREQUAL "arm64-v8a")
-    set(GGML_CPU_ARM_ARCH "armv8.2-a+dotprod+fp16" CACHE STRING "" FORCE)
+    if (DEFINED INFERA_ARM_ARCH)
+        set(GGML_CPU_ARM_ARCH "${INFERA_ARM_ARCH}" CACHE STRING "" FORCE)
+    else()
+        set(GGML_CPU_ARM_ARCH "armv8.2-a+dotprod+fp16" CACHE STRING "" FORCE)
+    endif()
 endif()
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 add_subdirectory(${LLAMA_DIR} llama-build)
@@ -27,11 +36,11 @@ target_link_libraries(whisper_lite PUBLIC ggml)
 set_target_properties(whisper_lite PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_compile_definitions(whisper_lite PRIVATE WHISPER_VERSION="infera")
 
-add_library(infera_engine SHARED infera_engine.cpp jni_bridge.cpp)
-target_include_directories(infera_engine PRIVATE ${LLAMA_DIR}/include)
-target_link_libraries(infera_engine PRIVATE llama whisper_lite)
+add_library(${INFERA_LIB_NAME} SHARED infera_engine.cpp jni_bridge.cpp)
+target_include_directories(${INFERA_LIB_NAME} PRIVATE ${LLAMA_DIR}/include)
+target_link_libraries(${INFERA_LIB_NAME} PRIVATE llama whisper_lite)
 if (ANDROID)
-    target_link_libraries(infera_engine PRIVATE log android)
+    target_link_libraries(${INFERA_LIB_NAME} PRIVATE log android)
 endif()
 
 # Host test (desktop only): cmake -DINFERA_HOST_TEST=ON

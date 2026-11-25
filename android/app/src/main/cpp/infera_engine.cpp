@@ -2,6 +2,10 @@
 
 #include <algorithm>
 #include <cstring>
+#include <fstream>
+#if defined(__linux__)
+#include <sched.h>
+#endif
 
 #include "llama.h"
 
@@ -60,7 +64,18 @@ std::string Engine::load(const std::string &path, int n_ctx, int n_threads, int 
         cp.n_threads = n_threads;
         cp.n_threads_batch = n_threads;
     }
+    // 8-bit attention cache: half the memory of 16-bit, so each request can get a longer
+    // window. Needs flash attention; fall back to the 16-bit cache if unavailable.
+    cp.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_AUTO;
+    cp.type_k = GGML_TYPE_Q8_0;
+    cp.type_v = GGML_TYPE_Q8_0;
     ctx_ = llama_init_from_model(model_, cp);
+    if (!ctx_) {
+        cp.type_k = GGML_TYPE_F16;
+        cp.type_v = GGML_TYPE_F16;
+        cp.n_ctx = std::min<uint32_t>(cp.n_ctx, 2048u * n_par_);
+        ctx_ = llama_init_from_model(model_, cp);
+    }
     if (!ctx_) return "could not create the inference context";
     n_ctx_ = (int)llama_n_ctx_seq(ctx_);
     seq_used_.assign(n_par_, false);
@@ -208,7 +223,30 @@ std::pair<int, int> Engine::generate(const std::vector<Message> &messages, int m
 
 // Worker: admits waiting requests (prefill), then decodes one token for every active
 // request per step, in a single llama_decode call.
+// Pins the calling thread (and the compute threads it later creates, which inherit the
+// mask) to the fast cores: those whose top frequency is within 70% of the fastest core.
+static void pin_to_fast_cores() {
+#if defined(__linux__)
+    std::vector<long> freq;
+    for (int i = 0; i < 64; i++) {
+        std::ifstream f("/sys/devices/system/cpu/cpu" + std::to_string(i) + "/cpufreq/cpuinfo_max_freq");
+        long v = 0;
+        if (!(f >> v)) break;
+        freq.push_back(v);
+    }
+    if (freq.size() < 2) return;
+    long top = *std::max_element(freq.begin(), freq.end());
+    cpu_set_t set;
+    CPU_ZERO(&set);
+    int n = 0;
+    for (size_t i = 0; i < freq.size(); i++)
+        if (freq[i] * 10 >= top * 7) { CPU_SET(i, &set); n++; }
+    if (n > 0 && n < (int)freq.size()) sched_setaffinity(0, sizeof(set), &set);
+#endif
+}
+
 void Engine::loop() {
+    pin_to_fast_cores();
     llama_batch step = llama_batch_init(n_par_, 0, 1);
     llama_batch pre = llama_batch_init(512, 0, 1);
     auto mem = llama_get_memory(ctx_);

@@ -22,7 +22,7 @@ class PhoneRules(private val ctx: Context, private val prefs: Prefs) {
         val caps = cm.getNetworkCapabilities(cm.activeNetwork)
         val wifi = caps != null && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
         val pm = ctx.getSystemService(PowerManager::class.java)
-        val cool = Build.VERSION.SDK_INT < 29 || pm.currentThermalStatus < PowerManager.THERMAL_STATUS_MODERATE
+        val cool = coolEnough(pm)
         val screenOk = !pm.isInteractive || prefs.workWithScreenOn
         return listOf(
             Check("Charging", plugged, if (plugged) "Plugged in" else "Plug in your charger"),
@@ -43,8 +43,22 @@ class PhoneRules(private val ctx: Context, private val prefs: Prefs) {
         val caps = cm.getNetworkCapabilities(cm.activeNetwork)
         if (caps == null || !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)) return "not on Wi-Fi"
         val pm = ctx.getSystemService(PowerManager::class.java)
-        if (Build.VERSION.SDK_INT >= 29 && pm.currentThermalStatus >= PowerManager.THERMAL_STATUS_MODERATE) return "phone is warm"
+        if (!coolEnough(pm)) return "phone is warm"
         if (pm.isInteractive && !prefs.workWithScreenOn) return "screen is on"
         return null
+    }
+
+    /**
+     * Not hot now, and not about to throttle: Android's forecast of thermal headroom in
+     * 10 seconds (1.0 = throttling starts). Pausing new jobs early keeps speed steady instead
+     * of the phone slowing itself down mid-job.
+     */
+    private fun coolEnough(pm: PowerManager): Boolean {
+        if (Build.VERSION.SDK_INT >= 29 && pm.currentThermalStatus >= PowerManager.THERMAL_STATUS_MODERATE) return false
+        if (Build.VERSION.SDK_INT >= 30) {
+            val h = pm.getThermalHeadroom(10)
+            if (!h.isNaN() && h >= 0.9f) return false
+        }
+        return true
     }
 }
