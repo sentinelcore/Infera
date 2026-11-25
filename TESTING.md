@@ -118,7 +118,9 @@ curl https://<your domain>/v1/chat/completions \
   -d '{"model":"qwen3-1.7b","stream":true,"messages":[{"role":"user","content":"Hello"}]}'
 ```
 
-Any OpenAI SDK works with `base_url = https://<your domain>/v1`. Extra fields:
+Any OpenAI SDK works with `base_url = https://<your domain>/v1`.
+
+Transcription (Whisper): `curl https://<your domain>/v1/audio/transcriptions -H "Authorization: Bearer ik_cust_…" -F model=whisper-small -F file=@talk.mp3` (json, `response_format=text` or `verbose_json`; up to 25 MB; billed per audio minute). Contributors serve it by running a Whisper server (e.g. whisper.cpp `whisper-server --inference-path /v1/audio/transcriptions --port 8178 -m ggml-small.bin`) and adding `--stt-url http://127.0.0.1:8178 --stt-model whisper-small` to `infera engine`. Extra fields:
 - `"infera_batch": true` marks a job that can wait. Devices with lower dependability can take batch jobs.
 - `"privacy"` sets the minimum privacy level. Only `sandboxed` is available in this beta (see the privacy limits below).
 

@@ -329,6 +329,9 @@ fn served_models(cfg: &Config) -> Vec<String> {
     if !cfg.engine.embed_model.is_empty() && !cfg.engine.url.is_empty() {
         m.push(cfg.engine.embed_model.clone());
     }
+    if !cfg.engine.stt_model.is_empty() && !cfg.engine.stt_url.is_empty() {
+        m.push(cfg.engine.stt_model.clone());
+    }
     m
 }
 
@@ -415,7 +418,8 @@ async fn handle_offer(ctx: Arc<Ctx>, m: Value) {
     send(&ctx.state, json!({"t": "accept", "job_id": job_id, "sandbox_pub": sandbox.public_b64}));
 
     let result = match tokio::time::timeout(Duration::from_secs(20), prx).await {
-        Ok(Ok((epk, n, c))) if m["job_type"].as_str() == Some("embeddings") => run_embed(&ctx, &job_id, &model, sandbox, &epk, &n, &c).await,
+        Ok(Ok((epk, n, c))) if m["job_type"].as_str() == Some("embeddings") => run_embed(&ctx, &job_id, &model, sandbox, &epk, &n, &c, false).await,
+        Ok(Ok((epk, n, c))) if m["job_type"].as_str() == Some("transcription") => run_embed(&ctx, &job_id, &model, sandbox, &epk, &n, &c, true).await,
         Ok(Ok((epk, n, c))) => run_job(&ctx, &job_id, &model, sandbox, &epk, &n, &c, cancel_rx).await,
         _ => Err(anyhow::anyhow!("job payload never arrived")),
     };
@@ -444,13 +448,16 @@ async fn handle_offer(ctx: Arc<Ctx>, m: Value) {
     }
 }
 
-/// Embedding job: one sealed result, signed like any other job.
+/// Embedding or transcription job: one sealed result, signed like any other job.
+/// For transcriptions, "tokens_in" in the receipt is the audio length in seconds.
 #[allow(clippy::too_many_arguments)]
-async fn run_embed(ctx: &Arc<Ctx>, job_id: &str, model: &str, sandbox: SandboxKey, epk: &str, n: &str, c: &str) -> Result<()> {
+async fn run_embed(ctx: &Arc<Ctx>, job_id: &str, model: &str, sandbox: SandboxKey, epk: &str, n: &str, c: &str, speech: bool) -> Result<()> {
     let chan = sandbox.open(job_id, epk)?;
     let request: Value = serde_json::from_slice(&chan.open_down(n, c)?)?;
-    ctx.state.lock().unwrap().log(format!("Running embeddings job {job_id} ({model}) in the sealed sandbox"));
-    let (result, tin) = match ctx.engine.embed(request).await {
+    let kind = if speech { "Transcription" } else { "Embeddings" };
+    ctx.state.lock().unwrap().log(format!("Running {} job {job_id} ({model}) in the sealed sandbox", kind.to_lowercase()));
+    let res = if speech { ctx.engine.transcribe(request).await } else { ctx.engine.embed(request).await };
+    let (result, tin) = match res {
         Ok(r) => r,
         Err(e) => {
             send(&ctx.state, json!({"t": "abort", "job_id": job_id, "reason": "engine_error"}));
@@ -464,7 +471,7 @@ async fn run_embed(ctx: &Arc<Ctx>, job_id: &str, model: &str, sandbox: SandboxKe
     let receipt = format!("{job_id}|{model}|{hash}|{tin}|0|{}", unix());
     let sig = B64.encode(ctx.key.sign(receipt.as_bytes()).to_bytes());
     send(&ctx.state, json!({"t": "done", "job_id": job_id, "tokens_in": tin, "tokens_out": 0, "receipt": receipt, "sig": sig}));
-    ctx.state.lock().unwrap().log(format!("Embeddings job {job_id} done ({tin} tokens)"));
+    ctx.state.lock().unwrap().log(format!("{kind} job {job_id} done ({tin} {})", if speech { "s of audio" } else { "tokens" }));
     Ok(())
 }
 

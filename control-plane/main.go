@@ -39,6 +39,7 @@ func main() {
 		Prices:        map[string]Price{},
 		DefaultPrice:  Price{In: envFloat("INFERA_PRICE_IN", 0.10), Out: envFloat("INFERA_PRICE_OUT", 0.30)},
 		EmbedPrice:    envFloat("INFERA_PRICE_EMBED", 0.02),
+		AudioPrice:    envFloat("INFERA_PRICE_AUDIO_MIN", 0.003),
 		BatchDiscount: envFloat("INFERA_BATCH_DISCOUNT", 0.5),
 		FallbackURL:   os.Getenv("INFERA_FALLBACK_URL"),
 		FallbackKey:   os.Getenv("INFERA_FALLBACK_KEY"),
@@ -80,6 +81,7 @@ func main() {
 	mux.HandleFunc("POST /v1/chat/completions", gw.ChatCompletions)
 	mux.HandleFunc("GET /v1/models", gw.Models)
 	mux.HandleFunc("POST /v1/embeddings", gw.Embeddings)
+	mux.HandleFunc("POST /v1/audio/transcriptions", gw.Transcriptions)
 	mux.HandleFunc("POST /v1/batch", gw.BatchSubmit)
 	mux.HandleFunc("GET /v1/batch", gw.BatchList)
 	mux.HandleFunc("GET /v1/batch/{id}", gw.BatchGet)

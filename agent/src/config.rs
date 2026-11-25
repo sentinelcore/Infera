@@ -57,6 +57,15 @@ pub struct EngineConfig {
     pub embed_model: String,
     #[serde(default)]
     pub embed_engine_model: String,
+    /// Optional speech-to-text server (whisper.cpp server, faster-whisper, …) with an
+    /// OpenAI-compatible /v1/audio/transcriptions endpoint.
+    #[serde(default)]
+    pub stt_url: String,
+    /// Name customers request for transcription, e.g. "whisper-small".
+    #[serde(default)]
+    pub stt_model: String,
+    #[serde(default)]
+    pub stt_engine_model: String,
     /// Size in billions of parameters, used for the device class.
     #[serde(default)]
     pub params_b: f64,

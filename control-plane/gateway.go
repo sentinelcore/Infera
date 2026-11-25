@@ -29,6 +29,7 @@ type Config struct {
 	FallbackKey   string
 	FallbackModel string
 	EmbedPrice    float64 // USD per 1M input tokens for embeddings
+	AudioPrice    float64 // USD per audio minute for transcriptions
 	BatchDiscount float64 // fraction off for queued batch jobs
 	FirstToken    time.Duration
 	HedgeAfter    time.Duration // 0 = no hedged requests
@@ -419,7 +420,9 @@ func (g *Gateway) abort(dev *DeviceRow, jobID, cause string, estPay float64, evi
 // jobCost prices a job: chat by input and output tokens, embeddings by input tokens.
 func (g *Gateway) jobCost(req chatRequest, tin, tout int) int64 {
 	var c int64
-	if req.jobType == "embeddings" {
+	if req.jobType == "transcription" { // tin = audio seconds
+		c = int64(math.Ceil(float64(tin) / 60 * g.cfg.AudioPrice * microUSD))
+	} else if req.jobType == "embeddings" {
 		c = int64(math.Ceil(float64(tin) / 1e6 * g.cfg.EmbedPrice * microUSD))
 	} else {
 		c = g.cfg.cost(req.Model, tin, tout)
@@ -517,6 +520,8 @@ type streamWriter struct {
 	buf     strings.Builder
 	rbuf    strings.Builder
 	embed   bool // embeddings response instead of chat
+	// transcribe: "" for chat, else the response_format of a transcription
+	transcribe string
 }
 
 func newStreamWriter(w http.ResponseWriter, stream bool, jobID, model string) *streamWriter {
@@ -586,6 +591,10 @@ func (s *streamWriter) delta(text string) {
 }
 
 func (s *streamWriter) finish(tin, tout int) {
+	if s.transcribe != "" {
+		s.writeTranscription(tin)
+		return
+	}
 	if s.embed {
 		var res struct {
 			Data json.RawMessage `json:"data"`

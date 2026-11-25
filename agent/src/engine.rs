@@ -14,6 +14,9 @@ pub struct Engine {
     pub url: String,
     pub model: String,
     pub embed_model: String,
+    /// Speech-to-text endpoint base URL and engine model name (empty = not served).
+    pub stt_url: String,
+    pub stt_model: String,
     child: Option<Child>,
     http: reqwest::Client,
 }
@@ -31,8 +34,10 @@ impl Engine {
         let http = reqwest::Client::builder().connect_timeout(Duration::from_secs(5)).build()?;
         let model = if cfg.engine_model.is_empty() { cfg.model_id.clone() } else { cfg.engine_model.clone() };
         let embed_model = if cfg.embed_engine_model.is_empty() { cfg.embed_model.clone() } else { cfg.embed_engine_model.clone() };
+        let stt_url = cfg.stt_url.trim_end_matches('/').to_string();
+        let stt_model = if cfg.stt_engine_model.is_empty() { cfg.stt_model.clone() } else { cfg.stt_engine_model.clone() };
         if !cfg.url.is_empty() {
-            let e = Engine { url: cfg.url.trim_end_matches('/').to_string(), model, embed_model, child: None, http };
+            let e = Engine { url: cfg.url.trim_end_matches('/').to_string(), model, embed_model, stt_url, stt_model, child: None, http };
             e.wait_ready(Duration::from_secs(10)).await?;
             return Ok(e);
         }
@@ -50,7 +55,7 @@ impl Engine {
             .stderr(Stdio::null())
             .kill_on_drop(true);
         let child = cmd.spawn().map_err(|e| anyhow!("could not start llama-server at {}: {e}", cfg.llama_server))?;
-        let e = Engine { url: format!("http://127.0.0.1:{port}"), model, embed_model, child: Some(child), http };
+        let e = Engine { url: format!("http://127.0.0.1:{port}"), model, embed_model, stt_url, stt_model, child: Some(child), http };
         e.wait_ready(Duration::from_secs(180)).await?;
         Ok(e)
     }
@@ -141,6 +146,41 @@ impl Engine {
         let v: serde_json::Value = resp.json().await?;
         let tin = v["usage"]["prompt_tokens"].as_u64().unwrap_or(0) as u32;
         Ok((serde_json::json!({"data": v["data"], "usage": v["usage"]}), tin))
+    }
+
+    /// Speech to text. `request`: {"audio_b64", "filename", "language", "prompt"}.
+    /// Returns ({"text", "duration", "language", "segments"}, audio seconds).
+    pub async fn transcribe(&self, request: serde_json::Value) -> Result<(serde_json::Value, u32)> {
+        use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+        if self.stt_url.is_empty() {
+            bail!("this device doesn't serve transcription");
+        }
+        let audio = B64.decode(request["audio_b64"].as_str().unwrap_or(""))?;
+        let bytes = audio.len();
+        let name = request["filename"].as_str().filter(|s| !s.is_empty()).unwrap_or("audio.wav").to_string();
+        let mut form = reqwest::multipart::Form::new()
+            .part("file", reqwest::multipart::Part::bytes(audio).file_name(name))
+            .text("model", self.stt_model.clone())
+            .text("response_format", "verbose_json");
+        for k in ["language", "prompt"] {
+            if let Some(v) = request[k].as_str().filter(|v| !v.is_empty()) {
+                form = form.text(k, v.to_string());
+            }
+        }
+        let resp = self.http.post(format!("{}/v1/audio/transcriptions", self.stt_url)).multipart(form).send().await?;
+        if !resp.status().is_success() {
+            bail!("speech engine returned {}", resp.status());
+        }
+        let v: serde_json::Value = resp.json().await?;
+        // Audio length: from the engine, else a conservative estimate from the file size.
+        let secs = v["duration"].as_f64().map(|d| d.ceil() as u32).unwrap_or(((bytes / 16_000) as u32).max(1)).max(1);
+        let mut out = serde_json::json!({"text": v["text"], "duration": secs});
+        for k in ["language", "segments"] {
+            if !v[k].is_null() {
+                out[k] = v[k].clone();
+            }
+        }
+        Ok((out, secs))
     }
 
     pub async fn stop(&mut self) {

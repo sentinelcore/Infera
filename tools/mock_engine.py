@@ -23,7 +23,14 @@ class H(BaseHTTPRequestHandler):
         body = json.dumps({"object": "list", "data": [{"id": "mock"}]}).encode()
         self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(body)
     def do_POST(self):
-        req = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        raw = self.rfile.read(int(self.headers["Content-Length"]))
+        if self.path.endswith("/audio/transcriptions"):  # imitate a Whisper server
+            ok = b'name="file"' in raw and b'name="model"' in raw
+            body = json.dumps({"text": " Hello from the audio file." if ok else "", "language": "en",
+                               "duration": round(len(raw) / 32000, 2)}).encode()
+            self.send_response(200 if ok else 400); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(body)
+            return
+        req = json.loads(raw)
         if self.path.startswith("/api/pull"):
             self.send_response(200); self.send_header("Content-Type", "application/x-ndjson"); self.end_headers()
             for done in (0, 50, 100):

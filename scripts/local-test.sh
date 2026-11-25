@@ -67,7 +67,8 @@ else
   echo $! > "$WORK/mock.pid"
   sleep 0.5
   EMBED=mock-embed
-  "$NODE" engine --url http://127.0.0.1:18090 --model "$MODEL" --params-b 1 --embed-model "$EMBED" >/dev/null
+  STT=mock-whisper
+  "$NODE" engine --url http://127.0.0.1:18090 --model "$MODEL" --params-b 1 --embed-model "$EMBED" --stt-url http://127.0.0.1:18090 --stt-model "$STT" >/dev/null
 fi
 # Local testing: don't wait for 5 minutes of keyboard idle.
 python3 - "$INFERA_HOME/config.toml" <<'PY'
@@ -99,6 +100,12 @@ if [ -n "${EMBED:-}" ]; then
   echo "   Embeddings check ($EMBED) …"
   curl -s "localhost:$PORT/v1/embeddings" -H "Authorization: Bearer $CUST" -d "{\"model\":\"$EMBED\",\"input\":[\"idle laptops\",\"serve AI\"]}" \
     | python3 -c "import sys,json;d=json.load(sys.stdin);assert len(d['data'])==2 and len(d['data'][0]['embedding'])>0,d;print('   2 vectors of', len(d['data'][0]['embedding']), 'dims')" || { echo "TEST FAILED (embeddings)"; exit 1; }
+fi
+if [ -n "${STT:-}" ]; then
+  echo "   Transcription check ($STT) …"
+  head -c 64000 /dev/urandom > "$WORK/clip.wav"
+  curl -s "localhost:$PORT/v1/audio/transcriptions" -H "Authorization: Bearer $CUST" -F "model=$STT" -F "file=@$WORK/clip.wav" \
+    | python3 -c "import sys,json;d=json.load(sys.stdin);assert 'Hello' in d.get('text',''),d;print('   Text:', d['text'])" || { echo "TEST FAILED (transcription)"; exit 1; }
 fi
 echo "   Batch queue check …"
 BODY="{\"requests\":[{\"model\":\"$MODEL\",\"max_tokens\":30,\"messages\":[{\"role\":\"user\",\"content\":\"Name a colour.\"}]},{\"model\":\"$MODEL\",\"max_tokens\":30,\"messages\":[{\"role\":\"user\",\"content\":\"Name a fruit.\"}]}"

@@ -149,7 +149,7 @@ class MainActivity : Activity() {
 
     private fun renderModel() {
         val ram = phoneRamGb()
-        val status = text(if (prefs.klass == "unrated") "Too slow with that model (below 3 tokens/s). Pick a smaller one." else "")
+        val status = text(setupStatus.ifEmpty { if (prefs.klass == "unrated") "Too slow with that model (below 3 tokens/s). Pick a smaller one." else "" })
         val picker = android.widget.Spinner(this)
         val go = button("Download and start") {}
         val bar = android.widget.ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 100; visibility = View.GONE }
@@ -201,6 +201,18 @@ class MainActivity : Activity() {
             val u = url.text.toString().trim(); val mid = id.text.toString().trim()
             runSetup { say -> setupModel(u, mid, pb, say = say) }
         }).apply { visibility = View.GONE }
+        val stored = File(filesDir, "models").listFiles()?.filter { it.isFile } ?: emptyList()
+        if (stored.isNotEmpty() && !setupBusy) {
+            val mb = stored.sumOf { it.length() } / 1_000_000
+            root.addView(button("Remove downloaded models (%d MB)".format(mb), primary = false) {
+                if (setupBusy) return@button
+                NodeService.engine?.close(); NodeService.engine = null
+                stored.forEach { it.delete() }
+                prefs.modelPath = ""; prefs.klass = ""
+                setupStatus = "Removed %d MB of models.".format(mb)
+                render()
+            })
+        }
         root.addView(button("Advanced: use my own model file", primary = false) { adv.visibility = View.VISIBLE })
         root.addView(adv)
     }
@@ -286,7 +298,17 @@ class MainActivity : Activity() {
             val ram = (getSystemService(android.app.ActivityManager::class.java)).let { val mi = android.app.ActivityManager.MemoryInfo(); it.getMemoryInfo(mi); mi.totalMem / 1e9 }
             prefs.modelPath = file.path; prefs.modelId = modelId; prefs.paramsB = paramsB; prefs.tps = tps.toFloat()
             prefs.klass = phoneClass(tps, ram)
-            say("%.1f tokens/s · class %s".format(tps, prefs.klass))
+            if (prefs.klass == "unrated") {
+                // Too slow to earn with this model: free the space straight away.
+                NodeService.engine?.close(); NodeService.engine = null
+                val mb = file.length() / 1_000_000
+                file.delete()
+                prefs.modelPath = ""
+                say("%.1f tokens/s: too slow for this model (needs 3+). Removed it to free %d MB. Pick a smaller one.".format(tps, mb))
+                ui.post { current?.render() }
+                return
+            }
+            say("%.1f tokens/s · class %s · %d threads".format(tps, prefs.klass, LlamaEngine.bestThreads()))
             if (prefs.klass != "unrated") { prefs.enabled = true; NodeService.start(this) }
             ui.post { current?.render() }
             ui.post { current?.progress?.visibility = View.GONE }

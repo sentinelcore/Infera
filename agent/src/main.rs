@@ -69,6 +69,15 @@ enum Cmd {
         /// Embedding model name to send to the engine, if different
         #[arg(long, default_value = "")]
         embed_engine_model: String,
+        /// Also serve transcription: a Whisper server with /v1/audio/transcriptions (whisper.cpp server, faster-whisper)
+        #[arg(long, default_value = "")]
+        stt_url: String,
+        /// Transcription model name customers request, e.g. whisper-small
+        #[arg(long, default_value = "")]
+        stt_model: String,
+        /// Transcription model name to send to the speech server, if different
+        #[arg(long, default_value = "")]
+        stt_engine_model: String,
     },
     /// Benchmark this device and show its class
     Bench,
@@ -111,7 +120,7 @@ async fn async_main(cli: Cli) -> Result<()> {
     match cli.cmd {
         Cmd::Setup { code, server, no_service } => setup::run(code, server, no_service).await,
         Cmd::Pair { code, server, name } => pair(code, server, name).await,
-        Cmd::Engine { url, llama_server, gguf, model, engine_model, params_b, embed_model, embed_engine_model } => {
+        Cmd::Engine { url, llama_server, gguf, model, engine_model, params_b, embed_model, embed_engine_model, stt_url, stt_model, stt_engine_model } => {
             let mut c = config::load()?;
             c.engine.url = url;
             c.engine.llama_server = llama_server;
@@ -121,6 +130,9 @@ async fn async_main(cli: Cli) -> Result<()> {
             c.engine.params_b = params_b;
             c.engine.embed_model = embed_model;
             c.engine.embed_engine_model = embed_engine_model;
+            c.engine.stt_url = stt_url;
+            c.engine.stt_model = stt_model;
+            c.engine.stt_engine_model = stt_engine_model;
             c.bench = None;
             config::save(&c)?;
             println!("Engine saved. Run `infera bench`, then `infera run`.");
