@@ -64,7 +64,25 @@ class MainActivity : Activity() {
         current = this
         if (Build.VERSION.SDK_INT >= 33) requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
         root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(24), dp(18), dp(24)) }
-        setContentView(ScrollView(this).apply { setBackgroundColor(bg); addView(root) })
+        actionBar?.hide() // the app draws its own "Infera" header
+        val scroll = ScrollView(this).apply { setBackgroundColor(bg); addView(root) }
+        // Android 15 draws apps edge to edge: keep content clear of the status bar and gesture bar.
+        scroll.setOnApplyWindowInsetsListener { _, insets ->
+            val (top, bottom) = if (Build.VERSION.SDK_INT >= 30) {
+                val b = insets.getInsets(android.view.WindowInsets.Type.systemBars() or android.view.WindowInsets.Type.displayCutout())
+                b.top to b.bottom
+            } else {
+                @Suppress("DEPRECATION") (insets.systemWindowInsetTop to insets.systemWindowInsetBottom)
+            }
+            root.setPadding(dp(18), top + dp(12), dp(18), bottom + dp(24))
+            insets
+        }
+        window.statusBarColor = bg
+        window.navigationBarColor = bg
+        if (!dark && Build.VERSION.SDK_INT >= 30) window.insetsController?.setSystemBarsAppearance(
+            android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,
+            android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS)
+        setContentView(scroll)
         NodeService.listeners.add(listener)
         render()
         handlePairLink(intent)
