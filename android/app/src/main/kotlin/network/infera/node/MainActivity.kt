@@ -27,6 +27,19 @@ import java.io.File
 
 /** One screen: pair → get a model → benchmark → run, with the Uber-style offer card. */
 class MainActivity : Activity() {
+    companion object {
+        /** Model download/benchmark state, shared across activity instances (rotation, reopening). */
+        @Volatile var setupBusy = false
+        @Volatile var setupStatus = ""
+        @Volatile var setupPct = -1
+        @Volatile var current: MainActivity? = null
+        /** HTTP/1.1 only: long HTTP/2 downloads from the model CDN get "stream was reset: PROTOCOL_ERROR". */
+        val downloadHttp: okhttp3.OkHttpClient by lazy {
+            Api.http.newBuilder().protocols(listOf(okhttp3.Protocol.HTTP_1_1))
+                .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS).build()
+        }
+    }
+    private var statusView: TextView? = null
     private lateinit var prefs: Prefs
     private lateinit var root: LinearLayout
     private val ui = Handler(Looper.getMainLooper())
@@ -39,6 +52,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = Prefs(this)
+        current = this
         if (Build.VERSION.SDK_INT >= 33) requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
         root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(24), dp(18), dp(24)) }
         setContentView(ScrollView(this).apply { addView(root) })
@@ -81,7 +95,7 @@ class MainActivity : Activity() {
         }.start()
     }
 
-    override fun onDestroy() { NodeService.listeners.remove(listener); super.onDestroy() }
+    override fun onDestroy() { NodeService.listeners.remove(listener); if (current === this) current = null; super.onDestroy() }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
@@ -162,16 +176,18 @@ class MainActivity : Activity() {
                 }
             }.start()
         }
+        statusView = status
+        if (setupBusy) { // a download is already running (e.g. the app was reopened): show it, don't start another
+            go.isEnabled = false; go.text = "Working…"; status.text = setupStatus
+            if (setupPct >= 0) { bar.visibility = View.VISIBLE; bar.progress = setupPct }
+        }
         go.setOnClickListener {
             val m = catalog.getOrNull(picker.selectedItemPosition) ?: return@setOnClickListener
+            if (setupBusy) return@setOnClickListener
             go.isEnabled = false
             go.text = "Working…"
-            status.text = "Starting download of ${m.ggufMb} MB… keep the app open"
-            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            Thread {
-                setupModel(m.ggufUrl, m.id, m.paramsB.toFloat(), m.sha256, m.ggufMb.toLong()) { s -> ui.post { status.text = s } }
-                ui.post { go.isEnabled = true; go.text = "Download and start"; window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
-            }.start()
+            status.text = "Starting download of ${m.ggufMb} MB… you can rotate or lock the phone"
+            runSetup { say -> setupModel(m.ggufUrl, m.id, m.paramsB.toFloat(), m.sha256, m.ggufMb.toLong(), say) }
         }
 
         // Advanced: any GGUF link (most testers never need this)
@@ -181,10 +197,34 @@ class MainActivity : Activity() {
         val adv = card(text("Advanced: use your own model", 15f, true), url, id, params, button("Use this model", primary = false) {
             val pb = params.text.toString().toFloatOrNull() ?: 0f
             if (id.text.isBlank() || pb <= 0f || url.text.isBlank()) { status.text = "Enter the link, name and size."; return@button }
-            Thread { setupModel(url.text.toString().trim(), id.text.toString().trim(), pb) { s -> ui.post { status.text = s } } }.start()
+            if (setupBusy) return@button
+            val u = url.text.toString().trim(); val mid = id.text.toString().trim()
+            runSetup { say -> setupModel(u, mid, pb, say = say) }
         }).apply { visibility = View.GONE }
         root.addView(button("Advanced: use my own model file", primary = false) { adv.visibility = View.VISIBLE })
         root.addView(adv)
+    }
+
+    /** Runs a model setup on one background thread, holding the CPU and Wi-Fi awake, and reports
+     *  progress to whichever activity is on screen (it survives rotation and reopening the app). */
+    private fun runSetup(work: ((String) -> Unit) -> Unit) {
+        setupBusy = true; setupStatus = ""; setupPct = -1
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        val app = applicationContext
+        Thread {
+            val wake = (app.getSystemService(POWER_SERVICE) as android.os.PowerManager)
+                .newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "infera:model-download").apply { acquire(3 * 60 * 60 * 1000L) }
+            @Suppress("DEPRECATION")
+            val wifi = (app.getSystemService(WIFI_SERVICE) as android.net.wifi.WifiManager)
+                .createWifiLock(android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF, "infera:model-download").apply { acquire() }
+            try {
+                work { s -> setupStatus = s; ui.post { current?.statusView?.text = s } }
+            } finally {
+                runCatching { wake.release() }; runCatching { wifi.release() }
+                setupBusy = false; setupPct = -1
+                ui.post { current?.let { a -> a.window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); a.render() } }
+            }
+        }.start()
     }
 
     private fun setupModel(url: String, modelId: String, paramsB: Float, sha256: String = "", sizeMb: Long = 0, say: (String) -> Unit) {
@@ -209,9 +249,10 @@ class MainActivity : Activity() {
                         break
                     } catch (e: java.io.IOException) {
                         attempt++
-                        if (attempt > 5) throw IllegalStateException("download keeps dropping (${e.message}); tap the button to continue from ${tmp.length() / 1_000_000} MB")
-                        say("Connection dropped at ${tmp.length() / 1_000_000} MB, retrying in ${attempt * 3} s…")
-                        Thread.sleep(attempt * 3000L)
+                        if (attempt > 30) throw IllegalStateException("download keeps dropping (${e.message}); tap the button to continue from ${tmp.length() / 1_000_000} MB")
+                        val wait = minOf(attempt * 3, 30)
+                        say("Connection dropped at ${tmp.length() / 1_000_000} MB (${e.message}), continuing in $wait s…")
+                        Thread.sleep(wait * 1000L)
                     }
                 }
                 // Verified download: SHA-256 from the catalog, or the host's X-Linked-Etag.
@@ -230,7 +271,7 @@ class MainActivity : Activity() {
                 say("Model already downloaded")
             }
             if (!file.exists()) throw IllegalStateException("enter a model URL to download")
-            ui.post { progress?.isIndeterminate = true }
+            ui.post { current?.progress?.isIndeterminate = true }
             say("Loading the model…")
             NodeService.engine?.close()
             val eng = LlamaEngine(file.path, modelId)
@@ -247,10 +288,10 @@ class MainActivity : Activity() {
             prefs.klass = phoneClass(tps, ram)
             say("%.1f tokens/s · class %s".format(tps, prefs.klass))
             if (prefs.klass != "unrated") { prefs.enabled = true; NodeService.start(this) }
-            ui.post { render() }
-            ui.post { progress?.visibility = View.GONE }
+            ui.post { current?.render() }
+            ui.post { current?.progress?.visibility = View.GONE }
         } catch (e: Throwable) {
-            ui.post { progress?.visibility = View.GONE }
+            ui.post { current?.progress?.visibility = View.GONE }
             say("Problem: ${e.message ?: e.javaClass.simpleName}. Check Wi-Fi and storage space, then tap the button again.")
         }
     }
@@ -260,7 +301,8 @@ class MainActivity : Activity() {
     private fun downloadResumable(url: String, tmp: File, shaFile: File, say: (String) -> Unit) {
         val have = if (tmp.exists()) tmp.length() else 0L
         val req = Request.Builder().url(url).apply { if (have > 0) header("Range", "bytes=$have-") }.build()
-        Api.http.newCall(req).execute().use { r ->
+        downloadHttp.newCall(req).execute().use { r ->
+            if (r.code >= 500 || r.code == 429) throw java.io.IOException("server busy (${r.code})")
             if (!r.isSuccessful) throw IllegalStateException("download failed (${r.code})")
             if (!shaFile.exists()) {
                 // Hugging Face puts the file's SHA-256 in X-Linked-Etag on the redirect.
@@ -284,7 +326,8 @@ class MainActivity : Activity() {
                         if (done - last > 2_000_000) {
                             last = done
                             val pct = if (total > 0) (done * 100 / total).toInt() else 0
-                            ui.post { progress?.visibility = View.VISIBLE; progress?.isIndeterminate = total <= 0; progress?.progress = pct }
+                            setupPct = pct
+                            ui.post { current?.progress?.let { b -> b.visibility = View.VISIBLE; b.isIndeterminate = total <= 0; b.progress = pct } }
                             say("Downloading… ${done / 1_000_000} MB" + if (total > 0) " of ${total / 1_000_000} MB ($pct%)" else "")
                         }
                     }
