@@ -31,3 +31,4 @@ Audited 2026-11-24. ✅ built · 🟡 partial · ⬜ not built. Priority: P1 nex
 | G25 | Installers | Signed `.dmg` / `.msi`, notarized | ⬜ | Owner: Apple/Windows certificates |
 | G26 | Payouts | Automated USDT sending | ⬜ | Manual by decision |
 | G27 | Android | Model downloads resume after drops (HTTP Range), auto-retry, skip if already downloaded | ✅ (owner report: a dropped download restarted from zero) | P1 |
+| G28 | Performance | Phone speed-ups (deep dive 2026-11-25): (1) i8mm engine variant picked at runtime by CPU features; (2) Q4_0 GGUFs in the catalog for ARM repacking; (3) speculative decoding with a 0.6B draft model; (4) Adreno OpenCL backend on Snapdragon; (5) Android ADPF performance hints; (6) pin threads to fast cores; (7) thermal-headroom throttling; (8) q8 KV cache / smaller context; (9) NPU (Hexagon / APU) with G17. Order: 1+2, 5+6+7, 3, 4 | ⬜ (dotprod build + fast-core threads done: 4B went from <3 to 12.8 tok/s on SM8850) | P2 (parked by owner) |
