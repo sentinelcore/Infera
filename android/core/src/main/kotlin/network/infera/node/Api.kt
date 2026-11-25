@@ -22,6 +22,9 @@ data class CatalogModel(
     val sha256: String = "",
 )
 
+/** Live prices (USD) and the owner's share, from the server's catalog. */
+data class Pricing(val inPerM: Double = 0.10, val outPerM: Double = 0.30, val audioPerMin: Double = 0.003, val ownerShare: Double = 0.80)
+
 const val DEFAULT_SERVER = "https://control-plane-production-11856175.up.railway.app"
 
 object Api {
@@ -66,6 +69,14 @@ object Api {
             }
         }
     }
+
+    fun pricing(server: String): Pricing? = runCatching {
+        http.newCall(Request.Builder().url("${server.trimEnd('/')}/api/catalog").build()).execute().use { r ->
+            val p = Json.parseToJsonElement(r.body?.string() ?: "{}").jsonObject["pricing"]?.jsonObject ?: return null
+            fun d(k: String, def: Double) = p[k]?.jsonPrimitive?.content?.toDoubleOrNull() ?: def
+            Pricing(d("in_per_m", 0.10), d("out_per_m", 0.30), d("audio_per_min", 0.003), d("owner_share", 0.80))
+        }
+    }.getOrNull()
 
     /** Best model for a phone with this much RAM: the largest one it meets the minimum for. */
     fun pickForPhone(models: List<CatalogModel>, ramGb: Double): CatalogModel? =

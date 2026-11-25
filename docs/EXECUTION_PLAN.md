@@ -80,7 +80,7 @@ Timeline: 24 weeks to public launch. Weeks are relative to kickoff.
 - Phone classes M1/M2, Uber-style offer cards with push notifications (FCM), and opt-in big MoE batch jobs for M1 phones.
 - Confidential level on phones with Android protected VMs; Sealed level via Play Integrity.
 - Phone workloads: embeddings, Whisper-small **Transcription API**, and 1–3B batch chat.
-- Earnings v1: points convert to a USD balance in the ledger from real job revenue (operator share of e.g. 70%, a config value).
+- Earnings v1: points convert to a USD balance in the ledger from real job revenue (owner share 80%, a config value).
 - Payouts v1: weekly USDT batches to owners' wallets (Tron TRC-20 default; other networks optional), with sanctions screening and identity checks at the payout threshold (`ARCHITECTURE.md` §8.1).
 - Dependability score and penalties (forfeit, debit, holds, pay multiplier, suspension) live in the ledger (`ARCHITECTURE.md` §3.4).
 - Play Integrity attestation for Android nodes.

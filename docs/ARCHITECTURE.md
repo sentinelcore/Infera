@@ -174,7 +174,7 @@ RUNS  now · charging
 ```
 
 - **Time:** job size ÷ this device's benchmark speed for the model, plus model load time if needed.
-- **Earnings:** job price × owner share (e.g. 70%). Per hour = earnings ÷ time. The final credit uses actual work; the receipt shows estimate and final.
+- **Earnings:** job price × owner share (80%). Per hour = earnings ÷ time. The final credit uses actual work; the receipt shows estimate and final.
 - The card never shows the prompt, the output or the customer (§3.3).
 
 **Dispatch rules**
@@ -295,7 +295,7 @@ The batch, embedding and transcription APIs are priced 50–80% below interactiv
 ```
 Customer pays (Stripe card/credits, later x402/USDC)
   → gateway meters tokens → scheduler assigns node → node returns signed receipt
-  → ledger: revenue split, e.g. operator 70% / protocol 30% (config value)
+  → ledger: revenue split, e.g. owner 80% / protocol 20% (config value INFERA_OWNER_SHARE)
   → beta: points + USD balance in Postgres
   → penalties and holds applied (§3.4)
   → payout: USDT to the owner's wallet, weekly, above a minimum threshold (fiat via Stripe Connect as an option)

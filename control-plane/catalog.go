@@ -52,7 +52,12 @@ func catalog() []CatalogModel {
 
 // GET /api/catalog
 func (a *API) Catalog(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, map[string]any{"models": catalog()})
+	// Live prices and owner share, so apps can show honest earning estimates.
+	writeJSON(w, map[string]any{"models": catalog(), "pricing": map[string]any{
+		"in_per_m": a.cfg.DefaultPrice.In, "out_per_m": a.cfg.DefaultPrice.Out, "per_model": a.cfg.Prices,
+		"embed_per_m": a.cfg.EmbedPrice, "audio_per_min": a.cfg.AudioPrice, "owner_share": a.cfg.OwnerShare,
+		"batch_discount": a.cfg.BatchDiscount,
+	}})
 }
 
 // GET /pair/{code} — opened on a phone: one tap opens the Infera app, which pairs itself

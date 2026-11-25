@@ -33,6 +33,7 @@ class MainActivity : Activity() {
         @Volatile var setupStatus = ""
         @Volatile var setupPct = -1
         @Volatile var current: MainActivity? = null
+        @Volatile var pricing = Pricing()
         /** HTTP/1.1 only: long HTTP/2 downloads from the model CDN get "stream was reset: PROTOCOL_ERROR". */
         val downloadHttp: okhttp3.OkHttpClient by lazy {
             Api.http.newBuilder().protocols(listOf(okhttp3.Protocol.HTTP_1_1))
@@ -578,14 +579,16 @@ class MainActivity : Activity() {
         val soon = listOf("Embeddings" to "Turning text into search vectors. Coming to phones soon.", "Transcription" to "Speech to text with Whisper. Coming to phones soon.")
         root.addView(card(*(can.map { checkRow(true, it.first, it.second) } + soon.map { checkRow(false, it.first, it.second) }).toTypedArray()))
 
-        // Beta prices: $0.30 per 1M output tokens, owners keep 70%.
-        val perHour = tps * 3600 / 1e6 * 0.30 * 0.70
+        // Live prices from the server. A typical job has ~2 prompt tokens per answer token.
+        val pr = pricing
+        if (System.currentTimeMillis() / 1000 % 30 == 0L || pr == Pricing()) Thread { Api.pricing(prefs.server)?.let { pricing = it } }.start()
+        val perHour = tps * 3600 / 1e6 * (pr.outPerM + 2 * pr.inPerM) * pr.ownerShare
         root.addView(heading("Earning potential"))
         root.addView(card(
-            row("Per hour of jobs", "≈ $%.4f".format(perHour), green),
-            row("A night on the charger", "≈ $%.4f".format(perHour * 8 * 0.25)),
-            row("A month of nights", "≈ $%.2f".format(perHour * 8 * 0.25 * 30)),
-            text("Estimates at beta prices, if the phone is busy a quarter of the night. Real earnings depend on demand, your class and dependability. Faster models and longer charging time earn more.", 12f, color = muted),
+            row("Per hour of chat jobs", "≈ $%.4f".format(perHour), green),
+            row("Quiet month (2 h of jobs a night)", "≈ $%.2f".format(perHour * 2 * 30)),
+            row("Busy month (6 h of jobs a night)", "≈ $%.2f".format(perHour * 6 * 30), green),
+            text("At today's prices: $%.2f per million answer tokens, $%.2f per million prompt tokens, and you keep %.0f%%. Coming soon to phones, and paying more per hour: transcription (speech to text) and running several jobs at once. Real earnings depend on demand and your dependability.".format(pr.outPerM, pr.inPerM, pr.ownerShare * 100), 12f, color = muted),
         ))
         root.addView(heading("Improve your result"))
         root.addView(card(
