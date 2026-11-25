@@ -72,6 +72,7 @@ func main() {
 	go mon.Watch(gw)
 	go RunSanctions()
 	go hub.SampleAvailability()
+	go gw.RunFallbackMap()
 	api := &API{st: st, hub: hub, cfg: cfg, inviteCode: os.Getenv("INFERA_INVITE_CODE"), adminToken: os.Getenv("INFERA_ADMIN_TOKEN"),
 		starterCents: int64(envFloat("INFERA_STARTER_CREDITS_USD", 5) * 100)}
 

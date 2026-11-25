@@ -89,6 +89,7 @@ func bearer(r *http.Request) string {
 // supported parameters, modalities, and how many devices serve it right now.
 func (g *Gateway) Models(w http.ResponseWriter, r *http.Request) {
 	online := g.hub.OnlineModels()
+	covered := backupCovers()
 	// USD per token as a clean decimal string (no float noise): 0.30 per 1M -> "0.0000003".
 	per := func(usdPerM float64) string {
 		s := strconv.FormatFloat(usdPerM/1e6, 'f', 12, 64)
@@ -104,6 +105,9 @@ func (g *Gateway) Models(w http.ResponseWriter, r *http.Request) {
 		seen[c.ID] = true
 		m := map[string]any{"id": c.ID, "object": "model", "created": 1764000000, "owned_by": "infera", "name": c.Label,
 			"hugging_face_id": c.HFID, "context_length": c.Ctx, "quantization": c.Quant, "devices_online": online[c.ID]}
+		if _, ok := covered[c.ID]; ok {
+			m["backup_capacity"] = true
+		}
 		switch c.Kind {
 		case "transcription":
 			m["input_modalities"], m["output_modalities"] = []string{"audio"}, []string{"text"}
@@ -210,8 +214,8 @@ func (g *Gateway) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 		sw.reset(jobID)
 	}
 
-	if g.cfg.FallbackURL != "" {
-		g.fallback(w, r, acct, jobID, req, raw, estIn)
+	if fb, ok := g.fallbackFor(req.Model); ok {
+		g.fallback(w, r, acct, jobID, req, raw, estIn, fb)
 		return
 	}
 	apiError(w, 503, fmt.Sprintf("no device is serving %q at privacy level %q right now; try again shortly or use GET /v1/models", req.Model, req.Privacy))
@@ -489,18 +493,17 @@ func (g *Gateway) settlePartial(acct *Account, dev *DeviceRow, jobID string, req
 }
 
 // fallback forwards the request to the rented-capacity provider (ARCHITECTURE.md §2.5).
-func (g *Gateway) fallback(w http.ResponseWriter, r *http.Request, acct *Account, jobID string, req chatRequest, raw []byte, estIn int) {
-	body := raw
+func (g *Gateway) fallback(w http.ResponseWriter, r *http.Request, acct *Account, jobID string, req chatRequest, raw []byte, estIn int, upstreamModel string) {
 	model := req.Model
-	if g.cfg.FallbackModel != "" {
-		var m map[string]any
-		json.Unmarshal(raw, &m)
-		m["model"] = g.cfg.FallbackModel
-		delete(m, "privacy")
-		delete(m, "infera_batch")
-		body, _ = json.Marshal(m)
-		model = g.cfg.FallbackModel
+	var m map[string]any
+	json.Unmarshal(raw, &m)
+	m["model"] = upstreamModel
+	delete(m, "privacy")
+	delete(m, "infera_batch")
+	if req.Stream { // ask for exact token counts at the end of the stream
+		m["stream_options"] = map[string]any{"include_usage": true}
 	}
+	body, _ := json.Marshal(m)
 	up, _ := http.NewRequestWithContext(r.Context(), "POST", strings.TrimRight(g.cfg.FallbackURL, "/")+"/chat/completions", bytes.NewReader(body))
 	up.Header.Set("Content-Type", "application/json")
 	if g.cfg.FallbackKey != "" {
@@ -541,6 +544,14 @@ func (g *Gateway) fallback(w http.ResponseWriter, r *http.Request, acct *Account
 	}
 	if !req.Stream && json.Unmarshal(buf.Bytes(), &parsed) == nil && parsed.Usage.CompletionTokens > 0 {
 		tin, tout = parsed.Usage.PromptTokens, parsed.Usage.CompletionTokens
+	}
+	if req.Stream { // usage arrives in the last data chunk
+		for _, line := range strings.Split(buf.String(), "\n") {
+			line = strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+			if strings.Contains(line, `"usage"`) && json.Unmarshal([]byte(line), &parsed) == nil && parsed.Usage.CompletionTokens > 0 {
+				tin, tout = parsed.Usage.PromptTokens, parsed.Usage.CompletionTokens
+			}
+		}
 	}
 	if resp.StatusCode == 200 {
 		charge := g.cfg.cost(req.Model, tin, tout)
