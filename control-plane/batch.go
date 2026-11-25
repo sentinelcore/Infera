@@ -44,6 +44,7 @@ const (
 	batchMaxPerCall  = 1000
 	batchMaxAttempts = 5
 	batchExpiry      = 24 * 3600 // seconds a job may wait before it fails
+	batchRetention   = 7 * 86400 // finished batch jobs (request + result) are deleted after this
 )
 
 func (s *Store) MigrateBatch() error {
@@ -205,6 +206,8 @@ func (g *Gateway) BatchWorker() {
 
 func (g *Gateway) dispatchBatch() int {
 	g.st.exec(`UPDATE batch_jobs SET status='failed', error='no device took the job within 24 hours', finished_at=? WHERE status='queued' AND created_at<?`, now(), now()-batchExpiry)
+	// Retention: batch requests and results are deleted 7 days after they finish.
+	g.st.exec(`DELETE FROM batch_jobs WHERE finished_at>0 AND finished_at<?`, now()-batchRetention)
 	rows, err := g.st.query(`SELECT ` + batchCols + ` FROM batch_jobs WHERE status='queued' ORDER BY created_at LIMIT 200`)
 	if err != nil {
 		return 0

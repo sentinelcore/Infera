@@ -433,3 +433,23 @@ func TestOneAccountPerDevice(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestPerformanceAndUsage(t *testing.T) {
+	st := mustStore(t)
+	cust, _, _ := st.CreateAccount("u@x.dev", "customer", 0)
+	st.InsertJob("j1", cust.ID, "d1", "m", "device")
+	st.FinishJob("j1", "done", 10, 20, 5000, 4000, "", "")
+	st.SetJobTTFT("j1", 800)
+	st.InsertJob("j2", cust.ID, "d1", "m", "device")
+	st.FinishJob("j2", "aborted", 0, 0, 0, 0, CauseDeviceFailure, "")
+	st.exec(`INSERT INTO availability(minute,model,devices) VALUES(?,?,?)`, now()/60, "m", 1)
+	st.exec(`INSERT INTO availability(minute,model,devices) VALUES(?,?,?)`, now()/60-1, "m", 0)
+	p := st.Performance(7, map[string]int{"m": 1})
+	if len(p) != 1 || p[0].Requests != 2 || p[0].SuccessPct != 50 || p[0].UptimePct != 50 || p[0].TTFTp50ms != 800 {
+		t.Fatalf("performance: %+v", p)
+	}
+	u := st.Usage(cust.ID, now()-3600, now()+3600)
+	if len(u) != 1 || u[0].Requests != 1 || u[0].TokensOut != 20 || u[0].ChargeUSD != 0.005 {
+		t.Fatalf("usage: %+v", u)
+	}
+}

@@ -71,6 +71,7 @@ func main() {
 	go gw.BatchWorker()
 	go mon.Watch(gw)
 	go RunSanctions()
+	go hub.SampleAvailability()
 	api := &API{st: st, hub: hub, cfg: cfg, inviteCode: os.Getenv("INFERA_INVITE_CODE"), adminToken: os.Getenv("INFERA_ADMIN_TOKEN"),
 		starterCents: int64(envFloat("INFERA_STARTER_CREDITS_USD", 5) * 100)}
 
@@ -101,6 +102,9 @@ func main() {
 	mux.HandleFunc("GET /metrics", mon.Metrics(gw))
 	mux.HandleFunc("GET /api/status", mon.StatusJSON(gw))
 	mux.HandleFunc("GET /status", mon.StatusPage(gw))
+	mux.HandleFunc("GET /api/performance", gw.PerformanceJSON)
+	mux.HandleFunc("GET /performance", gw.PerformancePage)
+	mux.HandleFunc("GET /privacy", PrivacyPage)
 	mux.HandleFunc("POST /api/waitlist", api.JoinWaitlist)
 	mux.HandleFunc("GET /api/waitlist/{code}", api.WaitlistStatus)
 	mux.HandleFunc("GET /api/leaderboard", api.Leaderboard)
@@ -125,6 +129,7 @@ func main() {
 	mux.HandleFunc("POST /api/owner/payout-address/verify", api.VerifyWallet)
 	mux.HandleFunc("POST /api/admin/verify", api.AdminVerify)
 	mux.HandleFunc("GET /api/admin/nodes", api.AdminNodes)
+	mux.HandleFunc("GET /api/admin/usage", api.AdminUsage)
 	mux.HandleFunc("GET /api/admin/appeals", api.AdminAppeals)
 	mux.HandleFunc("POST /api/admin/appeals/resolve", api.AdminAppeals)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })

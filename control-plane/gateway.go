@@ -216,6 +216,7 @@ func (g *Gateway) runOnDevice(ctx context.Context, n *Node, acct *Account, jobID
 		ttl = 30
 	}
 	jobType := req.typeName()
+	offered := time.Now()
 	n.Send(Msg{T: "offer", JobID: jobID, JobType: jobType, Model: req.Model, EstTokens: estIn + req.MaxTokens, EstPay: estPay, TTL: ttl, Privacy: req.Privacy})
 
 	// 1. Wait for accept / decline.
@@ -311,6 +312,9 @@ wait:
 				}
 				if !gotFirst && !g.hedgeClaim(req, n, jobID, sw) {
 					return runNotAccepted
+				}
+				if !gotFirst {
+					g.st.SetJobTTFT(jobID, time.Since(offered).Milliseconds())
 				}
 				gotFirst = true
 				pieces++
