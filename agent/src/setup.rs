@@ -7,7 +7,7 @@ use futures_util::StreamExt;
 use serde::Deserialize;
 use std::io::Write;
 
-pub const DEFAULT_SERVER: &str = "https://control-plane-production-11856175.up.railway.app";
+pub const DEFAULT_SERVER: &str = "https://infera.valanor.network";
 const OLLAMA: &str = "http://127.0.0.1:11434";
 
 #[derive(Deserialize, Clone, Debug)]

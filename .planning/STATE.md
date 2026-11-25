@@ -18,7 +18,7 @@
 - Test builds: every push refreshes the "Infera test build" pre-release (APK + desktop nodes).
 - Railway: `control-plane/railway.json` + `docs/DEPLOY_RAILWAY.md`; server honours `$PORT`.
 
-- **Live on Railway:** https://control-plane-production-11856175.up.railway.app (project `infera`, service `control-plane`, volume at /data). Deployed from the branch by Claude via the Railway API; `live-check` workflow tests it.
+- **Live on Railway:** https://infera.valanor.network (project `infera`, service `control-plane`, volume at /data). Deployed from the branch by Claude via the Railway API; `live-check` workflow tests it.
 
 - **Database:** Railway Postgres service `postgres` (volume), server uses it via `INFERA_DATABASE_URL` over Railway's private network. SQLite still used for local tests. The few test accounts made on the earlier SQLite deploy were not migrated.
 

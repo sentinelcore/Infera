@@ -25,7 +25,7 @@ data class CatalogModel(
 /** Live prices (USD) and the owner's share, from the server's catalog. */
 data class Pricing(val inPerM: Double = 0.10, val outPerM: Double = 0.30, val audioPerMin: Double = 0.003, val ownerShare: Double = 0.80)
 
-const val DEFAULT_SERVER = "https://control-plane-production-11856175.up.railway.app"
+const val DEFAULT_SERVER = "https://infera.valanor.network"
 
 object Api {
     val http: OkHttpClient = OkHttpClient.Builder()

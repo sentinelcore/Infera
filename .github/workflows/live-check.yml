@@ -10,7 +10,7 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
-    env: { URL: "${{ vars.INFERA_PUBLIC_URL || 'https://control-plane-production-11856175.up.railway.app' }}" }
+    env: { URL: "${{ vars.INFERA_PUBLIC_URL || 'https://infera.valanor.network' }}" }
     steps:
       - name: Wait for Railway to redeploy after a push
         if: github.event_name == 'push'
