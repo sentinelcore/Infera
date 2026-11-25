@@ -124,6 +124,7 @@ func main() {
 	mux.HandleFunc("POST /api/owner/appeal", api.FileAppeal)
 	mux.HandleFunc("POST /api/owner/payout-address/verify", api.VerifyWallet)
 	mux.HandleFunc("POST /api/admin/verify", api.AdminVerify)
+	mux.HandleFunc("GET /api/admin/nodes", api.AdminNodes)
 	mux.HandleFunc("GET /api/admin/appeals", api.AdminAppeals)
 	mux.HandleFunc("POST /api/admin/appeals/resolve", api.AdminAppeals)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })

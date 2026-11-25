@@ -384,3 +384,51 @@ func (h *Hub) handle(n *Node, m Msg) {
 		}
 	}
 }
+
+// GET /api/admin/nodes: live state of connected devices and why each isn't taking jobs.
+func (a *API) AdminNodes(w http.ResponseWriter, r *http.Request) {
+	if !a.admin(w, r) {
+		return
+	}
+	a.hub.mu.Lock()
+	nodes := make([]*Node, 0, len(a.hub.nodes))
+	for _, n := range a.hub.nodes {
+		nodes = append(nodes, n)
+	}
+	a.hub.mu.Unlock()
+	var out []map[string]any
+	for _, n := range nodes {
+		n.mu.Lock()
+		v := map[string]any{"id": n.ID, "online": n.Online, "status": n.Status, "mode": n.Mode, "class": n.Class,
+			"models": n.Models, "running_jobs": len(n.jobs), "tps": n.TPS}
+		var why []string
+		if !n.Online {
+			why = append(why, "owner set offline")
+		}
+		if n.Status != "idle" {
+			why = append(why, "device reports "+n.Status)
+		}
+		if len(n.jobs) > 0 {
+			why = append(why, "busy with a job")
+		}
+		if classRank[n.Class] == 0 {
+			why = append(why, "unrated class")
+		}
+		n.mu.Unlock()
+		if dev, err := a.st.Device(n.ID); err == nil {
+			v["dependability"] = dev.Dependability
+			v["name"] = dev.Name
+			if dev.SuspendedUntil > now() {
+				why = append(why, "suspended")
+			}
+			if b := BandFor(dev.Dependability); b.Suspended {
+				why = append(why, "dependability band suspended")
+			} else if b.BatchOnly {
+				why = append(why, "batch jobs only (dependability)")
+			}
+		}
+		v["not_taking_jobs_because"] = why
+		out = append(out, v)
+	}
+	writeJSON(w, map[string]any{"nodes": out})
+}
