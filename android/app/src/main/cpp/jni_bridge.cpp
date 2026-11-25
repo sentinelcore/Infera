@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "infera_engine.h"
+#include "infera_whisper.h"
 
 using infera::Engine;
 using infera::Message;
@@ -69,5 +70,35 @@ JNIEXPORT jintArray JNICALL Java_network_infera_node_LlamaEngine_nativeGenerate(
 
 JNIEXPORT void JNICALL Java_network_infera_node_LlamaEngine_nativeFree(JNIEnv *, jclass, jlong h) {
     delete reinterpret_cast<Engine *>(h);
+}
+
+// ---- network.infera.node.WhisperEngine (speech to text) ----
+JNIEXPORT jlong JNICALL Java_network_infera_node_WhisperEngine_nativeLoad(JNIEnv *env, jclass, jstring path, jint threads) {
+    auto *s = new infera::Speech();
+    std::string err = s->load(jstr(env, path), threads);
+    if (!err.empty()) {
+        delete s;
+        env->ThrowNew(env->FindClass("java/lang/IllegalStateException"), err.c_str());
+        return 0;
+    }
+    return reinterpret_cast<jlong>(s);
+}
+
+JNIEXPORT jbyteArray JNICALL Java_network_infera_node_WhisperEngine_nativeTranscribe(JNIEnv *env, jclass, jlong h, jfloatArray pcm,
+                                                                                   jstring language, jstring prompt) {
+    auto *s = reinterpret_cast<infera::Speech *>(h);
+    if (!s || !pcm) return env->NewByteArray(0);
+    jsize n = env->GetArrayLength(pcm);
+    std::vector<float> buf(n);
+    env->GetFloatArrayRegion(pcm, 0, n, buf.data());
+    std::string out = s->transcribe(buf, jstr(env, language), jstr(env, prompt));
+    // Raw UTF-8 bytes (NewStringUTF can't take 4-byte characters).
+    jbyteArray r = env->NewByteArray((jsize)out.size());
+    env->SetByteArrayRegion(r, 0, (jsize)out.size(), reinterpret_cast<const jbyte *>(out.data()));
+    return r;
+}
+
+JNIEXPORT void JNICALL Java_network_infera_node_WhisperEngine_nativeFree(JNIEnv *, jclass, jlong h) {
+    delete reinterpret_cast<infera::Speech *>(h);
 }
 }

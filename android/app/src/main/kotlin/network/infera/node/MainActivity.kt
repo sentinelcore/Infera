@@ -576,8 +576,13 @@ class MainActivity : Activity() {
         root.addView(heading("Jobs this phone can take"))
         val can = if (m1) listOf("Live chat replies" to "Customers waiting on an answer. Paid the most.", "Batch chat" to "Large jobs that can wait; run while you sleep.")
                   else listOf("Batch chat" to "Jobs where nobody is waiting; run overnight on the charger.")
-        val soon = listOf("Embeddings" to "Turning text into search vectors. Coming to phones soon.", "Transcription" to "Speech to text with Whisper. Coming to phones soon.")
-        root.addView(card(*(can.map { checkRow(true, it.first, it.second) } + soon.map { checkRow(false, it.first, it.second) }).toTypedArray()))
+        val speechOn = prefs.speechPath.isNotEmpty() && File(prefs.speechPath).exists()
+        val rows = can.map { checkRow(true, it.first, it.second) } +
+            checkRow(speechOn, "Transcription (speech to text)", if (speechOn) "On: Whisper is ready. Pays per audio minute, the best earner per hour."
+                                                                else "Off: turn it on below. Pays per audio minute, the best earner per hour.") +
+            checkRow(false, "Embeddings", "Turning text into search vectors. Coming to phones soon.")
+        root.addView(card(*rows.toTypedArray(),
+            if (speechOn) View(this) else button(if (setupBusy) "Working…" else "Turn on transcription (60 MB download)") { enableSpeech() }))
 
         // Live prices from the server. A typical job has ~2 prompt tokens per answer token.
         val pr = pricing
@@ -596,6 +601,43 @@ class MainActivity : Activity() {
             button("Run the benchmark again", primary = false) { rebenchmark() },
             button("Change model", primary = false) { stopNode(); prefs.enabled = false; prefs.modelPath = ""; prefs.klass = ""; setupStatus = ""; render() },
         ))
+    }
+
+    /** Downloads the Whisper model, checks it loads, then restarts the node so it offers transcription. */
+    private fun enableSpeech() {
+        if (setupBusy) return
+        tab = "device"
+        runSetup { say ->
+            try {
+                val m = Api.speechModel(prefs.server) ?: throw IllegalStateException("couldn't get the speech model list; check your connection")
+                val dir = File(filesDir, "speech").apply { mkdirs() }
+                val file = File(dir, "${m.id}.bin")
+                if (!file.exists()) {
+                    val tmp = File(dir, "${m.id}.part"); val sha = File(dir, "${m.id}.sha256")
+                    if (m.sha256.isNotEmpty()) sha.writeText(m.sha256)
+                    var attempt = 0
+                    while (true) {
+                        try { downloadResumable(m.ggufUrl, tmp, sha, say); break }
+                        catch (e: java.io.IOException) {
+                            if (++attempt > 30) throw IllegalStateException("download keeps dropping; tap the button to continue")
+                            say("Connection dropped, continuing in ${minOf(attempt * 3, 30)} s…"); Thread.sleep(minOf(attempt * 3, 30) * 1000L)
+                        }
+                    }
+                    val expect = if (sha.exists()) sha.readText().trim().lowercase() else ""
+                    if (expect.length == 64 && sha256Of(tmp) != expect) { tmp.delete(); sha.delete(); throw IllegalStateException("the download was damaged; tap the button to try again") }
+                    tmp.renameTo(file); sha.delete()
+                }
+                say("Checking the speech model…")
+                NodeService.speech?.close(); NodeService.speech = null
+                WhisperEngine(file.path, m.id, cacheDir).close() // loads it once to be sure it works
+                prefs.speechPath = file.path; prefs.speechId = m.id
+                say("Transcription is on.")
+                if (prefs.enabled) // reconnect so the network knows this phone now takes transcription jobs
+                    startService(android.content.Intent(this, NodeService::class.java).setAction(NodeService.ACTION_RELOAD))
+            } catch (e: Throwable) {
+                say("Problem: ${e.message ?: e.javaClass.simpleName}")
+            }
+        }
     }
 
     private fun stopNode() {

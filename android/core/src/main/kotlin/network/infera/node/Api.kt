@@ -70,6 +70,18 @@ object Api {
         }
     }
 
+    /** The speech-to-text model phones download (Whisper, ggml format). */
+    fun speechModel(server: String): CatalogModel? = runCatching {
+        http.newCall(Request.Builder().url("${server.trimEnd('/')}/api/catalog").build()).execute().use { r ->
+            val arr = Json.parseToJsonElement(r.body?.string() ?: "{}").jsonObject["models"] as? kotlinx.serialization.json.JsonArray ?: return null
+            arr.map { it.jsonObject }.firstOrNull { it["kind"]?.jsonPrimitive?.content == "transcription" && !it["gguf_url"]?.jsonPrimitive?.content.isNullOrEmpty() }?.let { o ->
+                fun s(k: String) = o[k]?.jsonPrimitive?.content ?: ""
+                CatalogModel(s("id"), s("label"), "transcription", s("params_b").toDoubleOrNull() ?: 0.0, s("gguf_url"),
+                    s("gguf_mb").toDoubleOrNull()?.toInt() ?: 0, s("phone_min_ram_gb").toDoubleOrNull() ?: 0.0, s("sha256").lowercase())
+            }
+        }
+    }.getOrNull()
+
     fun pricing(server: String): Pricing? = runCatching {
         http.newCall(Request.Builder().url("${server.trimEnd('/')}/api/catalog").build()).execute().use { r ->
             val p = Json.parseToJsonElement(r.body?.string() ?: "{}").jsonObject["pricing"]?.jsonObject ?: return null

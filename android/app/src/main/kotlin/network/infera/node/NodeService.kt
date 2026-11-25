@@ -19,8 +19,11 @@ class NodeService : Service() {
         const val ACTION_ACCEPT = "network.infera.node.ACCEPT"
         const val ACTION_DECLINE = "network.infera.node.DECLINE"
         const val ACTION_STOP = "network.infera.node.STOP"
+        /** Reconnect with the current settings and models (e.g. after turning on transcription). */
+        const val ACTION_RELOAD = "network.infera.node.RELOAD"
         @Volatile var node: Node? = null
         @Volatile var engine: LlamaEngine? = null
+        @Volatile var speech: WhisperEngine? = null
         val listeners = CopyOnWriteArrayList<(NodeStatus) -> Unit>()
 
         fun start(ctx: Context) {
@@ -58,6 +61,10 @@ class NodeService : Service() {
                 "android ${Build.VERSION.RELEASE} ${Build.SUPPORTED_ABIS.firstOrNull() ?: ""} ${Build.MODEL}", { rules.check() }, ::onStatus)
             nd.setMode(prefs.mode)
             nd.limits = prefs.limits
+            if (prefs.speechPath.isNotEmpty() && java.io.File(prefs.speechPath).exists()) {
+                runCatching { speech ?: WhisperEngine(prefs.speechPath, prefs.speechId, cacheDir).also { speech = it } }
+                    .onSuccess { nd.speech = it }
+            }
             node = nd
             nd.start()
         } catch (e: Throwable) {
@@ -69,6 +76,12 @@ class NodeService : Service() {
         when (intent?.action) {
             ACTION_ACCEPT -> node?.decide(true)
             ACTION_DECLINE -> node?.decide(false)
+            ACTION_RELOAD -> Thread {
+                // Wait for a running job to finish, then reconnect with the new model list.
+                repeat(600) { if (node?.status?.runningJob == null) return@repeat; Thread.sleep(1000) }
+                node?.stop(); node = null
+                boot()
+            }.start()
             ACTION_STOP -> {
                 prefs.enabled = false
                 node?.finishThenOffline()

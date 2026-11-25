@@ -19,6 +19,12 @@ jobs:
         run: cd control-plane && go build -o "$RUNNER_TEMP/infera-server" .
       - name: Core tests against the real server
         run: INFERA_SERVER_BIN="$RUNNER_TEMP/infera-server" gradle -p android :core:test
+      - name: Speech engine works with a real Whisper model (host build)
+        run: |
+          cmake -S android/app/src/main/cpp -B "$RUNNER_TEMP/speech" -DINFERA_HOST_TEST=ON -DCMAKE_BUILD_TYPE=Release
+          cmake --build "$RUNNER_TEMP/speech" --target speech_test -j4
+          curl -fsSL -o "$RUNNER_TEMP/ggml-tiny.en.bin" https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin
+          "$RUNNER_TEMP/speech/speech_test" "$RUNNER_TEMP/ggml-tiny.en.bin" third_party/whisper.cpp/samples/jfk.wav
       - name: Build the APK
         run: gradle -p android :app:assembleDebug
       - uses: actions/upload-artifact@v4

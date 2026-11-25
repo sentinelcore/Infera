@@ -36,6 +36,8 @@ var defaultCatalog = []CatalogModel{
 		OllamaTag: "qwen3:8b", DeskRAM: 16, DeskVRAM: 8},
 	{ID: "qwen3-14b", Label: "Qwen3 14B · GPUs with 16 GB+, Macs with 32 GB+", Kind: "chat", ParamsB: 14,
 		OllamaTag: "qwen3:14b", DeskRAM: 32, DeskVRAM: 16},
+	{ID: "whisper-base", Label: "Whisper Base · speech to text (99 languages)", Kind: "transcription", ParamsB: 0.074,
+		GGUFURL: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin", GGUFMB: 60, PhoneRAM: 3, DeskRAM: 4},
 	{ID: "nomic-embed-text", Label: "Nomic Embed · embeddings", Kind: "embeddings", ParamsB: 0.14,
 		OllamaTag: "nomic-embed-text", DeskRAM: 8},
 }

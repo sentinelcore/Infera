@@ -27,6 +27,15 @@ class FakeEngine : Engine {
     }
 }
 
+class FakeSpeech : SpeechEngine {
+    override val modelId = "whisper-test"
+    var lastAudio = 0
+    override fun transcribe(audio: ByteArray, filename: String, language: String, prompt: String): Pair<String, Int> {
+        lastAudio = audio.size
+        return """{"text":" Ask not what your country can do for you.","language":"en","duration":11}""" to 11
+    }
+}
+
 /** End-to-end against the real Go control plane (set INFERA_SERVER_BIN to its binary). */
 class NodeTest {
     private var server: Process? = null
@@ -80,6 +89,8 @@ class NodeTest {
         }
         var last = NodeStatus()
         val node = Node(realId.first, realId.second, FakeEngine(), Bench(15.0, 1.7, 8.0, "M1"), "android 15 arm64", { null }, { last = it })
+        val speech = FakeSpeech()
+        node.speech = speech
         node.start()
         repeat(50) { if (last.connected && last.status == "idle") return@repeat; Thread.sleep(100) }
         Thread.sleep(2500)
@@ -97,7 +108,19 @@ class NodeTest {
         t.join()
         assertTrue(r2.contains("Phones can serve"), r2)
 
-        // 3. owner credited
+        // 3. transcription: multipart audio upload, sealed to the phone, text back
+        node.setMode("auto"); Thread.sleep(500)
+        val audio = ByteArray(20_000) { (it % 251).toByte() }
+        val form = okhttp3.MultipartBody.Builder().setType(okhttp3.MultipartBody.FORM)
+            .addFormDataPart("model", "whisper-test")
+            .addFormDataPart("file", "talk.mp3", audio.toRequestBody("audio/mpeg".toMediaType()))
+            .build()
+        val r3 = Api.http.newCall(Request.Builder().url("$base/v1/audio/transcriptions").header("Authorization", "Bearer $cust").post(form).build())
+            .execute().use { it.body!!.string() }
+        assertTrue(r3.contains("Ask not what your country"), r3)
+        assertEquals(audio.size, speech.lastAudio, "the phone must receive the exact audio")
+
+        // 4. owner credited
         Thread.sleep(500)
         val owner = Json.parseToJsonElement(Api.http.newCall(Request.Builder().url("$base/api/owner").header("Authorization", "Bearer $own").build()).execute().body!!.string()).jsonObject
         val held = owner["balance"]!!.jsonObject["held"]!!.jsonPrimitive.content.toLong()

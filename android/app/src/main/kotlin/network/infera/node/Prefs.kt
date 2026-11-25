@@ -24,6 +24,8 @@ class Prefs(ctx: Context) {
     var maxMinutes: Float get() = p.getFloat("max_minutes", 0f); set(v) = p.edit().putFloat("max_minutes", v).apply()
     val limits: AutoLimits get() = AutoLimits(minPayUsd.toDouble(), minPerHourUsd.toDouble(), maxMinutes.toDouble())
 
+    var speechPath: String get() = p.getString("speech_path", "") ?: ""; set(v) = p.edit().putString("speech_path", v).apply()
+    var speechId: String get() = p.getString("speech_id", "") ?: ""; set(v) = p.edit().putString("speech_id", v).apply()
     var benchAt: Long get() = p.getLong("bench_at", 0); set(v) = p.edit().putLong("bench_at", v).apply()
     var threads: Int get() = p.getInt("threads", 0); set(v) = p.edit().putInt("threads", v).apply()
 

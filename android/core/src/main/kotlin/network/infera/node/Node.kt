@@ -30,6 +30,12 @@ interface Engine {
     fun generate(messages: List<Pair<String, String>>, maxTokens: Int, temperature: Float, onText: (String) -> Boolean): Pair<Int, Int>
 }
 
+/** Speech to text (Whisper). Returns (result JSON {"text","duration",...}, audio seconds). */
+interface SpeechEngine {
+    val modelId: String
+    fun transcribe(audio: ByteArray, filename: String, language: String, prompt: String): Pair<String, Int>
+}
+
 data class Offer(
     val jobId: String, val jobType: String, val model: String, val estPayUsd: Double,
     val estSeconds: Double, val ttlSeconds: Int, val receivedAt: Long = System.currentTimeMillis(),
@@ -86,6 +92,8 @@ class Node(
     private val payloads = ConcurrentHashMap<String, (Triple<String, String, String>) -> Unit>()
     private val cancels = ConcurrentHashMap<String, AtomicBoolean>()
     @Volatile var limits = AutoLimits()
+    /** Optional speech engine: when set, this phone also takes transcription jobs. */
+    @Volatile var speech: SpeechEngine? = null
     @Volatile private var decision: ((Boolean) -> Unit)? = null
     @Volatile private var drainThenOffline = false
     @Volatile private var sentState = ""
@@ -128,7 +136,7 @@ class Node(
                 send(buildJsonObject {
                     put("t", "hello"); put("agent_version", "android-0.1.0"); put("platform", platform)
                     put("class", bench.klass); put("privacy", "sandboxed"); put("mode", status.mode); put("tps", bench.tokensPerSecond)
-                    put("models", JsonArray(listOf(JsonPrimitive(engine.modelId))))
+                    put("models", JsonArray(listOfNotNull(engine.modelId, speech?.modelId).map { JsonPrimitive(it) }))
                     put("bench", buildJsonObject {
                         put("tokens_per_s", bench.tokensPerSecond); put("params_b", bench.paramsB); put("ram_gb", bench.ramGb)
                         put("class", bench.klass); put("model_id", engine.modelId)
@@ -195,7 +203,8 @@ class Node(
         try {
             if (!payloadLatch.await(20, TimeUnit.SECONDS)) throw IllegalStateException("job payload never arrived")
             val (epk, n, c) = payload!!
-            runJob(jobId, model, key.open(jobId, epk), n, c, cancel)
+            if (offer.jobType == "transcription") runSpeech(jobId, model, key.open(jobId, epk), n, c)
+            else runJob(jobId, model, key.open(jobId, epk), n, c, cancel)
         } catch (e: Exception) {
             log("Job $jobId failed: ${e.message}")
         } finally {
@@ -207,6 +216,33 @@ class Node(
             if (off) log("Job finished; now offline")
             tick()
         }
+    }
+
+    /** Transcription job: decode the sealed audio, run Whisper, return one sealed result. */
+    private fun runSpeech(jobId: String, model: String, chan: SealedChannel, n: String, c: String) {
+        val sp = speech ?: run {
+            send(buildJsonObject { put("t", "abort"); put("job_id", jobId); put("reason", "engine_error") })
+            throw IllegalStateException("no speech model on this phone")
+        }
+        val req = Json.parseToJsonElement(String(chan.openDown(n, c))).jsonObject
+        fun s(k: String) = req[k]?.jsonPrimitive?.contentOrNull ?: ""
+        val audio = java.util.Base64.getDecoder().decode(s("audio_b64"))
+        log("Running transcription job $jobId ($model) in the sealed sandbox")
+        val started = System.currentTimeMillis()
+        val (out, secs) = try {
+            sp.transcribe(audio, s("filename"), s("language"), s("prompt"))
+        } catch (e: Exception) {
+            send(buildJsonObject { put("t", "abort"); put("job_id", jobId); put("reason", "engine_error") })
+            throw e
+        }
+        val (nonce, ct) = chan.sealUp(out.toByteArray())
+        send(buildJsonObject { put("t", "tok"); put("job_id", jobId); put("seq", 1); put("n", nonce); put("c", ct) })
+        val receipt = "$jobId|$model|${sha256Hex(out.toByteArray())}|$secs|0|${System.currentTimeMillis() / 1000}"
+        send(buildJsonObject {
+            put("t", "done"); put("job_id", jobId); put("tokens_in", secs); put("tokens_out", 0)
+            put("receipt", receipt); put("sig", identity.sign(receipt))
+        })
+        log("Transcription job $jobId done: $secs s of audio in %.1f s".format((System.currentTimeMillis() - started) / 1000.0))
     }
 
     private fun runJob(jobId: String, model: String, chan: SealedChannel, n: String, c: String, cancel: AtomicBoolean) {
