@@ -26,6 +26,8 @@ class Prefs(ctx: Context) {
 
     var speechPath: String get() = p.getString("speech_path", "") ?: ""; set(v) = p.edit().putString("speech_path", v).apply()
     var speechId: String get() = p.getString("speech_id", "") ?: ""; set(v) = p.edit().putString("speech_id", v).apply()
+    var batchTps: Float get() = p.getFloat("batch_tps", 0f); set(v) = p.edit().putFloat("batch_tps", v).apply()
+    var parallel: Int get() = p.getInt("parallel", 1); set(v) = p.edit().putInt("parallel", v).apply()
     var benchAt: Long get() = p.getLong("bench_at", 0); set(v) = p.edit().putLong("bench_at", v).apply()
     var threads: Int get() = p.getInt("threads", 0); set(v) = p.edit().putInt("threads", v).apply()
 

@@ -27,6 +27,15 @@ class FakeEngine : Engine {
     }
 }
 
+/** Slow engine with two slots: proves the server sends a batching phone two jobs at once. */
+class SlowParallelEngine : Engine {
+    override val modelId = "phone-batch"
+    override val parallel = 2
+    override fun generate(messages: List<Pair<String, String>>, maxTokens: Int, temperature: Float, onText: (String) -> Boolean): Pair<Int, Int> {
+        Thread.sleep(1500); onText("batched answer"); return 5 to 2
+    }
+}
+
 class FakeSpeech : SpeechEngine {
     override val modelId = "whisper-test"
     var lastAudio = 0
@@ -128,6 +137,28 @@ class NodeTest {
         node.stop()
         println("phone node OK: $text1 | events=${last.events.take(3)}")
         check(pairing.deviceId.isNotEmpty() && id.publicKeyB64.isNotEmpty())
+    }
+
+    @Test fun batchingPhoneTakesTwoJobsAtOnce() {
+        if (server == null) { println("INFERA_SERVER_BIN not set; skipping"); return }
+        val own = field(post("/api/signup", """{"email":"b@p.dev","kind":"owner"}"""), "api_key")
+        val cust = field(post("/api/signup", """{"email":"bc@p.dev","kind":"customer"}"""), "api_key")
+        val ident = Identity.generate()
+        val pairing = Api.pair(base, field(post("/api/pair-code", "{}", own), "code"), "batch-phone", ident, "android 15 arm64")
+        var last = NodeStatus()
+        val node = Node(pairing, ident, SlowParallelEngine(), Bench(15.0, 1.7, 12.0, "M1"), "android 15 arm64", { null }, { last = it })
+        node.start()
+        repeat(50) { if (last.connected && last.status == "idle") return@repeat; Thread.sleep(100) }
+        Thread.sleep(2500)
+        val results = java.util.concurrent.ConcurrentLinkedQueue<String>()
+        val t0 = System.currentTimeMillis()
+        val threads = (1..2).map { Thread { results.add(post("/v1/chat/completions", """{"model":"phone-batch","max_tokens":5,"messages":[{"role":"user","content":"hi $it"}]}""", cust)) } }
+        threads.forEach { it.start() }; threads.forEach { it.join() }
+        val took = System.currentTimeMillis() - t0
+        node.stop()
+        assertEquals(2, results.count { it.contains("batched answer") }, results.toString())
+        assertTrue(took < 2900, "two 1.5 s jobs should overlap on a 2-slot phone, took $took ms")
+        println("batching OK: 2 jobs in $took ms")
     }
 
     @Test

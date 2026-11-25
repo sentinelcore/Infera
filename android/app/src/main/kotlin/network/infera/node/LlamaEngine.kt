@@ -1,8 +1,10 @@
 package network.infera.node
 
 /** On-device engine: llama.cpp through JNI (src/main/cpp). Loads GGUF models, the same files desktops use. */
-class LlamaEngine(path: String, override val modelId: String, ctx: Int = 4096, threads: Int = bestThreads()) : Engine {
-    private var handle: Long = nativeLoad(path, ctx, threads)
+class LlamaEngine(path: String, override val modelId: String, threads: Int = bestThreads(),
+                  override val parallel: Int = bestParallel()) : Engine {
+    // Each request gets its own context window; smaller when several run at once (memory).
+    private var handle: Long = nativeLoad(path, if (parallel > 1) 2048 else 4096, threads, parallel)
 
     fun interface TokenSink { fun onText(utf8: ByteArray): Boolean }
 
@@ -28,7 +30,15 @@ class LlamaEngine(path: String, override val modelId: String, ctx: Int = 4096, t
             return freqs.count { it >= top * 0.7 }.coerceIn(2, 8)
         }
 
-        @JvmStatic private external fun nativeLoad(path: String, ctx: Int, threads: Int): Long
+        @JvmStatic private external fun nativeLoad(path: String, ctx: Int, threads: Int, parallel: Int): Long
+
+        /** Requests answered at once: more on phones with more memory (each needs its own cache). */
+        fun bestParallel(): Int {
+            val gb = runCatching {
+                java.io.File("/proc/meminfo").readLines().first { it.startsWith("MemTotal") }.split(Regex("\\s+"))[1].toLong() / 1e6
+            }.getOrDefault(4.0)
+            return when { gb >= 11 -> 4; gb >= 7 -> 2; else -> 1 }
+        }
         @JvmStatic private external fun nativeParams(h: Long): Long
         @JvmStatic private external fun nativeGenerate(h: Long, roles: Array<String>, contents: Array<String>, maxTokens: Int, temp: Float, sink: TokenSink): IntArray
         @JvmStatic private external fun nativeFree(h: Long)

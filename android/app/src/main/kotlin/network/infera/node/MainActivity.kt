@@ -374,6 +374,19 @@ class MainActivity : Activity() {
             }
             val secs = ((System.nanoTime() - first) / 1e9).coerceAtLeast(0.001)
             val tps = (n - 1).coerceAtLeast(0) / secs
+            // Batched throughput: the engine answers several requests in one pass over the model.
+            var batchTps = tps
+            if (eng.parallel > 1) {
+                say("Measuring speed with ${eng.parallel} jobs at once…")
+                val total = java.util.concurrent.atomic.AtomicInteger(0)
+                val t0 = System.nanoTime()
+                val ts = (1..eng.parallel).map { k ->
+                    Thread { eng.generate(listOf("user" to "Write a short paragraph about topic number $k."), 48, 0f) { total.incrementAndGet(); true } }
+                }
+                ts.forEach { it.start() }; ts.forEach { it.join() }
+                batchTps = total.get() / ((System.nanoTime() - t0) / 1e9).coerceAtLeast(0.001)
+            }
+            prefs.batchTps = batchTps.toFloat(); prefs.parallel = eng.parallel
             val ram = (getSystemService(android.app.ActivityManager::class.java)).let { val mi = android.app.ActivityManager.MemoryInfo(); it.getMemoryInfo(mi); mi.totalMem / 1e9 }
             prefs.modelPath = file.path; prefs.modelId = modelId; prefs.paramsB = paramsB; prefs.tps = tps.toFloat()
             prefs.klass = phoneClass(tps, ram)
@@ -494,6 +507,7 @@ class MainActivity : Activity() {
         val failing = checks.filter { !it.ok }
         val (headline, color, explain) = when {
             !running -> Triple("Not running", muted, "Tap Start earning to let this phone take jobs.")
+            (s?.runningCount ?: 0) > 1 -> Triple("Working on ${s!!.runningCount} jobs at once", amber, "Earning about $%.4f for these jobs. Keep the phone plugged in.".format(s.runningPayUsd))
             s?.runningJob != null -> Triple("Working on a job", amber, "Earning about $%.4f for this job. Keep the phone plugged in.".format(s.runningPayUsd))
             s?.online == false -> Triple("Offline", muted, "You turned jobs off. Tap Go online to earn again.")
             s?.connected != true -> Triple("Connecting…", muted, "Reaching the Infera network.")
@@ -568,6 +582,7 @@ class MainActivity : Activity() {
             text(if (m1) "Fast enough for live chat replies, where a customer is waiting for the answer."
                  else "Good for batch jobs, where nobody is waiting, so speed matters less.", 14f, color = muted),
             row("Speed", "%.1f tokens/s".format(tps)),
+            row("With ${prefs.parallel.coerceAtLeast(1)} jobs at once", "%.1f tokens/s total".format(prefs.batchTps.takeIf { it > 0 } ?: prefs.tps), green),
             row("Model", "${prefs.modelId} (%.1f B)".format(prefs.paramsB)),
             row("Memory", "%.0f GB RAM".format(phoneRamGb())),
             row("Processor", (if (Build.VERSION.SDK_INT >= 31) Build.SOC_MODEL else Build.HARDWARE) + " · ${prefs.threads.takeIf { it > 0 } ?: LlamaEngine.bestThreads()} fast cores"),
@@ -587,7 +602,8 @@ class MainActivity : Activity() {
         // Live prices from the server. A typical job has ~2 prompt tokens per answer token.
         val pr = pricing
         if (System.currentTimeMillis() / 1000 % 30 == 0L || pr == Pricing()) Thread { Api.pricing(prefs.server)?.let { pricing = it } }.start()
-        val perHour = tps * 3600 / 1e6 * (pr.outPerM + 2 * pr.inPerM) * pr.ownerShare
+        val busyTps = (prefs.batchTps.takeIf { it > 0 } ?: prefs.tps).toDouble() // several jobs at once when busy
+        val perHour = busyTps * 3600 / 1e6 * (pr.outPerM + 2 * pr.inPerM) * pr.ownerShare
         root.addView(heading("Earning potential"))
         root.addView(card(
             row("Per hour of chat jobs", "≈ $%.4f".format(perHour), green),

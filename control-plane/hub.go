@@ -30,6 +30,7 @@ type Msg struct {
 	Online *bool   `json:"online,omitempty"`
 	Mode   string  `json:"mode,omitempty"` // auto | ask
 	TPS    float64 `json:"tps,omitempty"`
+	Slots  int     `json:"slots,omitempty"` // hello: jobs the device can run at once (batching)
 
 	// jobs
 	JobID      string  `json:"job_id,omitempty"`
@@ -68,6 +69,7 @@ type Node struct {
 	Status   string
 	Online   bool
 	TPS      float64
+	Slots    int                    // jobs at once (1 unless the device batches)
 	quitting bool                   // owner asked to quit (bye: owner_quit) – a running job stopped now is an owner action
 	declines map[string]*declineLog // job type -> recent owner declines (G9: learn what an owner doesn't want)
 
@@ -140,7 +142,7 @@ func (h *Hub) Candidates(model, privacy string, batch bool) []*Node {
 	var out []*Node
 	for _, n := range h.nodes {
 		n.mu.Lock()
-		ok := n.Online && n.Status == "idle" && privacyRank[n.Privacy] >= privacyRank[privacy] && contains(n.Models, model) && len(n.jobs) == 0
+		ok := n.Online && n.Status == "idle" && privacyRank[n.Privacy] >= privacyRank[privacy] && contains(n.Models, model) && len(n.jobs) < max(1, n.Slots)
 		n.mu.Unlock()
 		if !ok || classRank[n.Class] == 0 { // unrated devices (below the benchmark minimum) get no jobs
 			continue
@@ -351,6 +353,10 @@ func (h *Hub) handle(n *Node, m Msg) {
 			n.Mode = m.Mode
 		}
 		n.TPS = m.TPS
+		n.Slots = m.Slots
+		if n.Slots < 1 || n.Slots > 8 {
+			n.Slots = 1
+		}
 		n.mu.Unlock()
 		h.sendConfig(n)
 	case "state":
@@ -400,7 +406,7 @@ func (a *API) AdminNodes(w http.ResponseWriter, r *http.Request) {
 	for _, n := range nodes {
 		n.mu.Lock()
 		v := map[string]any{"id": n.ID, "online": n.Online, "status": n.Status, "mode": n.Mode, "class": n.Class,
-			"models": n.Models, "running_jobs": len(n.jobs), "tps": n.TPS}
+			"models": n.Models, "running_jobs": len(n.jobs), "slots": max(1, n.Slots), "tps": n.TPS}
 		var why []string
 		if !n.Online {
 			why = append(why, "owner set offline")
@@ -408,8 +414,8 @@ func (a *API) AdminNodes(w http.ResponseWriter, r *http.Request) {
 		if n.Status != "idle" {
 			why = append(why, "device reports "+n.Status)
 		}
-		if len(n.jobs) > 0 {
-			why = append(why, "busy with a job")
+		if len(n.jobs) >= max(1, n.Slots) {
+			why = append(why, "all job slots busy")
 		}
 		if classRank[n.Class] == 0 {
 			why = append(why, "unrated class")

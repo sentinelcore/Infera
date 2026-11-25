@@ -21,9 +21,9 @@ static std::string jstr(JNIEnv *env, jstring s) {
 extern "C" {
 
 JNIEXPORT jlong JNICALL Java_network_infera_node_LlamaEngine_nativeLoad(JNIEnv *env, jclass, jstring path, jint ctx,
-                                                                         jint threads) {
+                                                                         jint threads, jint parallel) {
     auto *e = new Engine();
-    std::string err = e->load(jstr(env, path), ctx, threads);
+    std::string err = e->load(jstr(env, path), ctx, threads, parallel);
     if (!err.empty()) {
         delete e;
         env->ThrowNew(env->FindClass("java/lang/IllegalStateException"), err.c_str());

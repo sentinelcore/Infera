@@ -26,6 +26,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 /** Inference engine on the device (llama.cpp on phones). */
 interface Engine {
     val modelId: String
+    /** Requests the engine can answer at once (batched decoding). */
+    val parallel: Int get() = 1
     /** Streams text; return false from onText to stop. Returns (prompt tokens, completion tokens). */
     fun generate(messages: List<Pair<String, String>>, maxTokens: Int, temperature: Float, onText: (String) -> Boolean): Pair<Int, Int>
 }
@@ -64,6 +66,8 @@ data class NodeStatus(
     val status: String = "paused",
     val pauseReason: String = "",
     val runningJob: String? = null,
+    /** Jobs running right now (several when the engine batches). */
+    val runningCount: Int = 0,
     val runningPayUsd: Double = 0.0,
     val offer: Offer? = null,
     val hub: JsonObject? = null,
@@ -87,7 +91,10 @@ class Node(
         private set
     private var ws: WebSocket? = null
     private val running = AtomicBoolean(false)
-    private val jobs = Executors.newSingleThreadExecutor()
+    private val jobs = Executors.newCachedThreadPool()
+    private val activeJobs = ConcurrentHashMap<String, Double>() // job id -> estimated pay
+    /** Jobs this phone takes at once: one in ask mode (one offer card at a time), else the engine's slots. */
+    private fun capacity() = if (status.mode == "ask") 1 else engine.parallel.coerceAtLeast(1)
     private val ticker = Executors.newSingleThreadScheduledExecutor()
     private val payloads = ConcurrentHashMap<String, (Triple<String, String, String>) -> Unit>()
     private val cancels = ConcurrentHashMap<String, AtomicBoolean>()
@@ -115,15 +122,17 @@ class Node(
     fun setOnline(on: Boolean) = update { it.copy(online = on) }.also { pushState(force = true) }
     fun setMode(mode: String) = update { it.copy(mode = mode) }.also { pushState(force = true) }
     fun decide(accept: Boolean) { decision?.invoke(accept); decision = null }
-    fun finishThenOffline() { if (status.runningJob == null) setOnline(false) else drainThenOffline = true; log("Finishing the current job, then going offline") }
+    fun finishThenOffline() { if (activeJobs.isEmpty()) setOnline(false) else drainThenOffline = true; log("Finishing the current jobs, then going offline") }
 
-    /** Stop the running job now: counts as an owner abort (pay lost, debit, −10 dependability). */
+    /** Stop the running jobs now: counts as an owner abort (pay lost, debit, −10 dependability each). */
     fun stopNow() {
-        val job = status.runningJob ?: return
-        send(buildJsonObject { put("t", "abort"); put("job_id", job); put("reason", "owner_stop") })
-        cancels[job]?.set(true)
+        if (activeJobs.isEmpty()) return
         update { it.copy(online = false) }
-        log("Stopped job $job (owner abort)")
+        for (job in activeJobs.keys.toList()) {
+            send(buildJsonObject { put("t", "abort"); put("job_id", job); put("reason", "owner_stop") })
+            cancels[job]?.set(true)
+            log("Stopped job $job (owner abort)")
+        }
     }
 
     private fun connect() {
@@ -135,7 +144,7 @@ class Node(
                 log("Connected to ${pairing.server}")
                 send(buildJsonObject {
                     put("t", "hello"); put("agent_version", "android-0.1.0"); put("platform", platform)
-                    put("class", bench.klass); put("privacy", "sandboxed"); put("mode", status.mode); put("tps", bench.tokensPerSecond)
+                    put("class", bench.klass); put("privacy", "sandboxed"); put("mode", status.mode); put("tps", bench.tokensPerSecond); put("slots", engine.parallel)
                     put("models", JsonArray(listOfNotNull(engine.modelId, speech?.modelId).map { JsonPrimitive(it) }))
                     put("bench", buildJsonObject {
                         put("tokens_per_s", bench.tokensPerSecond); put("params_b", bench.paramsB); put("ram_gb", bench.ramGb)
@@ -172,7 +181,7 @@ class Node(
     private fun onOffer(m: JsonObject) {
         val jobId = m.s("job_id")
         val model = m.s("model")
-        if (status.status != "idle") { decline(jobId, "governor"); return }
+        if (status.status == "paused" || !status.online || activeJobs.size >= capacity()) { decline(jobId, "governor"); return }
         val estTokens = m["est_tokens"]?.jsonPrimitive?.doubleOrNull ?: 0.0
         val offer = Offer(jobId, m.s("job_type").ifEmpty { "chat" }, model, m["est_pay_usd"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
             estTokens / bench.tokensPerSecond.coerceAtLeast(1.0), m["ttl_s"]?.jsonPrimitive?.intOrNull ?: 30)
@@ -197,7 +206,8 @@ class Node(
         payloads[jobId] = { p -> payload = p; payloadLatch.countDown() }
         val cancel = AtomicBoolean(false)
         cancels[jobId] = cancel
-        update { it.copy(status = "busy", runningJob = jobId, runningPayUsd = offer.estPayUsd) }
+        activeJobs[jobId] = offer.estPayUsd
+        refreshStatus()
         pushState(force = true)
         send(buildJsonObject { put("t", "accept"); put("job_id", jobId); put("sandbox_pub", key.publicB64) })
         try {
@@ -212,8 +222,10 @@ class Node(
             payloads.remove(jobId)
             val off = drainThenOffline
             drainThenOffline = false
-            update { it.copy(runningJob = null, status = "paused", online = if (off) false else it.online) }
-            if (off) log("Job finished; now offline")
+            activeJobs.remove(jobId)
+            if (off && activeJobs.isEmpty()) { update { it.copy(online = false) }; drainThenOffline = false; log("Jobs finished; now offline") }
+            else if (off) drainThenOffline = true
+            refreshStatus()
             tick()
         }
     }
@@ -293,7 +305,20 @@ class Node(
             suspended() -> "suspended by Infera (see dashboard)"
             else -> readiness()
         }
-        if (status.runningJob == null) update { it.copy(status = if (reason == null) "idle" else "paused", pauseReason = reason ?: "") }
+        update { it.copy(pauseReason = reason ?: "") }
+        refreshStatus()
+    }
+
+    /** idle = can take another job; busy = every slot is in use; paused = not taking jobs. */
+    private fun refreshStatus() {
+        val reason = status.pauseReason.ifEmpty { null }
+        val n = activeJobs.size
+        update {
+            it.copy(
+                status = when { n >= capacity() -> "busy"; reason != null -> if (n > 0) "busy" else "paused"; else -> "idle" },
+                runningJob = activeJobs.keys.firstOrNull(), runningCount = n, runningPayUsd = activeJobs.values.sum(),
+            )
+        }
         pushState()
     }
 
