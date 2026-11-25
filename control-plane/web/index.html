@@ -445,7 +445,7 @@ async function showCust() {
     $("c-credits").textContent = usd(d.credits);
     $("cled-rows").innerHTML = (d.ledger || []).map(e => `<tr><td>${when(e.created_at)}</td><td>${esc(e.kind)}</td><td class="num ${e.amount < 0 ? "neg" : ""}">${usd(e.amount)}</td><td>${esc(e.note)}</td></tr>`).join("");
     const m = await call("/v1/models");
-    const ids = (m.data || []).map(x => x.id);
+    const ids = (m.data || []).filter(x => x.devices_online > 0 && (x.endpoint || "/v1/chat/completions") === "/v1/chat/completions").map(x => x.id);
     $("t-model").innerHTML = ids.length ? ids.map(i => `<option>${esc(i)}</option>`).join("") : `<option value="">No models online yet</option>`;
     $("c-snippet").textContent = `curl ${location.origin}/v1/chat/completions \\
   -H "Authorization: Bearer ${custKey}" \\

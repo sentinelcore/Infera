@@ -84,17 +84,55 @@ func bearer(r *http.Request) string {
 	return strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
 }
 
+// GET /v1/models: every model in the catalog (public), in the OpenAI list format plus the
+// fields marketplaces read: per-token prices as strings, context length, quantization,
+// supported parameters, modalities, and how many devices serve it right now.
 func (g *Gateway) Models(w http.ResponseWriter, r *http.Request) {
-	var data []map[string]any
-	for m, n := range g.hub.OnlineModels() {
-		p := g.cfg.price(m)
-		data = append(data, map[string]any{"id": m, "object": "model", "owned_by": "infera", "devices_online": n,
-			"price_per_1m": map[string]float64{"input": p.In, "output": p.Out}})
+	online := g.hub.OnlineModels()
+	// USD per token as a clean decimal string (no float noise): 0.30 per 1M -> "0.0000003".
+	per := func(usdPerM float64) string {
+		s := strconv.FormatFloat(usdPerM/1e6, 'f', 12, 64)
+		s = strings.TrimRight(strings.TrimRight(s, "0"), ".")
+		if s == "" {
+			return "0"
+		}
+		return s
 	}
-	if g.cfg.FallbackURL != "" && g.cfg.FallbackModel != "" {
-		data = append(data, map[string]any{"id": g.cfg.FallbackModel, "object": "model", "owned_by": "infera-fallback"})
+	data := []map[string]any{}
+	seen := map[string]bool{}
+	for _, c := range catalog() {
+		seen[c.ID] = true
+		m := map[string]any{"id": c.ID, "object": "model", "created": 1764000000, "owned_by": "infera", "name": c.Label,
+			"hugging_face_id": c.HFID, "context_length": c.Ctx, "quantization": c.Quant, "devices_online": online[c.ID]}
+		switch c.Kind {
+		case "transcription":
+			m["input_modalities"], m["output_modalities"] = []string{"audio"}, []string{"text"}
+			m["pricing"] = map[string]string{"prompt": "0", "completion": "0", "audio_minute": strconv.FormatFloat(g.cfg.AudioPrice, 'f', -1, 64)}
+			m["endpoint"] = "/v1/audio/transcriptions"
+		case "embeddings":
+			m["input_modalities"], m["output_modalities"] = []string{"text"}, []string{"embeddings"}
+			m["pricing"] = map[string]string{"prompt": per(g.cfg.EmbedPrice), "completion": "0"}
+			m["endpoint"] = "/v1/embeddings"
+		default:
+			p := g.cfg.price(c.ID)
+			m["input_modalities"], m["output_modalities"] = []string{"text"}, []string{"text"}
+			m["pricing"] = map[string]string{"prompt": per(p.In), "completion": per(p.Out)}
+			m["max_output_length"] = c.Ctx / 2
+			m["supported_parameters"] = []string{"max_tokens", "temperature", "stream"}
+			m["endpoint"] = "/v1/chat/completions"
+		}
+		data = append(data, m)
+	}
+	// Models a device serves that aren't in the catalog (an owner's own model file).
+	for id, n := range online {
+		if !seen[id] {
+			p := g.cfg.price(id)
+			data = append(data, map[string]any{"id": id, "object": "model", "created": 1764000000, "owned_by": "infera", "devices_online": n,
+				"pricing": map[string]string{"prompt": per(p.In), "completion": per(p.Out)}})
+		}
 	}
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
 	json.NewEncoder(w).Encode(map[string]any{"object": "list", "data": data})
 }
 
