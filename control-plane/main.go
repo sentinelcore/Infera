@@ -134,6 +134,16 @@ func main() {
 	mux.HandleFunc("POST /api/admin/appeals/resolve", api.AdminAppeals)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
 	sub, _ := fs.Sub(webFS, "web")
+	page := func(name string) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			b, _ := webFS.ReadFile("web/" + name)
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Write(b)
+		}
+	}
+	// "/" is the public landing page; the dashboard (sign-up, devices, API keys) is /app.
+	mux.HandleFunc("GET /{$}", page("landing.html"))
+	mux.HandleFunc("GET /app", page("index.html"))
 	mux.Handle("GET /", http.FileServer(http.FS(sub)))
 
 	addr := env("INFERA_ADDR", ":8080")
