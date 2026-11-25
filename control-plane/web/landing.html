@@ -151,18 +151,13 @@ footer a{text-decoration:none}footer a:hover{color:var(--fg)}
 <div class="hero">
   <div class="wrap hero-grid">
     <div>
-      <span class="eyebrow"><span class="dot"></span><span id="live">Network live</span></span>
+      <span class="eyebrow"><span class="dot"></span><span>Now in open beta</span></span>
       <h1>AI from the world's <span class="grad">idle devices.</span></h1>
       <p class="lede">Phones, laptops and desktops serve AI while they charge or sit idle. Developers get an OpenAI-compatible API at lower prices. Owners earn USDT for the work their devices do.</p>
       <div class="ctas">
         <a class="btn primary" href="/app">Get started →</a>
         <a class="btn ghost" href="/app#contribute">Start earning</a>
         <a class="btn ghost" href="/app#dev">Use the API</a>
-      </div>
-      <div class="stats" aria-live="polite">
-        <div class="stat"><b id="s-dev">–</b><span>devices online</span></div>
-        <div class="stat"><b id="s-models">–</b><span>models online</span></div>
-        <div class="stat"><b id="s-jobs">–</b><span>jobs today</span></div>
       </div>
     </div>
     <div class="visual" aria-hidden="true">
@@ -300,13 +295,7 @@ client.chat.completions.create(
   };
 })();
 
-// Live network numbers and prices.
-fetch("/api/network").then(r => r.json()).then(d => {
-  document.getElementById("s-dev").textContent = d.devices_online;
-  document.getElementById("s-models").textContent = Object.keys(d.models || {}).length;
-  document.getElementById("s-jobs").textContent = (d.jobs_today || 0).toLocaleString();
-  document.getElementById("live").textContent = d.devices_online > 0 ? `${d.devices_online} device${d.devices_online === 1 ? "" : "s"} serving now` : "Network live";
-}).catch(() => {});
+// Live prices.
 fetch("/api/catalog").then(r => r.json()).then(d => {
   const p = d.pricing; if (!p) return;
   const money = (v, dp) => "$" + v.toFixed(dp);
