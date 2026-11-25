@@ -239,6 +239,7 @@ pub async fn run_with(ask: bool, state: node::State) -> Result<()> {
         s.bench = serde_json::to_value(&c.bench).unwrap_or_default();
         s.ui_port = c.governor.ui_port;
         s.limits = c.limits.clone();
+        s.slots = c.engine.slots();
     }
     tokio::spawn(ui::serve(state.clone(), c.governor.ui_port));
     tokio::spawn(updater::run(state.clone(), c.auto_update));

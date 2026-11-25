@@ -49,7 +49,9 @@ impl Engine {
         cmd.arg("-m").arg(&cfg.gguf)
             .arg("--host").arg("127.0.0.1")
             .arg("--port").arg(port.to_string())
-            .arg("-c").arg(if cfg.ctx > 0 { cfg.ctx } else { 4096 }.to_string())
+            // Each parallel slot gets its own context window.
+            .arg("-c").arg((if cfg.ctx > 0 { cfg.ctx } else { 4096 } * cfg.slots() as u32).to_string())
+            .arg("--parallel").arg(cfg.slots().to_string())
             .arg("-ngl").arg(if cfg.gpu_layers != 0 { cfg.gpu_layers } else { 99 }.to_string())
             .stdout(Stdio::null())
             .stderr(Stdio::null())

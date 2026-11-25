@@ -57,7 +57,14 @@ pub struct Shared {
     /// Set by the tray's Quit: finish any running job, then exit.
     pub quit_requested: bool,
     pub ui_port: u16,
+    /// The first running job (shown on the local page and tray); see `running` for all of them.
     pub job: Option<JobView>,
+    /// Jobs running right now (several when the engine has parallel slots).
+    pub jobs_running: usize,
+    /// Jobs this device takes at once.
+    pub slots: usize,
+    #[serde(skip)]
+    pub running: std::collections::BTreeMap<String, (JobView, watch::Sender<bool>)>,
     pub offer: Option<OfferView>,
     pub hub: Value,
     pub remote: Value,
@@ -70,8 +77,6 @@ pub struct Shared {
     pub decision: Option<oneshot::Sender<bool>>,
     #[serde(skip)]
     pub out: Option<mpsc::Sender<String>>,
-    #[serde(skip)]
-    pub stop_job: Option<watch::Sender<bool>>,
 }
 
 impl Shared {
@@ -233,19 +238,34 @@ pub async fn run(cfg: Config, engine: Engine, key: SigningKey, state: State) -> 
     }
 }
 
+/// Recomputes the job summary and status: idle = can take another job, busy = all slots
+/// in use (or working while conditions say "no new jobs"), paused = not taking jobs.
+pub fn refresh_jobs(s: &mut Shared) {
+    s.job = s.running.values().next().map(|(j, _)| j.clone());
+    s.jobs_running = s.running.len();
+    let slots = s.slots.max(1);
+    s.status = if s.status == "starting" {
+        s.status.clone()
+    } else if s.running.len() >= slots || (!s.running.is_empty() && !(s.ready && s.online && !s.draining)) {
+        "busy".into()
+    } else if s.ready && s.online && !s.draining {
+        "idle".into()
+    } else {
+        "paused".into()
+    };
+}
+
 /// Stop the running job immediately. Counts as an owner action on the server.
 pub fn stop_now(state: &State, quitting: bool) {
-    let (job, stop) = {
+    let jobs: Vec<(String, watch::Sender<bool>)> = {
         let mut s = state.lock().unwrap();
         s.online = false;
-        (s.job.clone(), s.stop_job.take())
+        s.running.iter().map(|(id, (_, tx))| (id.clone(), tx.clone())).collect()
     };
-    if let Some(j) = job {
-        send(state, json!({"t": "abort", "job_id": j.job_id, "reason": "owner_stop"}));
-        if let Some(st) = stop {
-            let _ = st.send(true);
-        }
-        state.lock().unwrap().log(format!("Stopped job {} (owner abort)", j.job_id));
+    for (id, stop) in jobs {
+        send(state, json!({"t": "abort", "job_id": id, "reason": "owner_stop"}));
+        let _ = stop.send(true);
+        state.lock().unwrap().log(format!("Stopped job {id} (owner abort)"));
     }
     if quitting {
         send(state, json!({"t": "bye", "reason": "owner_quit"}));
@@ -281,7 +301,7 @@ async fn session(ctx: Arc<Ctx>) -> Result<()> {
         "t": "hello", "agent_version": env!("CARGO_PKG_VERSION"),
         "platform": format!("{} {}", std::env::consts::OS, std::env::consts::ARCH),
         "bench": bench, "class": bench.class, "privacy": "sandboxed", "models": served_models(&ctx.cfg),
-        "mode": mode, "tps": bench.tokens_per_s,
+        "mode": mode, "tps": bench.tokens_per_s, "slots": ctx.cfg.engine.slots(),
     }));
     push_state(&ctx.state);
 
@@ -397,7 +417,7 @@ async fn handle_offer(ctx: Arc<Ctx>, m: Value) {
         send(&ctx.state, json!({"t": "decline", "job_id": job_id, "reason": "user_declined"}));
         return;
     }
-    // Re-check the governor after a human decision.
+    // Re-check the governor (and free slots) after a human decision.
     if ctx.state.lock().unwrap().status != "idle" {
         send(&ctx.state, json!({"t": "decline", "job_id": job_id, "reason": "governor"}));
         return;
@@ -410,9 +430,9 @@ async fn handle_offer(ctx: Arc<Ctx>, m: Value) {
     ctx.cancels.lock().unwrap().insert(job_id.clone(), ctx_tx.clone());
     {
         let mut s = ctx.state.lock().unwrap();
-        s.status = "busy".into();
-        s.job = Some(JobView { job_id: job_id.clone(), model: model.clone(), est_pay_usd: est_pay, running_s: 0, started: Some(Instant::now()) });
-        s.stop_job = Some(ctx_tx);
+        let view = JobView { job_id: job_id.clone(), model: model.clone(), est_pay_usd: est_pay, running_s: 0, started: Some(Instant::now()) };
+        s.running.insert(job_id.clone(), (view, ctx_tx));
+        refresh_jobs(&mut s);
     }
     push_state(&ctx.state);
     send(&ctx.state, json!({"t": "accept", "job_id": job_id, "sandbox_pub": sandbox.public_b64}));
@@ -430,15 +450,14 @@ async fn handle_offer(ctx: Arc<Ctx>, m: Value) {
     ctx.cancels.lock().unwrap().remove(&job_id);
     let quit = {
         let mut s = ctx.state.lock().unwrap();
-        s.job = None;
-        s.stop_job = None;
-        if s.draining {
+        s.running.remove(&job_id);
+        if s.draining && s.running.is_empty() {
             s.draining = false;
             s.online = false;
-            s.log("Job finished; now offline");
+            s.log("Jobs finished; now offline");
         }
-        s.status = if s.ready && s.online && !s.draining { "idle".into() } else { "paused".into() };
-        s.quit_after_job
+        refresh_jobs(&mut s);
+        s.quit_after_job && s.running.is_empty()
     };
     push_state(&ctx.state);
     if quit {
@@ -564,7 +583,7 @@ async fn governor(ctx: Arc<Ctx>) {
                     o.seconds_left = d.saturating_duration_since(Instant::now()).as_secs();
                 }
             }
-            if let Some(j) = s.job.as_mut() {
+            for (j, _) in s.running.values_mut() {
                 if let Some(st) = j.started {
                     j.running_s = st.elapsed().as_secs();
                 }
@@ -601,10 +620,8 @@ async fn governor(ctx: Arc<Ctx>) {
                 ""
             };
             s.ready = reason.is_empty();
-            if s.job.is_none() {
-                s.status = if s.ready { "idle".into() } else { "paused".into() };
-            }
             s.pause_reason = if s.job.is_some() { String::new() } else { reason.into() };
+            refresh_jobs(&mut s);
             let changed = format!("{}|{}|{}", s.status, s.online, s.mode) != s.sent;
             changed
         };

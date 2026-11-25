@@ -71,8 +71,19 @@ pub struct EngineConfig {
     pub params_b: f64,
     #[serde(default)]
     pub ctx: u32,
+    /// Jobs answered at once (batching). 0 = automatic (2).
+    #[serde(default)]
+    pub parallel: u32,
     #[serde(default)]
     pub gpu_layers: i32,
+}
+
+impl EngineConfig {
+    /// Jobs this device takes at once. Ollama and LM Studio run requests in parallel;
+    /// a llama-server started by Infera gets the same number of slots.
+    pub fn slots(&self) -> usize {
+        (if self.parallel == 0 { 2 } else { self.parallel }).clamp(1, 8) as usize
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
