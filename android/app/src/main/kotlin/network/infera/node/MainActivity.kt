@@ -75,7 +75,10 @@ class MainActivity : Activity() {
             } else {
                 @Suppress("DEPRECATION") (insets.systemWindowInsetTop to insets.systemWindowInsetBottom)
             }
-            root.setPadding(dp(18), top + dp(12), dp(18), bottom + dp(24))
+            // Pad the scroll view itself (and clip to it) so scrolled content never slides
+            // under the see-through status bar.
+            (root.parent as? ScrollView)?.apply { setPadding(0, top, 0, bottom); clipToPadding = true }
+            root.setPadding(dp(18), dp(12), dp(18), dp(24))
             insets
         }
         window.statusBarColor = bg
