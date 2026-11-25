@@ -66,6 +66,11 @@ pub struct EngineConfig {
     pub stt_model: String,
     #[serde(default)]
     pub stt_engine_model: String,
+    /// Or: a whisper.cpp `whisper-server` binary Infera starts itself, with this ggml model.
+    #[serde(default)]
+    pub stt_server: String,
+    #[serde(default)]
+    pub stt_gguf: String,
     /// Size in billions of parameters, used for the device class.
     #[serde(default)]
     pub params_b: f64,

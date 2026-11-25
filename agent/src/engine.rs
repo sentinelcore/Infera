@@ -18,6 +18,7 @@ pub struct Engine {
     pub stt_url: String,
     pub stt_model: String,
     child: Option<Child>,
+    stt_child: Option<Child>,
     http: reqwest::Client,
 }
 
@@ -34,10 +35,28 @@ impl Engine {
         let http = reqwest::Client::builder().connect_timeout(Duration::from_secs(5)).build()?;
         let model = if cfg.engine_model.is_empty() { cfg.model_id.clone() } else { cfg.engine_model.clone() };
         let embed_model = if cfg.embed_engine_model.is_empty() { cfg.embed_model.clone() } else { cfg.embed_engine_model.clone() };
-        let stt_url = cfg.stt_url.trim_end_matches('/').to_string();
+        // Speech: an existing server (stt_url), or a whisper-server Infera starts itself.
+        let (mut stt_url, mut stt_child) = (cfg.stt_url.trim_end_matches('/').to_string(), None);
+        if stt_url.is_empty() && !cfg.stt_server.is_empty() && !cfg.stt_gguf.is_empty() {
+            let port = 18178;
+            let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).min(8);
+            match Command::new(&cfg.stt_server)
+                .args(["-m", &cfg.stt_gguf, "--host", "127.0.0.1", "--port", &port.to_string(), "--inference-path", "/v1/audio/transcriptions", "-t", &threads.to_string()])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .kill_on_drop(true)
+                .spawn()
+            {
+                Ok(c) => {
+                    stt_child = Some(c);
+                    stt_url = format!("http://127.0.0.1:{port}");
+                }
+                Err(e) => eprintln!("transcription off: could not start {}: {e}", cfg.stt_server),
+            }
+        }
         let stt_model = if cfg.stt_engine_model.is_empty() { cfg.stt_model.clone() } else { cfg.stt_engine_model.clone() };
         if !cfg.url.is_empty() {
-            let e = Engine { url: cfg.url.trim_end_matches('/').to_string(), model, embed_model, stt_url, stt_model, child: None, http };
+            let e = Engine { url: cfg.url.trim_end_matches('/').to_string(), model, embed_model, stt_url, stt_model, child: None, stt_child, http };
             e.wait_ready(Duration::from_secs(10)).await?;
             return Ok(e);
         }
@@ -57,7 +76,7 @@ impl Engine {
             .stderr(Stdio::null())
             .kill_on_drop(true);
         let child = cmd.spawn().map_err(|e| anyhow!("could not start llama-server at {}: {e}", cfg.llama_server))?;
-        let e = Engine { url: format!("http://127.0.0.1:{port}"), model, embed_model, stt_url, stt_model, child: Some(child), http };
+        let e = Engine { url: format!("http://127.0.0.1:{port}"), model, embed_model, stt_url, stt_model, child: Some(child), stt_child, http };
         e.wait_ready(Duration::from_secs(180)).await?;
         Ok(e)
     }
@@ -187,6 +206,9 @@ impl Engine {
 
     pub async fn stop(&mut self) {
         if let Some(c) = self.child.as_mut() {
+            let _ = c.kill().await;
+        }
+        if let Some(c) = self.stt_child.as_mut() {
             let _ = c.kill().await;
         }
     }

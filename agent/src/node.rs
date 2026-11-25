@@ -349,7 +349,7 @@ fn served_models(cfg: &Config) -> Vec<String> {
     if !cfg.engine.embed_model.is_empty() && !cfg.engine.url.is_empty() {
         m.push(cfg.engine.embed_model.clone());
     }
-    if !cfg.engine.stt_model.is_empty() && !cfg.engine.stt_url.is_empty() {
+    if !cfg.engine.stt_model.is_empty() && (!cfg.engine.stt_url.is_empty() || !cfg.engine.stt_server.is_empty()) {
         m.push(cfg.engine.stt_model.clone());
     }
     m

@@ -40,7 +40,16 @@ To run it without Docker: `cd control-plane && go build -o infera-server . && IN
 
 ## 2. Contributors: share a laptop or desktop
 
-**Install the node**
+**Install the node (one command: install, pair, pick and download the best model, benchmark, start at login)**
+
+```sh
+# macOS (builds once, ~5 min; also sets up Whisper transcription) and Linux
+curl -fsSL https://infera.valanor.network/install.sh | sh -s -- <pairing code>
+# choose the model, e.g. DeepSeek R1 Distill:
+curl -fsSL https://infera.valanor.network/install.sh | sh -s -- <pairing code> --model deepseek-r1-distill-llama-8b
+```
+
+Or step by step:
 
 ```sh
 # macOS / Linux

@@ -35,6 +35,9 @@ enum Cmd {
         /// Don't install the start-at-login service
         #[arg(long)]
         no_service: bool,
+        /// Serve this model instead of the automatic pick, e.g. deepseek-r1-distill-llama-8b
+        #[arg(long, default_value = "")]
+        model: String,
     },
     /// Pair this device with your account using the 6-digit code from the dashboard
     Pair {
@@ -118,7 +121,7 @@ fn main() -> Result<()> {
 
 async fn async_main(cli: Cli) -> Result<()> {
     match cli.cmd {
-        Cmd::Setup { code, server, no_service } => setup::run(code, server, no_service).await,
+        Cmd::Setup { code, server, no_service, model } => setup::run(code, server, no_service, model).await,
         Cmd::Pair { code, server, name } => pair(code, server, name).await,
         Cmd::Engine { url, llama_server, gguf, model, engine_model, params_b, embed_model, embed_engine_model, stt_url, stt_model, stt_engine_model } => {
             let mut c = config::load()?;

@@ -2,9 +2,11 @@
 # Infera node installer for macOS and Linux.
 #   curl -fsSL https://<your Infera server>/install.sh | sh                 # install only
 #   curl -fsSL https://<your Infera server>/install.sh | sh -s -- 123456    # install, pair with this code,
+#   … | sh -s -- 123456 --model deepseek-r1-distill-llama-8b               # choose the model
 #                                                                            # download a model, start at login
 set -eu
 CODE="${1:-}"
+[ $# -gt 0 ] && shift  # anything after the code (e.g. --model …) goes to infera setup
 REPO="${INFERA_REPO:-sentinelcore/Infera}"
 TAG="${INFERA_VERSION:-test-build}"
 DEST="${INFERA_BIN:-$HOME/.infera/bin}"
@@ -49,7 +51,7 @@ case "$os-$arch" in
     cp "$SRC/agent/target/release/infera" "$DEST/infera"
     chmod +x "$DEST/infera"
     echo "Installed to $DEST/infera"
-    if [ -n "$CODE" ]; then exec "$DEST/infera" setup "$CODE"; fi
+    if [ -n "$CODE" ]; then exec "$DEST/infera" setup "$CODE" "$@"; fi
     echo "Next: get a pairing code on the dashboard, then run:  $DEST/infera setup <code>"
     exit 0 ;;
   *) echo "Infera doesn't have a build for $os $arch yet." >&2; exit 1 ;;
@@ -63,7 +65,7 @@ tar -xzf "$tmp/infera.tar.gz" -C "$DEST"
 chmod +x "$DEST/infera"
 rm -rf "$tmp"
 echo "Installed to $DEST/infera"
-if [ -n "$CODE" ]; then exec "$DEST/infera" setup "$CODE"; fi
+if [ -n "$CODE" ]; then exec "$DEST/infera" setup "$CODE" "$@"; fi
 case ":$PATH:" in *":$DEST:"*) ;; *) echo "Add it to your PATH:  export PATH=\"$DEST:\$PATH\"" ;; esac
 cat <<'NEXT'
 
