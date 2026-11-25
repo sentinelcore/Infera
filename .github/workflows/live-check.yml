@@ -19,7 +19,10 @@ jobs:
         run: |
           set -e
           curl -fsS "$URL/healthz" | grep -q ok
-          curl -fsS "$URL/" | grep -q "<title>Infera</title>"
+          curl -fsS "$URL/" | grep -q "idle devices"
+          curl -fsS "$URL/app" | grep -q "<title>Infera</title>"
+          curl -fsS "$URL/performance" | grep -q "Performance"
+          curl -fsS "$URL/privacy" | grep -q "Data and privacy"
           curl -fsS "$URL/api/network" | tee net.json | grep -q devices_online
           curl -fsS "$URL/v1/models" | grep -q '"object":"list"'
           code=$(curl -s -o /dev/null -w "%{http_code}" "$URL/v1/chat/completions" -d '{}')
