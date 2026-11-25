@@ -2,13 +2,16 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"io/fs"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 	"time"
 )
 
@@ -133,7 +136,21 @@ func main() {
 	}
 	log.Printf("Infera control plane on %s (owner share %.0f%%, fallback %v)", addr, cfg.OwnerShare*100, cfg.FallbackURL != "")
 	srv := &http.Server{Addr: addr, Handler: mon.Wrap(logRequests(mux)), ReadHeaderTimeout: 15 * time.Second}
-	log.Fatal(srv.ListenAndServe())
+	// Graceful stop: Railway (and Docker) send SIGTERM to the old container on every deploy.
+	// Exit 0 after finishing in-flight requests, so it isn't reported as a crash.
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGTERM, syscall.SIGINT)
+	go func() {
+		<-stop
+		log.Printf("shutting down")
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		srv.Shutdown(ctx)
+	}()
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Fatal(err)
+	}
+	log.Printf("stopped")
 }
 
 func logRequests(h http.Handler) http.Handler {

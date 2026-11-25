@@ -24,6 +24,9 @@ class Prefs(ctx: Context) {
     var maxMinutes: Float get() = p.getFloat("max_minutes", 0f); set(v) = p.edit().putFloat("max_minutes", v).apply()
     val limits: AutoLimits get() = AutoLimits(minPayUsd.toDouble(), minPerHourUsd.toDouble(), maxMinutes.toDouble())
 
+    var benchAt: Long get() = p.getLong("bench_at", 0); set(v) = p.edit().putLong("bench_at", v).apply()
+    var threads: Int get() = p.getInt("threads", 0); set(v) = p.edit().putInt("threads", v).apply()
+
     val paired: Boolean get() = deviceId.isNotEmpty() && token.isNotEmpty()
     val ready: Boolean get() = paired && modelPath.isNotEmpty() && klass.isNotEmpty() && klass != "unrated"
     val pairing: Pairing get() = Pairing(server, deviceId, token)

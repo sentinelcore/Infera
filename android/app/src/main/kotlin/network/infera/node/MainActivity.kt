@@ -45,7 +45,16 @@ class MainActivity : Activity() {
     private val ui = Handler(Looper.getMainLooper())
     private val green = Color.rgb(0x17, 0x79, 0x5a)
     private val amber = Color.rgb(0xa8, 0x6a, 0x00)
-    private var remote = ""
+    private var tab = "home"            // home | device | settings
+    private var benchJustDone = false
+    private var rToday = ""; private var rJobs = ""; private var rAvail = ""; private var rHeld = ""; private var rDep = ""
+    private val dark get() = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+    private val bg get() = if (dark) Color.rgb(0x0e, 0x14, 0x12) else Color.rgb(0xf4, 0xf6, 0xf4)
+    private val surface get() = if (dark) Color.rgb(0x16, 0x1f, 0x1b) else Color.WHITE
+    private val fg get() = if (dark) Color.rgb(0xe3, 0xeb, 0xe7) else Color.rgb(0x14, 0x20, 0x1b)
+    private val muted get() = if (dark) Color.rgb(0x9a, 0xab, 0xa3) else Color.rgb(0x56, 0x65, 0x5e)
+    private val line get() = if (dark) Color.rgb(0x2f, 0x3e, 0x37) else Color.rgb(0xc9, 0xd3, 0xce)
+    private val red = Color.rgb(0xb3, 0x41, 0x2e)
     private var stopArmed = false
     private val listener: (NodeStatus) -> Unit = { ui.post { if (prefs.ready) render() } }
 
@@ -55,7 +64,7 @@ class MainActivity : Activity() {
         current = this
         if (Build.VERSION.SDK_INT >= 33) requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
         root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(24), dp(18), dp(24)) }
-        setContentView(ScrollView(this).apply { addView(root) })
+        setContentView(ScrollView(this).apply { setBackgroundColor(bg); addView(root) })
         NodeService.listeners.add(listener)
         render()
         handlePairLink(intent)
@@ -100,9 +109,32 @@ class MainActivity : Activity() {
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
     private fun text(s: String, size: Float = 15f, bold: Boolean = false, color: Int? = null) = TextView(this).apply {
-        text = s; textSize = size; if (bold) setTypeface(typeface, Typeface.BOLD); color?.let { setTextColor(it) }
+        text = s; textSize = size; if (bold) setTypeface(typeface, Typeface.BOLD); setTextColor(color ?: fg)
         setPadding(0, dp(4), 0, dp(4))
     }
+    /** Label on the left, value on the right. */
+    private fun row(label: String, value: String, valueColor: Int? = null) = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(3), 0, dp(3))
+        addView(text(label, 14f, color = muted), LinearLayout.LayoutParams(0, -2, 1f))
+        addView(text(value, 14f, true, valueColor).apply { gravity = Gravity.END })
+    }
+    /** Checklist line: ✓ / ✗, label, and a short explanation. */
+    private fun checkRow(ok: Boolean, label: String, detail: String) = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(5), 0, dp(5)); gravity = Gravity.CENTER_VERTICAL
+        addView(text(if (ok) "✓" else "✗", 18f, true, if (ok) green else red).apply { minWidth = dp(28) })
+        addView(LinearLayout(this@MainActivity).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(text(label, 15f, true).apply { setPadding(0, 0, 0, 0) })
+            addView(text(detail, 12f, color = muted).apply { setPadding(0, 0, 0, 0) })
+        })
+    }
+    private fun pill(s: String, color: Int) = TextView(this).apply {
+        text = s; textSize = 12f; setTypeface(typeface, Typeface.BOLD); setTextColor(color)
+        setPadding(dp(10), dp(3), dp(10), dp(3))
+        background = GradientDrawable().apply { cornerRadius = dp(99).toFloat(); setStroke(dp(1), color) }
+        layoutParams = LinearLayout.LayoutParams(-2, -2)
+    }
+    private fun heading(s: String) = text(s, 13f, true, muted).apply { setPadding(0, dp(18), 0, 0); setAllCaps(true); letterSpacing = 0.06f }
     private fun field(hint: String, value: String = "", number: Boolean = false) = EditText(this).apply {
         this.hint = hint; setText(value); if (number) inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
     }
@@ -112,19 +144,47 @@ class MainActivity : Activity() {
     }
     private fun card(vararg views: View) = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(14), dp(16), dp(14))
-        background = GradientDrawable().apply { cornerRadius = dp(14).toFloat(); setStroke(dp(1), Color.rgb(0xc9, 0xd3, 0xce)) }
+        background = GradientDrawable().apply { cornerRadius = dp(14).toFloat(); setColor(surface); setStroke(dp(1), line) }
         layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) }
         views.forEach { addView(it) }
     }
 
     private fun render() {
         root.removeAllViews()
-        root.addView(text("Infera", 26f, true))
-        root.addView(text("Version ${BuildConfig.VERSION_NAME} · built ${BuildConfig.BUILD_TIME}", 11f, color = Color.GRAY))
+        root.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            addView(text("Infera", 26f, true), LinearLayout.LayoutParams(0, -2, 1f))
+            if (prefs.ready) addView(pill("Class ${prefs.klass}", green))
+        })
         when {
             !prefs.paired -> renderPair()
             !prefs.ready -> renderModel()
-            else -> renderRunning()
+            else -> {
+                root.addView(tabs())
+                when (tab) {
+                    "device" -> renderDevice()
+                    "settings" -> renderSettings()
+                    else -> renderHome()
+                }
+            }
+        }
+        root.addView(text("Version ${BuildConfig.VERSION_NAME} · built ${BuildConfig.BUILD_TIME}", 11f, color = muted).apply { setPadding(0, dp(20), 0, 0); gravity = Gravity.CENTER })
+    }
+
+    private fun tabs() = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) }
+        background = GradientDrawable().apply { cornerRadius = dp(12).toFloat(); setColor(surface); setStroke(dp(1), line) }
+        setPadding(dp(4), dp(4), dp(4), dp(4))
+        for ((id, label) in listOf("home" to "Home", "device" to "My device", "settings" to "Settings")) {
+            addView(TextView(this@MainActivity).apply {
+                text = label; textSize = 14f; gravity = Gravity.CENTER; setPadding(0, dp(9), 0, dp(9))
+                setTypeface(typeface, Typeface.BOLD)
+                val on = tab == id
+                setTextColor(if (on) Color.WHITE else muted)
+                if (on) background = GradientDrawable().apply { cornerRadius = dp(9).toFloat(); setColor(green) }
+                setOnClickListener { tab = id; benchJustDone = false; render() }
+            }, LinearLayout.LayoutParams(0, -2, 1f))
         }
     }
 
@@ -309,8 +369,9 @@ class MainActivity : Activity() {
                 return
             }
             say("%.1f tokens/s · class %s · %d threads".format(tps, prefs.klass, LlamaEngine.bestThreads()))
+            prefs.benchAt = System.currentTimeMillis(); prefs.threads = LlamaEngine.bestThreads()
             if (prefs.klass != "unrated") { prefs.enabled = true; NodeService.start(this) }
-            ui.post { current?.render() }
+            ui.post { current?.let { a -> a.tab = "device"; a.benchJustDone = true; a.render() } }
             ui.post { current?.progress?.visibility = View.GONE }
         } catch (e: Throwable) {
             ui.post { current?.progress?.visibility = View.GONE }
@@ -390,81 +451,176 @@ class MainActivity : Activity() {
     }
 
     private fun refreshRemote() {
-        if (System.currentTimeMillis() / 1000 % 15 != 0L) return
+        if (rToday.isNotEmpty() && System.currentTimeMillis() / 1000 % 15 != 0L) return
         Thread {
             val v = Api.deviceMe(prefs.pairing) ?: return@Thread
             val today = v["today"]?.jsonObject
             val bal = v["balance"]?.jsonObject
             val dev = v["device"]?.jsonObject
             fun usd(m: Long?) = if (m == null) "–" else "$" + "%.${if (m != 0L && kotlin.math.abs(m) < 10_000) 6 else 2}f".format(m / 1e6)
-            remote = "Today ${usd(today?.get("earned_today")?.jsonPrimitive?.longOrNull)} · ${today?.get("jobs_today")?.jsonPrimitive?.content ?: "0"} jobs\n" +
-                "Available ${usd(bal?.get("available")?.jsonPrimitive?.longOrNull)} · held ${usd(bal?.get("held")?.jsonPrimitive?.longOrNull)}\n" +
-                "Class ${dev?.get("class")?.jsonPrimitive?.content ?: prefs.klass} · dependability ${"%.1f".format(dev?.get("dependability")?.jsonPrimitive?.doubleOrNull ?: 0.0)}"
+            rToday = usd(today?.get("earned_today")?.jsonPrimitive?.longOrNull)
+            rJobs = today?.get("jobs_today")?.jsonPrimitive?.content ?: "0"
+            rAvail = usd(bal?.get("available")?.jsonPrimitive?.longOrNull)
+            rHeld = usd(bal?.get("held")?.jsonPrimitive?.longOrNull)
+            rDep = "%.0f / 100".format(dev?.get("dependability")?.jsonPrimitive?.doubleOrNull ?: 0.0)
         }.start()
     }
 
-    private fun renderRunning() {
+    // ---------- Home: what's happening now ----------
+    private fun renderHome() {
         val n = NodeService.node
         val s = n?.status
         val running = prefs.enabled && n != null
-        val headline = when {
-            !running -> "Not running"
-            s?.runningJob != null -> "Working on a job"
-            s?.connected != true -> "Connecting…"
-            s.status == "idle" -> "Online · waiting for jobs"
-            else -> "Paused · ${s.pauseReason}"
+        val checks = PhoneRules(this, prefs).checks()
+        val failing = checks.filter { !it.ok }
+        val (headline, color, explain) = when {
+            !running -> Triple("Not running", muted, "Tap Start earning to let this phone take jobs.")
+            s?.runningJob != null -> Triple("Working on a job", amber, "Earning about $%.4f for this job. Keep the phone plugged in.".format(s.runningPayUsd))
+            s?.online == false -> Triple("Offline", muted, "You turned jobs off. Tap Go online to earn again.")
+            s?.connected != true -> Triple("Connecting…", muted, "Reaching the Infera network.")
+            s.status == "idle" -> Triple("Online · ready for jobs", green, "Everything is set. Jobs arrive when customers send them; you'll see each one here.")
+            failing.isNotEmpty() -> Triple("Waiting to start", amber, "This phone takes jobs only when it's safe to. Waiting for: " + failing.joinToString(", ") { it.label.lowercase() } + ".")
+            else -> Triple("Paused", amber, s.pauseReason.replaceFirstChar { it.uppercase() })
         }
         root.addView(card(
-            text(headline, 18f, true, if (s?.runningJob != null) amber else green),
-            text(remote.ifEmpty { "Model ${prefs.modelId} · %.1f tok/s · class ${prefs.klass}".format(prefs.tps) }),
+            LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                addView(View(this@MainActivity).apply { background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(color) } },
+                    LinearLayout.LayoutParams(dp(14), dp(14)).apply { rightMargin = dp(10) })
+                addView(text(headline, 20f, true, color))
+            },
+            text(explain, 14f, color = muted),
             if (!running) button("Start earning") { prefs.enabled = true; NodeService.start(this); ui.postDelayed({ render() }, 800) }
-            else button(if (s?.online == false) "Go online" else "Go offline", primary = false) { n.setOnline(s?.online == false) },
+            else button(if (s?.online == false) "Go online" else "Go offline", primary = s?.online == false) { n.setOnline(s?.online == false) },
         ))
 
         s?.offer?.let { o ->
             root.addView(card(
-                text("NEW JOB OFFER · ${o.secondsLeft()}s", 12f, color = Color.GRAY),
+                text("NEW JOB OFFER · ${o.secondsLeft()}s left", 12f, true, muted),
                 text("$%.4f".format(o.estPayUsd), 34f, true, amber),
-                text("≈ $%.2f per hour".format(o.perHourUsd)),
-                text("${o.jobType.replace('_', ' ')} · ${o.model} · about ${o.estSeconds.toInt().coerceAtLeast(1)} s"),
+                text("≈ $%.2f per hour · ${o.jobType.replace('_', ' ')} · about ${o.estSeconds.toInt().coerceAtLeast(1)} s".format(o.perHourUsd), 14f),
                 button("Accept") { n?.decide(true) },
                 button("Decline", primary = false) { n?.decide(false) },
-                text("Declining is free. Once accepted, the job must finish.", 12f, color = Color.GRAY),
-            ).apply { background = GradientDrawable().apply { cornerRadius = dp(14).toFloat(); setStroke(dp(2), green) } })
+                text("Declining is free. Once accepted, the job must finish.", 12f, color = muted),
+            ).apply { background = GradientDrawable().apply { cornerRadius = dp(14).toFloat(); setColor(surface); setStroke(dp(2), green) } })
         }
-
         if (s?.runningJob != null) {
             root.addView(card(
-                text("Running job · sealed · earns ~$%.4f".format(s.runningPayUsd), 15f, true),
+                text("Running job · private and sealed", 15f, true),
+                text("You can't see what it is, and neither can anyone else on this phone.", 12f, color = muted),
                 button("Finish this job, then go offline", primary = false) { n?.finishThenOffline() },
                 button(if (stopArmed) "Tap again: stop now and take the penalty" else "Stop now", primary = false) {
                     if (stopArmed) { n?.stopNow(); stopArmed = false } else stopArmed = true
                 },
-                text("Stopping now loses this job's ~$%.4f, debits $%.4f (2×) and costs 10 dependability points.".format(s.runningPayUsd, s.runningPayUsd * 2), 12f, color = Color.GRAY),
+                text("Stopping now loses this job's ~$%.4f, debits $%.4f (2×) and costs 10 dependability points.".format(s.runningPayUsd, s.runningPayUsd * 2), 12f, color = muted),
             ))
         }
 
-        val ask = Switch(this).apply { text = "Ask before every job"; isChecked = prefs.mode == "ask"
+        root.addView(heading("Ready to earn when"))
+        root.addView(card(*checks.map { checkRow(it.ok, it.label, it.detail) }.toTypedArray(),
+            checkRow(s?.connected == true, "Connected to Infera", if (s?.connected == true) "Online" else "Connecting…")))
+
+        root.addView(heading("Earnings"))
+        root.addView(card(
+            row("Today", if (rToday.isEmpty()) "…" else "$rToday · $rJobs jobs", green),
+            row("Available to withdraw", rAvail.ifEmpty { "…" }),
+            row("On hold (safety period)", rHeld.ifEmpty { "…" }),
+            row("Dependability", rDep.ifEmpty { "…" }),
+            text("Withdraw in USDT from the dashboard. Earnings are held a few days first; reliable devices are paid sooner.", 12f, color = muted),
+        ))
+
+        root.addView(heading("Activity"))
+        val ev = (s?.events ?: emptyList()).take(10)
+        root.addView(card(text(if (ev.isEmpty()) "Nothing yet. Jobs and status changes show up here." else ev.joinToString("\n"), 12f, color = muted).apply { gravity = Gravity.START }))
+    }
+
+    // ---------- My device: benchmark summary and potential ----------
+    private fun renderDevice() {
+        val tps = prefs.tps.toDouble()
+        val m1 = prefs.klass == "M1"
+        if (benchJustDone) root.addView(card(
+            text("Benchmark complete ✓", 18f, true, green),
+            text("Here's what this phone can do on Infera. It has started earning; you'll find this page under My device any time.", 14f, color = muted),
+            button("Go to Home") { tab = "home"; benchJustDone = false; render() },
+        ))
+        root.addView(heading("Result"))
+        root.addView(card(
+            text(if (m1) "Class M1 · Mobile Plus" else "Class M2 · Mobile Lite", 20f, true, green),
+            text(if (m1) "Fast enough for live chat replies, where a customer is waiting for the answer."
+                 else "Good for batch jobs, where nobody is waiting, so speed matters less.", 14f, color = muted),
+            row("Speed", "%.1f tokens/s".format(tps)),
+            row("Model", "${prefs.modelId} (%.1f B)".format(prefs.paramsB)),
+            row("Memory", "%.0f GB RAM".format(phoneRamGb())),
+            row("Processor", (if (Build.VERSION.SDK_INT >= 31) Build.SOC_MODEL else Build.HARDWARE) + " · ${prefs.threads.takeIf { it > 0 } ?: LlamaEngine.bestThreads()} fast cores"),
+            row("Tested", if (prefs.benchAt > 0) java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(prefs.benchAt)) else "–"),
+        ))
+        root.addView(heading("Jobs this phone can take"))
+        val can = if (m1) listOf("Live chat replies" to "Customers waiting on an answer. Paid the most.", "Batch chat" to "Large jobs that can wait; run while you sleep.")
+                  else listOf("Batch chat" to "Jobs where nobody is waiting; run overnight on the charger.")
+        val soon = listOf("Embeddings" to "Turning text into search vectors. Coming to phones soon.", "Transcription" to "Speech to text with Whisper. Coming to phones soon.")
+        root.addView(card(*(can.map { checkRow(true, it.first, it.second) } + soon.map { checkRow(false, it.first, it.second) }).toTypedArray()))
+
+        // Beta prices: $0.30 per 1M output tokens, owners keep 70%.
+        val perHour = tps * 3600 / 1e6 * 0.30 * 0.70
+        root.addView(heading("Earning potential"))
+        root.addView(card(
+            row("Per hour of jobs", "≈ $%.4f".format(perHour), green),
+            row("A night on the charger", "≈ $%.4f".format(perHour * 8 * 0.25)),
+            row("A month of nights", "≈ $%.2f".format(perHour * 8 * 0.25 * 30)),
+            text("Estimates at beta prices, if the phone is busy a quarter of the night. Real earnings depend on demand, your class and dependability. Faster models and longer charging time earn more.", 12f, color = muted),
+        ))
+        root.addView(heading("Improve your result"))
+        root.addView(card(
+            text("• Keep it plugged in overnight on Wi-Fi: that's when most jobs run.\n• Don't stop accepted jobs: dependability raises your pay and gets you paid sooner.\n• Try a bigger model if this one is fast, or a smaller one if it's slow.", 14f),
+            button("Run the benchmark again", primary = false) { rebenchmark() },
+            button("Change model", primary = false) { stopNode(); prefs.enabled = false; prefs.modelPath = ""; prefs.klass = ""; setupStatus = ""; render() },
+        ))
+    }
+
+    private fun stopNode() {
+        startService(android.content.Intent(this, NodeService::class.java).setAction(NodeService.ACTION_STOP))
+    }
+
+    private fun rebenchmark() {
+        if (setupBusy) return
+        val path = prefs.modelPath; val id = prefs.modelId; val pb = prefs.paramsB
+        stopNode(); prefs.enabled = false
+        prefs.klass = ""; prefs.modelPath = path
+        tab = "device"; render()
+        runSetup { say -> setupModel("", id, pb, say = say) }
+    }
+
+    // ---------- Settings ----------
+    private fun renderSettings() {
+        val n = NodeService.node
+        val running = prefs.enabled && n != null
+        val ask = Switch(this).apply { text = "Ask before every job"; setTextColor(fg); isChecked = prefs.mode == "ask"
             setOnCheckedChangeListener { _, on -> prefs.mode = if (on) "ask" else "auto"; n?.setMode(prefs.mode) } }
-        val screen = Switch(this).apply { text = "Also work while the screen is on (Charge Mode)"; isChecked = prefs.workWithScreenOn
+        val screen = Switch(this).apply { text = "Charge Mode: also work with the screen on"; setTextColor(fg); isChecked = prefs.workWithScreenOn
             setOnCheckedChangeListener { _, on -> prefs.workWithScreenOn = on } }
         val lim = prefs.limits
-        val limText = if (lim == AutoLimits()) "Auto-approve: every job" else listOfNotNull(
-            if (lim.minPayUsd > 0) "min $%.4f".format(lim.minPayUsd) else null,
-            if (lim.minPerHourUsd > 0) "min $%.2f/hour".format(lim.minPerHourUsd) else null,
+        val limText = if (lim == AutoLimits()) "Every job is accepted automatically." else listOfNotNull(
+            if (lim.minPayUsd > 0) "min $%.4f a job".format(lim.minPayUsd) else null,
+            if (lim.minPerHourUsd > 0) "min $%.2f an hour".format(lim.minPerHourUsd) else null,
             if (lim.maxMinutes > 0) "max %.0f min".format(lim.maxMinutes) else null,
-        ).joinToString(" · ", "Auto-approve only: ")
-        root.addView(card(ask, screen, text(limText, 13f), button("Auto-approve limits…", primary = false) { editLimits() },
-            text("Jobs run only while charging, on Wi-Fi, above 50% battery and not warm. Jobs outside your limits come as offers to accept or decline.", 12f, color = Color.GRAY)))
-        if (running && s?.runningJob == null) root.addView(button("Stop the Infera service", primary = false) {
-            startService(android.content.Intent(this, NodeService::class.java).setAction(NodeService.ACTION_STOP))
-            ui.postDelayed({ render() }, 800)
-        })
-        root.addView(button("Pair again / use another account", primary = false) {
-            startService(android.content.Intent(this, NodeService::class.java).setAction(NodeService.ACTION_STOP))
-            prefs.enabled = false; prefs.deviceId = ""; prefs.token = ""
-            render()
-        })
-        root.addView(card(text("Activity", 13f, true), text((s?.events ?: emptyList()).take(12).joinToString("\n"), 12f).apply { gravity = Gravity.START }))
+        ).joinToString(" · ", "Auto-accept only: ") + ". Others come as offers."
+        root.addView(heading("Jobs"))
+        root.addView(card(ask, text("Off: jobs are accepted automatically. On: each job shows an offer with the pay; you accept or decline.", 12f, color = muted),
+            screen, text("By default jobs run only while the phone is locked, so it never slows you down.", 12f, color = muted),
+            text(limText, 13f), button("Auto-accept limits…", primary = false) { editLimits() }))
+        root.addView(heading("Model"))
+        root.addView(card(row("Model", prefs.modelId), row("Speed", "%.1f tokens/s".format(prefs.tps)),
+            button("Change model", primary = false) { stopNode(); prefs.enabled = false; prefs.modelPath = ""; prefs.klass = ""; setupStatus = ""; render() }))
+        root.addView(heading("Account"))
+        root.addView(card(row("Server", prefs.server.removePrefix("https://")), row("Device", prefs.deviceId),
+            if (running && n?.status?.runningJob == null) button("Stop the Infera service", primary = false) {
+                startService(android.content.Intent(this, NodeService::class.java).setAction(NodeService.ACTION_STOP))
+                prefs.enabled = false; ui.postDelayed({ render() }, 800)
+            } else View(this),
+            button("Pair again / use another account", primary = false) {
+                startService(android.content.Intent(this, NodeService::class.java).setAction(NodeService.ACTION_STOP))
+                prefs.enabled = false; prefs.deviceId = ""; prefs.token = ""
+                render()
+            }))
     }
 }
