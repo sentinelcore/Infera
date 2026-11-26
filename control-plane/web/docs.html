@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Infera API docs</title>
+<meta name="description" content="Infera API documentation: OpenAI-compatible chat, embeddings, speech-to-text and batch API served by idle devices.">
+<style>
+:root{--bg:#f5f7f5;--surface:#fff;--fg:#0f1a15;--muted:#55645d;--line:#d4ddd8;--accent:#137454;--soft:#dcefe6;--code-bg:#0f1a15;--code-fg:#d8e6df}
+@media (prefers-color-scheme:dark){:root{--bg:#0b1110;--surface:#131d1a;--fg:#e6eee9;--muted:#93a49c;--line:#24332d;--accent:#4cc398;--soft:#143429;--code-bg:#08100d;--code-fg:#cfe3d9;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+a{color:var(--accent)}
+header{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 85%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.bar{max-width:1180px;margin:0 auto;padding:0 20px;height:58px;display:flex;align-items:center;gap:18px}
+.logo{font-weight:800;font-size:1.15rem;text-decoration:none;color:var(--fg)}
+.bar .sp{margin-left:auto;display:flex;gap:10px}
+.btn{padding:8px 14px;border-radius:10px;text-decoration:none;font-weight:650;font-size:.92rem;border:1px solid var(--line);color:var(--fg);background:var(--surface)}
+.btn.p{background:var(--accent);border-color:var(--accent);color:#fff}
+@media (prefers-color-scheme:dark){.btn.p{color:#07110d}}
+.layout{max-width:1180px;margin:0 auto;padding:0 20px;display:grid;grid-template-columns:220px minmax(0,1fr);gap:40px}
+nav.toc{position:sticky;top:76px;align-self:start;padding:20px 0;font-size:.93rem}
+nav.toc a{display:block;padding:4px 0;color:var(--muted);text-decoration:none}
+nav.toc a:hover{color:var(--fg)}
+nav.toc b{display:block;margin:14px 0 4px;font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+main{padding:24px 0 80px;min-width:0}
+h1{font-size:2.2rem;letter-spacing:-.03em;margin:8px 0 8px}
+h2{font-size:1.45rem;letter-spacing:-.02em;margin:46px 0 10px;padding-top:8px;border-top:1px solid var(--line)}
+h3{font-size:1.08rem;margin:26px 0 8px}
+p,li{color:color-mix(in srgb,var(--fg) 82%,var(--muted))}
+.lede{font-size:1.1rem;color:var(--muted)}
+pre{background:var(--code-bg);color:var(--code-fg);border-radius:12px;padding:16px;overflow-x:auto;font:13.5px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;margin:10px 0 16px;max-width:100%}
+code{font:.9em ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--soft);padding:1px 6px;border-radius:6px}
+pre code{background:none;padding:0}
+.w{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.94rem;min-width:520px}
+th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-size:.8rem;text-transform:uppercase;letter-spacing:.05em}
+.tabs{display:flex;gap:6px;margin-top:10px}
+.tabs button{border:1px solid var(--line);background:var(--surface);color:var(--muted);padding:6px 12px;border-radius:8px;cursor:pointer;font-weight:600}
+.tabs button[aria-selected="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.note{border:1px solid var(--line);border-left:4px solid var(--accent);background:var(--surface);border-radius:10px;padding:12px 16px;margin:14px 0}
+.method{display:inline-block;font:700 .75rem ui-monospace,monospace;padding:2px 7px;border-radius:6px;background:var(--soft);color:var(--accent);margin-right:6px}
+@media (max-width:860px){.layout{grid-template-columns:1fr}nav.toc{display:none}.bar .btn:not(.p){display:none}}
+</style>
+</head>
+<body>
+<header><div class="bar"><a class="logo" href="/">Infera</a><span style="color:var(--muted)">API docs</span>
+<span class="sp"><a class="btn" href="/performance">Performance</a><a class="btn p" href="/app#dev">Get an API key</a></span></div></header>
+<div class="layout">
+<nav class="toc" aria-label="Contents">
+  <b>Start</b><a href="#quickstart">Quickstart</a><a href="#auth">Authentication</a><a href="#models">Models &amp; prices</a>
+  <b>Endpoints</b><a href="#chat">Chat completions</a><a href="#embeddings">Embeddings</a><a href="#transcriptions">Transcriptions</a><a href="#batch">Batch API</a><a href="#list-models">List models</a>
+  <b>Guides</b><a href="#sdks">SDKs &amp; tools</a><a href="#routing">How requests are served</a><a href="#errors">Errors</a><a href="#limits">Rate limits</a><a href="#privacy">Privacy</a>
+</nav>
+<main>
+<h1>Infera API</h1>
+<p class="lede">An OpenAI-compatible API served by idle phones, laptops and desktops. If your code works with OpenAI, change the base URL and key and it works with Infera.</p>
+<pre><code>Base URL:  https://infera.valanor.network/v1</code></pre>
+
+<h2 id="quickstart">Quickstart</h2>
+<ol>
+<li><a href="/app#dev">Create a developer account</a> and copy your API key (<code>ik_cust_…</code>). New accounts get starter credits.</li>
+<li>Send a request:</li>
+</ol>
+<div class="tabs" role="tablist" data-group="q"><button role="tab" aria-selected="true" data-k="curl">curl</button><button role="tab" data-k="py">Python</button><button role="tab" data-k="js">JavaScript</button></div>
+<pre data-group="q" data-k="curl"><code>curl https://infera.valanor.network/v1/chat/completions \
+  -H "Authorization: Bearer $INFERA_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "qwen3-4b", "messages": [{"role": "user", "content": "Hello!"}]}'</code></pre>
+<pre data-group="q" data-k="py" hidden><code>from openai import OpenAI
+
+client = OpenAI(base_url="https://infera.valanor.network/v1", api_key="ik_cust_…")
+r = client.chat.completions.create(
+    model="qwen3-4b",
+    messages=[{"role": "user", "content": "Hello!"}],
+)
+print(r.choices[0].message.content)</code></pre>
+<pre data-group="q" data-k="js" hidden><code>import OpenAI from "openai";
+
+const client = new OpenAI({ baseURL: "https://infera.valanor.network/v1", apiKey: "ik_cust_…" });
+const r = await client.chat.completions.create({
+  model: "qwen3-4b",
+  messages: [{ role: "user", content: "Hello!" }],
+});
+console.log(r.choices[0].message.content);</code></pre>
+
+<h2 id="auth">Authentication</h2>
+<p>Send your key as a bearer token on every request: <code>Authorization: Bearer ik_cust_…</code>. Keys are shown once when created; we store only a hash. Keep keys server-side.</p>
+
+<h2 id="models">Models &amp; prices</h2>
+<p>Prices are per request from your credits. The live list, with prices and how many devices serve each model right now, is at <a href="/v1/models"><code>GET /v1/models</code></a>.</p>
+<div class="w"><table id="model-table"><thead><tr><th>Model</th><th>Type</th><th>Price</th><th>Context</th><th>Online now</th></tr></thead><tbody><tr><td colspan="5">Loading…</td></tr></tbody></table></div>
+
+<h2 id="chat">Chat completions</h2>
+<p><span class="method">POST</span><code>/v1/chat/completions</code>, the same request and response as OpenAI's Chat Completions.</p>
+<div class="w"><table><thead><tr><th>Field</th><th>Type</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>model</code></td><td>string</td><td>Required. A chat model from <code>/v1/models</code>.</td></tr>
+<tr><td><code>messages</code></td><td>array</td><td>Required. <code>{"role": "system"|"user"|"assistant", "content": "…"}</code></td></tr>
+<tr><td><code>max_tokens</code></td><td>integer</td><td>Answer length limit. Default 512.</td></tr>
+<tr><td><code>temperature</code></td><td>number</td><td>0 for repeatable answers. Default 0.7.</td></tr>
+<tr><td><code>stream</code></td><td>boolean</td><td>Server-sent events, like OpenAI. Reasoning models stream thinking as <code>reasoning_content</code>.</td></tr>
+<tr><td><code>infera_batch</code></td><td>boolean</td><td>Optional: marks a request that can tolerate slower devices.</td></tr>
+</tbody></table></div>
+<pre><code>curl https://infera.valanor.network/v1/chat/completions \
+  -H "Authorization: Bearer $INFERA_API_KEY" -H "Content-Type: application/json" \
+  -d '{"model":"qwen3-4b","stream":true,"max_tokens":200,
+       "messages":[{"role":"user","content":"Explain DePIN in one paragraph."}]}'</code></pre>
+<p>Responses carry <code>X-Infera-Job</code> (the job id) and <code>X-Infera-Route</code> (<code>device</code> or <code>fallback</code>).</p>
+
+<h2 id="embeddings">Embeddings</h2>
+<p><span class="method">POST</span><code>/v1/embeddings</code>, same as OpenAI. <code>input</code> is a string or an array of strings.</p>
+<pre><code>curl https://infera.valanor.network/v1/embeddings \
+  -H "Authorization: Bearer $INFERA_API_KEY" -H "Content-Type: application/json" \
+  -d '{"model":"nomic-embed-text","input":["idle phones","serve AI"]}'</code></pre>
+
+<h2 id="transcriptions">Transcriptions (speech to text)</h2>
+<p><span class="method">POST</span><code>/v1/audio/transcriptions</code>, multipart form, same as OpenAI's Whisper API. Billed per audio minute.</p>
+<div class="w"><table><thead><tr><th>Field</th><th>Notes</th></tr></thead><tbody>
+<tr><td><code>file</code></td><td>Required. Audio up to 25 MB: mp3, m4a, wav, ogg, flac, webm…</td></tr>
+<tr><td><code>model</code></td><td>Required. <code>whisper-base</code></td></tr>
+<tr><td><code>language</code></td><td>Optional ISO code, e.g. <code>en</code>. Default: detect.</td></tr>
+<tr><td><code>prompt</code></td><td>Optional context to guide spelling.</td></tr>
+<tr><td><code>response_format</code></td><td><code>json</code> (default), <code>text</code> or <code>verbose_json</code> (adds language, duration and timed segments).</td></tr>
+</tbody></table></div>
+<pre><code>curl https://infera.valanor.network/v1/audio/transcriptions \
+  -H "Authorization: Bearer $INFERA_API_KEY" \
+  -F model=whisper-base -F file=@meeting.mp3 -F response_format=verbose_json</code></pre>
+<pre><code># Python
+with open("meeting.mp3", "rb") as f:
+    t = client.audio.transcriptions.create(model="whisper-base", file=f)
+print(t.text)</code></pre>
+
+<h2 id="batch">Batch API</h2>
+<p>For work that can wait up to 24 hours, at a discount (<span id="batch-off">50%</span> off). Jobs run whenever a suitable device is free, phones included.</p>
+<p><span class="method">POST</span><code>/v1/batch</code>: up to 1,000 requests per call (chat or embeddings). Returns job ids.</p>
+<pre><code>curl https://infera.valanor.network/v1/batch \
+  -H "Authorization: Bearer $INFERA_API_KEY" -H "Content-Type: application/json" \
+  -d '{"requests":[
+        {"model":"qwen3-4b","max_tokens":100,"messages":[{"role":"user","content":"Summarise: …"}]},
+        {"model":"nomic-embed-text","input":"text to embed"}
+      ]}'
+# → {"ids":["bj_…","bj_…"]}</code></pre>
+<p><span class="method">GET</span><code>/v1/batch/{id}</code>: status (<code>queued</code>, <code>running</code>, <code>done</code>, <code>failed</code>) and the result. <span class="method">GET</span><code>/v1/batch?status=done</code> lists your recent jobs. Results are kept for 7 days after a job finishes.</p>
+
+<h2 id="list-models">List models</h2>
+<p><span class="method">GET</span><code>/v1/models</code> is public. Each model has <code>pricing</code> (USD per token as strings, or per audio minute), <code>context_length</code>, <code>quantization</code>, <code>endpoint</code> and <code>devices_online</code>.</p>
+
+<h2 id="sdks">SDKs &amp; tools</h2>
+<p>Anything that accepts an OpenAI base URL works. Set the base URL to <code>https://infera.valanor.network/v1</code> and use your Infera key:</p>
+<ul>
+<li><b>OpenAI SDKs</b> (Python, JavaScript, Go, …): <code>base_url</code> / <code>baseURL</code>.</li>
+<li><b>LangChain</b>: <code>ChatOpenAI(base_url=…, api_key=…, model="qwen3-4b")</code>.</li>
+<li><b>LlamaIndex</b>: <code>OpenAILike(api_base=…, api_key=…, model="qwen3-4b", is_chat_model=True)</code>.</li>
+<li><b>LiteLLM</b>: <code>model="openai/qwen3-4b", api_base=…, api_key=…</code>.</li>
+<li><b>n8n, Zapier, Make</b>: use the OpenAI node/action with a custom base URL.</li>
+</ul>
+
+<h2 id="routing">How requests are served</h2>
+<ul>
+<li>Each request is encrypted to one device (a fresh key per job) and streamed back as it's generated.</li>
+<li>If the first device hasn't started answering in about 2.5 s, a second device gets the request too; the first to answer wins and you're billed once.</li>
+<li>Devices sign a receipt for every answer; test prompts and re-runs on a second device catch wrong results.</li>
+<li>When no device is free, a request may go to rented cloud capacity (<code>X-Infera-Route: fallback</code>) or return <code>503</code>.</li>
+<li>Live speed and uptime per model: <a href="/performance">/performance</a>.</li>
+</ul>
+
+<h2 id="errors">Errors</h2>
+<p>Errors use OpenAI's shape: <code>{"error": {"message": "…", "code": 400}}</code>.</p>
+<div class="w"><table><thead><tr><th>Code</th><th>Meaning</th><th>What to do</th></tr></thead><tbody>
+<tr><td>400</td><td>Bad request (missing <code>model</code>/<code>messages</code>, file too big…)</td><td>Fix the request.</td></tr>
+<tr><td>401</td><td>Missing or invalid API key</td><td>Check the <code>Authorization</code> header.</td></tr>
+<tr><td>402</td><td>Not enough credits</td><td>Top up on the dashboard.</td></tr>
+<tr><td>404</td><td>Batch job not found</td><td>Check the id.</td></tr>
+<tr><td>429</td><td>Rate limit or too many requests at once</td><td>Retry after the time in the message.</td></tr>
+<tr><td>503</td><td>No device is serving that model right now</td><td>Retry shortly, try another model, or use the batch API.</td></tr>
+</tbody></table></div>
+
+<h2 id="limits">Rate limits</h2>
+<p>By default each key can send <b>120 requests a minute</b> with up to <b>8 in progress</b> at once. Need more? Email <a href="mailto:hello@valanor.network">hello@valanor.network</a>.</p>
+
+<h2 id="privacy">Privacy</h2>
+<p>Our servers never store the content of live requests; batch content is deleted 7 days after completion. Requests run on independent contributors' devices, so don't send secrets or personal data yet. Details: <a href="/privacy">Data and privacy</a> · <a href="/privacy-policy">Privacy policy</a> · <a href="/terms">Terms</a>.</p>
+</main>
+</div>
+<script>
+// Code tabs
+document.querySelectorAll('.tabs').forEach(t => t.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const g = t.dataset.group;
+  t.querySelectorAll('button').forEach(x => x.setAttribute('aria-selected', x === b));
+  document.querySelectorAll(`pre[data-group="${g}"]`).forEach(p => p.hidden = p.dataset.k !== b.dataset.k);
+}));
+// Live model table and batch discount
+fetch('/v1/models').then(r => r.json()).then(d => {
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const perM = v => '$' + (parseFloat(v) * 1e6).toFixed(2);
+  const rows = (d.data || []).map(m => {
+    const p = m.pricing || {};
+    const type = m.endpoint === '/v1/audio/transcriptions' ? 'Speech to text' : m.endpoint === '/v1/embeddings' ? 'Embeddings' : 'Chat';
+    const price = p.audio_minute ? `$${p.audio_minute} / audio min` : type === 'Embeddings' ? `${perM(p.prompt)} / 1M tokens` : `${perM(p.prompt)} in · ${perM(p.completion)} out / 1M`;
+    return `<tr><td><code>${esc(m.id)}</code></td><td>${type}</td><td>${price}</td><td>${m.context_length ? m.context_length.toLocaleString() : '–'}</td><td>${m.devices_online || 0}</td></tr>`;
+  });
+  document.querySelector('#model-table tbody').innerHTML = rows.join('') || '<tr><td colspan="5">No models.</td></tr>';
+}).catch(() => {});
+fetch('/api/catalog').then(r => r.json()).then(d => { if (d.pricing) document.getElementById('batch-off').textContent = Math.round(d.pricing.batch_discount * 100) + '%'; }).catch(() => {});
+</script>
+</body>
+</html>

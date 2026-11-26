@@ -146,6 +146,7 @@ func main() {
 	mux.HandleFunc("GET /{$}", page("landing.html"))
 	mux.HandleFunc("GET /app", page("index.html"))
 	mux.HandleFunc("GET /terms", page("terms.html"))
+	mux.HandleFunc("GET /docs", page("docs.html"))
 	mux.HandleFunc("GET /privacy-policy", page("privacy-policy.html"))
 	mux.Handle("GET /", http.FileServer(http.FS(sub)))
 
