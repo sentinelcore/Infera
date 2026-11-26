@@ -49,9 +49,12 @@ code,pre{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.82rem}pre
 </div>
 <div class="card" style="margin-top:14px">
   <h2>Set up a computer in one command</h2>
-  <p class="muted">Install <a href="https://ollama.com/download">Ollama</a> first (it runs the AI models). Then, with the code from the dashboard:</p>
-  <pre>infera setup CODE</pre>
-  <p class="muted">It pairs this computer, picks the best model for your hardware, downloads it, benchmarks, and starts Infera in your menu bar / system tray at every login. On Windows use <code>.\infera.exe setup CODE</code>.</p>
+  <p class="muted">Get a code on the dashboard (Contribute tab, Get pairing code); it shows these lines with your code filled in.</p>
+  <p class="muted">Mac or Linux (Terminal):</p>
+  <pre>curl -fsSL "<span class="origin"></span>/install.sh?code=CODE" | sh</pre>
+  <p class="muted">Windows (PowerShell):</p>
+  <pre>irm "<span class="origin"></span>/install.ps1?code=CODE" | iex</pre>
+  <p class="muted">It installs Infera and Ollama, pairs this computer, picks the best models for your hardware (plus text to speech, text to video and fast transcription on NVIDIA GPUs with 8 GB+), downloads them, benchmarks, and starts Infera in your menu bar / system tray at every login. Running it again is safe: it skips what's already installed.</p>
 </div>
 </div>
 <script>document.querySelectorAll(".origin").forEach(e => e.textContent = location.origin);</script>

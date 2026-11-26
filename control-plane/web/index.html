@@ -426,7 +426,7 @@ $("o-code").onclick = async () => {
     $("pair-out").hidden = false; $("pair-code").textContent = r.code;
     $("pair-link").href = `/pair/${r.code}`;
     try { const q = qrcode(0, "M"); q.addData(`${location.origin}/pair/${r.code}`); q.make(); $("pair-qr").innerHTML = q.createSvgTag({ cellSize: 5, margin: 0 }); } catch (e) { $("pair-qr").hidden = true; }
-    $("pair-cmd").textContent = `Phone: open ${location.origin}/pair/${r.code} on the phone and tap "Open Infera and pair"\nComputer (with Ollama installed): infera setup ${r.code}`;
+    $("pair-cmd").textContent = `Phone: open ${location.origin}/pair/${r.code} on the phone and tap "Open Infera and pair"\n\nMac or Linux (Terminal), one command does everything:\ncurl -fsSL "${location.origin}/install.sh?code=${r.code}" | sh\n\nWindows (PowerShell), one command does everything:\nirm "${location.origin}/install.ps1?code=${r.code}" | iex`;
   } catch (e) { toast(e.message); }
 };
 $("p-copy").onclick = () => { navigator.clipboard.writeText($("p-msg").textContent).then(() => toast("Copied")); };

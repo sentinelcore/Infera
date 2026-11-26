@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -120,14 +121,21 @@ func main() {
 	mux.HandleFunc("POST /api/admin/waitlist/invite", api.AdminWaitlist)
 	mux.HandleFunc("GET /s/{tag}", api.SharePage)
 	mux.HandleFunc("GET /pair/{code}", api.PairPage)
+	// One-line installers; ?code=123456 bakes the pairing code in so one command does everything.
 	mux.HandleFunc("GET /install.sh", func(w http.ResponseWriter, r *http.Request) {
 		b, _ := webFS.ReadFile("web/install.sh")
 		w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
+		if c := installCode(r); c != "" {
+			b = []byte(strings.Replace(string(b), "set -eu\n", "set -eu\nINFERA_CODE=\""+c+"\"\n", 1))
+		}
 		w.Write(b)
 	})
 	mux.HandleFunc("GET /install.ps1", func(w http.ResponseWriter, r *http.Request) {
 		b, _ := webFS.ReadFile("web/install.ps1")
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		if c := installCode(r); c != "" {
+			b = append([]byte("$Code = \""+c+"\"\n"), b...)
+		}
 		w.Write(b)
 	})
 	mux.HandleFunc("GET /download", func(w http.ResponseWriter, r *http.Request) {
@@ -194,4 +202,18 @@ func logRequests(h http.Handler) http.Handler {
 		}
 		h.ServeHTTP(w, r)
 	})
+}
+
+// installCode: the pairing code from ?code=, if it is a plain code (letters, digits, dashes).
+func installCode(r *http.Request) string {
+	c := r.URL.Query().Get("code")
+	if len(c) == 0 || len(c) > 32 {
+		return ""
+	}
+	for _, ch := range c {
+		if !(ch >= '0' && ch <= '9' || ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z' || ch == '-') {
+			return ""
+		}
+	}
+	return c
 }

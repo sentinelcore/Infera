@@ -39,10 +39,10 @@ pub async fn run(code: String, server: String, no_service: bool, want: String) -
     println!("    {:.0} GB RAM · GPU: {gpu}{}", ram, if vram > 0.0 { format!(" ({vram:.0} GB)") } else { String::new() });
 
     let http = reqwest::Client::new();
-    if http.get(format!("{OLLAMA}/api/tags")).send().await.is_err() {
-        println!("\nInfera uses Ollama to run models, and it isn't running on this computer.");
+    if !ensure_ollama(&http).await {
+        println!("\nInfera uses Ollama to run models, and it couldn't be installed or started automatically.");
         if cfg!(target_os = "macos") {
-            println!("Install it from https://ollama.com/download (or: brew install ollama), open it once, then run this command again.");
+            println!("Install it from https://ollama.com/download, open it once, then run this command again.");
         } else if cfg!(target_os = "windows") {
             println!("Install it from https://ollama.com/download/windows, then run this command again.");
         } else {
@@ -185,6 +185,60 @@ pub async fn run(code: String, server: String, no_service: bool, want: String) -
         Err(err) => println!("\nCouldn't set up automatic start ({err}).\nStart it yourself with:  infera tray"),
     }
     Ok(())
+}
+
+/// Makes sure Ollama (which runs the chat models) is installed and running: installs it
+/// silently if missing, starts it if stopped. Returns whether its API answers.
+async fn ensure_ollama(http: &reqwest::Client) -> bool {
+    let up = || async { http.get(format!("{OLLAMA}/api/tags")).send().await.map(|r| r.status().is_success()).unwrap_or(false) };
+    if up().await {
+        return true;
+    }
+    let run = |cmd: &mut std::process::Command| cmd.status().map(|s| s.success()).unwrap_or(false);
+    if cfg!(target_os = "macos") {
+        if !std::path::Path::new("/Applications/Ollama.app").exists() {
+            println!("    Installing Ollama (runs the AI models) …");
+            run(std::process::Command::new("sh").args(["-c",
+                "t=$(mktemp -d) && curl -fsSL https://ollama.com/download/Ollama-darwin.zip -o \"$t/o.zip\" && ditto -xk \"$t/o.zip\" /Applications/ && rm -rf \"$t\""]));
+        }
+        run(std::process::Command::new("open").args(["-g", "-a", "Ollama"]));
+    } else if cfg!(target_os = "windows") {
+        let local = std::env::var("LOCALAPPDATA").unwrap_or_default();
+        let app = std::path::Path::new(&local).join("Programs").join("Ollama").join("ollama app.exe");
+        if !app.exists() {
+            println!("    Installing Ollama (runs the AI models) …");
+            let exe = std::env::temp_dir().join("OllamaSetup.exe");
+            let ok = match http.get("https://ollama.com/download/OllamaSetup.exe").send().await {
+                Ok(r) if r.status().is_success() => match r.bytes().await {
+                    Ok(b) => std::fs::write(&exe, &b).is_ok(),
+                    Err(_) => false,
+                },
+                _ => false,
+            };
+            if !ok || !run(std::process::Command::new(&exe).args(["/VERYSILENT", "/NORESTART", "/SUPPRESSMSGBOXES"])) {
+                return false;
+            }
+        }
+        if app.exists() {
+            let _ = std::process::Command::new(&app).spawn();
+        }
+    } else {
+        let have = std::process::Command::new("sh").args(["-c", "command -v ollama"]).output().map(|o| o.status.success()).unwrap_or(false);
+        if !have {
+            println!("    Installing Ollama (runs the AI models; may ask for your password) …");
+            run(std::process::Command::new("sh").args(["-c", "curl -fsSL https://ollama.com/install.sh | sh"]));
+        }
+        if !up().await {
+            let _ = std::process::Command::new("ollama").arg("serve").stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn();
+        }
+    }
+    for _ in 0..90 {
+        if up().await {
+            return true;
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
+    false
 }
 
 /// Installs the media server (its own Python with PyTorch, Kokoro, Wan 2.1 via diffusers and
