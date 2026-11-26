@@ -91,6 +91,10 @@ class MainActivity : Activity() {
         NodeService.listeners.add(listener)
         render()
         handlePairLink(intent)
+        if (prefs.retestOnStart && prefs.ready) { // came back from an engine switch
+            prefs.retestOnStart = false
+            ui.postDelayed({ rebenchmark() }, 600)
+        }
         ui.post(object : Runnable {
             override fun run() { if (prefs.ready) { refreshRemote(); render() }; ui.postDelayed(this, 1000) }
         })
@@ -383,6 +387,7 @@ class MainActivity : Activity() {
                 batchTps = total.get() / ((System.nanoTime() - t0) / 1e9).coerceAtLeast(0.001)
             }
             prefs.batchTps = batchTps.toFloat(); prefs.parallel = eng.parallel
+            prefs.saveEngineResult(NativeLib.variant, tps.toFloat(), batchTps.toFloat())
             val ram = (getSystemService(android.app.ActivityManager::class.java)).let { val mi = android.app.ActivityManager.MemoryInfo(); it.getMemoryInfo(mi); mi.totalMem / 1e9 }
             prefs.modelPath = file.path; prefs.modelId = modelId; prefs.paramsB = paramsB; prefs.tps = tps.toFloat()
             prefs.klass = phoneClass(tps, ram)
@@ -588,6 +593,7 @@ class MainActivity : Activity() {
             row("Tested", if (prefs.benchAt > 0) java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(prefs.benchAt)) +
                 (if (prefs.benchCharging) " · charging" else " · on battery") else "–"),
         ))
+        engineComparison()?.let { root.addView(heading("Engines")); root.addView(it) }
         root.addView(heading("Jobs this phone can take"))
         val can = if (m1) listOf("Live chat replies" to "Customers waiting on an answer. Paid the most.", "Batch chat" to "Large jobs that can wait; run while you sleep.")
                   else listOf("Batch chat" to "Jobs where nobody is waiting; they run whenever the phone is free.")
@@ -699,6 +705,40 @@ class MainActivity : Activity() {
         startService(android.content.Intent(this, NodeService::class.java).setAction(NodeService.ACTION_STOP))
     }
 
+    /**
+     * Picks the engine build and restarts the app process (the native library can only be
+     * loaded once per process). With retest, the benchmark runs again right after the restart.
+     */
+    private fun switchEngine(matrix: Boolean, retest: Boolean) {
+        // Keep the current engine's last result for the side-by-side comparison.
+        if (prefs.tps > 0 && prefs.engineResult(NativeLib.variant) == null)
+            prefs.saveEngineResult(NativeLib.variant, prefs.tps, prefs.batchTps.takeIf { it > 0 } ?: prefs.tps)
+        prefs.matrixEngine = matrix
+        prefs.retestOnStart = retest
+        stopNode()
+        android.widget.Toast.makeText(this, "Restarting Infera…", android.widget.Toast.LENGTH_SHORT).show()
+        ui.postDelayed({
+            startActivity(android.content.Intent.makeRestartActivityTask(componentName))
+            Runtime.getRuntime().exit(0)
+        }, 1500)
+    }
+
+    /** Standard vs matrix, side by side, once both have been benchmarked. */
+    private fun engineComparison(): View? {
+        val std = prefs.engineResult("dotprod") ?: return null
+        val mtx = prefs.engineResult("i8mm") ?: return null
+        val better = if (mtx.second > std.second * 1.03f) "i8mm" else "dotprod" // judged on 4-at-once (how phones earn)
+        val running = NativeLib.variant
+        val fmt = { r: Pair<Float, Float> -> "%.1f alone · %.1f with ${prefs.parallel.coerceAtLeast(1)} at once".format(r.first, r.second) }
+        return card(
+            text("Engine comparison", 17f, true),
+            row("Standard", fmt(std), if (better == "dotprod") green else null),
+            row("Matrix (i8mm)", fmt(mtx), if (better == "i8mm") green else null),
+            text(if (better == running) "You're on the faster engine." else "The ${if (better == "i8mm") "matrix" else "standard"} engine is faster on this phone.", 13f),
+            if (better == running) View(this) else button("Use the faster engine") { switchEngine(better == "i8mm", retest = false) },
+        )
+    }
+
     private fun rebenchmark() {
         if (setupBusy) return
         val path = prefs.modelPath; val id = prefs.modelId; val pb = prefs.paramsB
@@ -731,9 +771,17 @@ class MainActivity : Activity() {
             text(limText, 13f), button("Auto-accept limits…", primary = false) { editLimits() }))
         if (NativeLib.hasI8mm()) {
             val matrix = Switch(this).apply { text = "Experimental: matrix engine (i8mm)"; setTextColor(fg); isChecked = prefs.matrixEngine
-                setOnCheckedChangeListener { _, on -> prefs.matrixEngine = on } }
+                setOnCheckedChangeListener { sw, on ->
+                    android.app.AlertDialog.Builder(this@MainActivity)
+                        .setTitle(if (on) "Try the matrix engine?" else "Back to the standard engine?")
+                        .setMessage("Infera will restart and run the benchmark again (about a minute). Then My device shows both engines side by side so you can keep the faster one.")
+                        .setPositiveButton("Restart and test") { _, _ -> switchEngine(on, retest = true) }
+                        .setNegativeButton("Cancel") { _, _ -> sw.isChecked = !on }
+                        .setOnCancelListener { sw.isChecked = !on }
+                        .show()
+                } }
             root.addView(heading("Engine"))
-            root.addView(card(matrix, text("Reads long prompts faster on this chip but may generate answers more slowly. Takes effect after you close and reopen the app; then run the benchmark again to compare. Now running: " +
+            root.addView(card(matrix, text("Reads long prompts faster on this chip but may generate answers more slowly. Now running: " +
                 (if (NativeLib.variant == "i8mm") "matrix" else "standard") + ".", 12f, color = muted)))
         }
         root.addView(heading("Model"))

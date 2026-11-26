@@ -34,6 +34,12 @@ class Prefs(ctx: Context) {
     /** Experimental: load the i8mm (matrix) engine build on chips that support it. */
     var matrixEngine: Boolean get() = p.getBoolean("matrix_engine", false); set(v) = p.edit().putBoolean("matrix_engine", v).apply()
     var benchCharging: Boolean get() = p.getBoolean("bench_charging", false); set(v) = p.edit().putBoolean("bench_charging", v).apply()
+    var retestOnStart: Boolean get() = p.getBoolean("retest_on_start", false); set(v) = p.edit().putBoolean("retest_on_start", v).apply()
+    fun saveEngineResult(variant: String, alone: Float, batched: Float) =
+        p.edit().putFloat("eng_${variant}_alone", alone).putFloat("eng_${variant}_batch", batched).apply()
+    /** (alone, batched) tokens/s last measured with this engine build, if any. */
+    fun engineResult(variant: String): Pair<Float, Float>? =
+        if (p.contains("eng_${variant}_alone")) p.getFloat("eng_${variant}_alone", 0f) to p.getFloat("eng_${variant}_batch", 0f) else null
     var benchAt: Long get() = p.getLong("bench_at", 0); set(v) = p.edit().putLong("bench_at", v).apply()
     var threads: Int get() = p.getInt("threads", 0); set(v) = p.edit().putInt("threads", v).apply()
 
