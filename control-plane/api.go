@@ -104,6 +104,60 @@ func (a *API) PairDevice(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"device_id": id, "token": token})
 }
 
+type deviceEarn struct {
+	Today, Week int64
+	JobsToday   int
+}
+
+// DeviceEarnings: earnings per device today and over 7 days, and jobs today.
+func (s *Store) DeviceEarnings(ownerID string) map[string]deviceEarn {
+	out := map[string]deviceEarn{}
+	day := now() - now()%86400
+	rows, err := s.query(`SELECT device_id, CAST(COALESCE(SUM(CASE WHEN created_at>=? THEN amount ELSE 0 END),0) AS BIGINT),
+	  CAST(COALESCE(SUM(amount),0) AS BIGINT), CAST(COALESCE(SUM(CASE WHEN created_at>=? THEN 1 ELSE 0 END),0) AS BIGINT)
+	  FROM ledger WHERE account_id=? AND kind='earning' AND device_id<>'' AND created_at>=? GROUP BY device_id`, day, day, ownerID, now()-7*86400)
+	if err != nil {
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var e deviceEarn
+		var jobs int64
+		rows.Scan(&id, &e.Today, &e.Week, &jobs)
+		e.JobsToday = int(jobs)
+		out[id] = e
+	}
+	return out
+}
+
+// RetireDevice unpairs one of the owner's devices (its token stops working). History stays.
+func (s *Store) RetireDevice(ownerID, deviceID string) bool {
+	res, err := s.exec(`UPDATE devices SET token_hash='' WHERE id=? AND owner_id=?`, deviceID, ownerID)
+	if err != nil {
+		return false
+	}
+	n, _ := res.RowsAffected()
+	return n > 0
+}
+
+// POST /api/owner/devices/{id}/remove
+func (a *API) RemoveDevice(w http.ResponseWriter, r *http.Request) {
+	acct := a.auth(w, r, "owner")
+	if acct == nil {
+		return
+	}
+	id := r.PathValue("id")
+	if !a.st.RetireDevice(acct.ID, id) {
+		apiError(w, 404, "no such device on your account")
+		return
+	}
+	if n := a.hub.Node(id); n != nil {
+		n.Send(Msg{T: "bye", Reason: "removed by owner"})
+	}
+	writeJSON(w, map[string]any{"ok": true})
+}
+
 type deviceView struct {
 	ID             string   `json:"id"`
 	Name           string   `json:"name"`
@@ -121,6 +175,12 @@ type deviceView struct {
 	LastSeen       int64    `json:"last_seen"`
 	Bench          any      `json:"bench"`
 	PublicTag      string   `json:"public_tag"`
+	EarnedToday    int64    `json:"earned_today"`
+	EarnedWeek     int64    `json:"earned_week"`
+	JobsToday      int      `json:"jobs_today"`
+	PauseReason    string   `json:"pause_reason,omitempty"`
+	Slots          int      `json:"slots,omitempty"`
+	LiveTPS        float64  `json:"tps,omitempty"`
 }
 
 func (a *API) viewDevice(d *DeviceRow) deviceView {
@@ -136,6 +196,7 @@ func (a *API) viewDevice(d *DeviceRow) deviceView {
 	if n := a.hub.Node(d.ID); n != nil {
 		n.mu.Lock()
 		v.Online, v.Status, v.Mode = n.Online, n.Status, n.Mode
+		v.PauseReason, v.Slots, v.LiveTPS = n.Reason, max(1, n.Slots), n.TPS
 		if !n.Online {
 			v.Status = "offline"
 		}
@@ -152,8 +213,12 @@ func (a *API) Owner(w http.ResponseWriter, r *http.Request) {
 	}
 	devs, _ := a.st.DevicesByOwner(acct.ID)
 	var views []deviceView
+	earn := a.st.DeviceEarnings(acct.ID)
 	for _, d := range devs {
-		views = append(views, a.viewDevice(d))
+		v := a.viewDevice(d)
+		e := earn[d.ID]
+		v.EarnedToday, v.EarnedWeek, v.JobsToday = e.Today, e.Week, e.JobsToday
+		views = append(views, v)
 	}
 	writeJSON(w, map[string]any{
 		"account":   map[string]any{"id": acct.ID, "email": acct.Email, "payout_network": acct.PayoutNetwork, "payout_address": acct.PayoutAddress, "payout_address_set_at": acct.PayoutAddressSetAt},

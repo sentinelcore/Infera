@@ -127,6 +127,7 @@ func main() {
 	mux.HandleFunc("POST /api/admin/payouts/mark-sent", api.MarkPaid)
 	mux.HandleFunc("POST /api/admin/credits", api.GrantCredits)
 	mux.HandleFunc("POST /api/owner/appeal", api.FileAppeal)
+	mux.HandleFunc("POST /api/owner/devices/{id}/remove", api.RemoveDevice)
 	mux.HandleFunc("POST /api/owner/payout-address/verify", api.VerifyWallet)
 	mux.HandleFunc("POST /api/admin/verify", api.AdminVerify)
 	mux.HandleFunc("GET /api/admin/nodes", api.AdminNodes)

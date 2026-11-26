@@ -147,8 +147,9 @@ td.num { font-variant-numeric: tabular-nums; font-family: var(--mono); }
 
       <h2>Devices</h2>
       <div class="table-wrap"><table>
-        <thead><tr><th>Device</th><th>Status</th><th>Class</th><th>Dependability</th><th>Hold · Pay</th><th>Models</th></tr></thead>
-        <tbody id="dev-rows"><tr><td colspan="6" class="muted">No devices yet. Add one below.</td></tr></tbody>
+        <caption id="fleet" style="text-align:left;padding:6px 0;font-weight:600"></caption>
+        <thead><tr><th>Device</th><th>Status</th><th>Earned today · 7 days</th><th>Class</th><th>Dependability</th><th>Hold · Pay</th><th>Models</th><th></th></tr></thead>
+        <tbody id="dev-rows"><tr><td colspan="8" class="muted">No devices yet. Add one below.</td></tr></tbody>
       </table></div>
 
       <div class="grid" style="margin-top:14px">
@@ -158,6 +159,8 @@ td.num { font-variant-numeric: tabular-nums; font-family: var(--mono); }
           <button class="primary" id="o-code">Get pairing code</button>
           <div id="pair-out" hidden>
             <div class="code" id="pair-code"></div>
+            <div id="pair-qr" style="background:#fff;display:inline-block;padding:10px;border-radius:10px;margin:6px 0" aria-label="QR code: scan with a phone camera to pair"></div>
+            <p class="muted">Scan with each phone's camera (the Infera app must be installed). While this code is valid it pairs several devices, so you can set up a whole fleet with one code.</p>
             <a class="primary" id="pair-link" style="display:inline-block;margin:6px 0;padding:9px 16px;border-radius:8px;background:var(--accent);color:var(--bg);font-weight:600;text-decoration:none">Pair this phone</a>
             <p class="muted">On a phone with the Infera app: tap the button above. On a computer: run the command below.</p>
             <pre id="pair-cmd"></pre>
@@ -287,6 +290,7 @@ td.num { font-variant-numeric: tabular-nums; font-family: var(--mono); }
 <p class="muted" style="text-align:center;margin-top:40px"><a href="/download">Download</a> · <a href="/status">Status</a></p>
 <div class="toast" id="toast" hidden></div>
 
+<script src="/qrcode.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 const usd = (micro) => (micro < 0 ? "−$" : "$") + (Math.abs(micro) / 1e6).toFixed(micro !== 0 && Math.abs(micro) < 1e4 ? 6 : 2);
@@ -377,16 +381,25 @@ async function showOwner() {
     $("b-pen").textContent = usd(-d.balance.penalties);
     $("b-paid").textContent = usd(d.balance.paid);
     const devs = d.devices || [];
+    const on = devs.filter(v => v.online && v.status !== "offline");
+    $("fleet").textContent = devs.length ? `${devs.length} device${devs.length === 1 ? "" : "s"} · ${on.length} online · ${on.filter(v => v.status === "idle" || v.status === "busy").length} taking jobs · ${usd(devs.reduce((a, v) => a + v.earned_today, 0))} today` : "";
     $("dev-rows").innerHTML = devs.length ? devs.map(v => {
       const susp = v.suspended_until * 1000 > Date.now();
       const st = v.suspended_until >= 253402300799 ? `<span class="pill warn">removed · appeal below</span>` : susp ? `<span class="pill warn">suspended until ${new Date(v.suspended_until * 1000).toLocaleString()}</span>`
-        : `<span class="pill ${v.online ? "on" : ""}">${esc(v.status)}${v.online && v.mode === "ask" ? " · ask" : ""}</span>`;
-      return `<tr><td><b>${esc(v.name)}</b><div class="muted mono">${esc(v.platform)}</div></td><td>${st}</td>
+        : `<span class="pill ${v.online ? "on" : ""}">${esc(v.status)}${v.online && v.mode === "ask" ? " · ask" : ""}</span>${v.status === "paused" && v.pause_reason ? `<div class="muted">${esc(v.pause_reason)}</div>` : ""}${v.status === "busy" || v.status === "idle" ? `<div class="muted">${v.slots || 1} at once${v.tps ? " · " + v.tps.toFixed(1) + " tok/s" : ""}</div>` : ""}<div class="muted">seen ${when(v.last_seen)}</div>`;
+      return `<tr><td><b>${esc(v.name)}</b><div class="muted mono">${esc(v.platform)}</div><div class="muted mono">${esc(v.id)}</div></td><td>${st}</td>
+        <td class="num">${usd(v.earned_today)}<div class="muted">${usd(v.earned_week)} · ${v.jobs_today} jobs today</div></td>
         <td>${esc(v.class)}<div class="muted">${esc(v.privacy_level)}</div></td>
         <td class="num">${v.dependability.toFixed(1)}<div class="muted">streak ${v.streak}</div></td>
         <td class="num">${v.band.suspended ? "frozen" : v.band.hold_days + " d · " + v.band.multiplier.toFixed(2) + "×"}${v.band.batch_only ? '<div class="muted">batch only</div>' : ""}</td>
-        <td class="mono">${esc((v.models || []).join(", "))}<div><a target="_blank" rel="noopener" href="https://x.com/intent/post?text=${encodeURIComponent("My idle device is earning by serving AI on Infera this week:")}&url=${encodeURIComponent(location.origin + "/s/" + v.public_tag)}">Share on X</a></div></td></tr>`;
-    }).join("") : `<tr><td colspan="6" class="muted">No devices yet. Add one below.</td></tr>`;
+        <td class="mono">${esc((v.models || []).join(", "))}<div><a target="_blank" rel="noopener" href="https://x.com/intent/post?text=${encodeURIComponent("My idle device is earning by serving AI on Infera this week:")}&url=${encodeURIComponent(location.origin + "/s/" + v.public_tag)}">Share on X</a></div></td>
+        <td><button class="ghost" data-remove="${esc(v.id)}" data-name="${esc(v.name)}">Remove</button></td></tr>`;
+    }).join("") : `<tr><td colspan="8" class="muted">No devices yet. Add one below.</td></tr>`;
+    $("dev-rows").querySelectorAll("[data-remove]").forEach(b => b.onclick = async () => {
+      if (!confirm(`Remove ${b.dataset.name} (${b.dataset.remove})? It stops taking jobs and must be paired again to rejoin. Its earnings stay on your account.`)) return;
+      try { await call(`/api/owner/devices/${encodeURIComponent(b.dataset.remove)}/remove`, { method: "POST", key: ownerKey }); toast("Device removed"); showOwner(); }
+      catch (e) { toast(e.message); }
+    });
     const pens = d.penalties || [];
     $("pen-rows").innerHTML = pens.length ? pens.map(p => `<tr><td>${when(p.created_at)}</td><td class="mono">${esc(p.device_id)}</td>
       <td>${esc(p.cause.replace(/_/g, " "))}</td><td class="num ${p.delta < 0 ? "neg" : ""}">${p.delta > 0 ? "+" : ""}${p.delta}</td><td>${esc(p.evidence)}</td>
@@ -412,6 +425,7 @@ $("o-code").onclick = async () => {
     const r = await call("/api/pair-code", { method: "POST", key: ownerKey });
     $("pair-out").hidden = false; $("pair-code").textContent = r.code;
     $("pair-link").href = `/pair/${r.code}`;
+    try { const q = qrcode(0, "M"); q.addData(`${location.origin}/pair/${r.code}`); q.make(); $("pair-qr").innerHTML = q.createSvgTag({ cellSize: 5, margin: 0 }); } catch (e) { $("pair-qr").hidden = true; }
     $("pair-cmd").textContent = `Phone: open ${location.origin}/pair/${r.code} on the phone and tap "Open Infera and pair"\nComputer (with Ollama installed): infera setup ${r.code}`;
   } catch (e) { toast(e.message); }
 };
