@@ -106,7 +106,15 @@ impl Engine {
         // Text completion jobs (code autocomplete: "prompt" + optional "suffix") use the engine's
         // /v1/completions; Ollama builds the model's fill-in-the-middle prompt from the suffix.
         let path = if request.get("prompt").is_some() { "/v1/completions" } else { "/v1/chat/completions" };
-        let resp = self.http.post(format!("{}{path}", self.url)).json(&request).send().await?;
+        let mut resp = self.http.post(format!("{}{path}", self.url)).json(&request).send().await?;
+        // Models without fill-in-the-middle support reject "suffix" ("does not support insert"):
+        // retry as a plain continuation of the prompt.
+        if resp.status() == reqwest::StatusCode::BAD_REQUEST && request.get("suffix").is_some() {
+            if let Some(o) = request.as_object_mut() {
+                o.remove("suffix");
+            }
+            resp = self.http.post(format!("{}{path}", self.url)).json(&request).send().await?;
+        }
         if !resp.status().is_success() {
             bail!("engine returned {}", resp.status());
         }
