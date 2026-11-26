@@ -36,10 +36,15 @@ class Engine {
     // Returns {prompt_tokens, completion_tokens}, or {-1, -1} on error.
     std::pair<int, int> generate(const std::vector<Message> &messages, int max_tokens, float temperature,
                                  const std::function<bool(const std::string &)> &on_text);
+    // Same, for raw text with no chat template (code completion / fill in the middle).
+    std::pair<int, int> generate_text(const std::string &text, int max_tokens, float temperature,
+                                      const std::function<bool(const std::string &)> &on_text);
     uint64_t n_params() const;
     int n_parallel() const { return n_par_; }
 
   private:
+    std::pair<int, int> run(const std::vector<int> &toks, int max_tokens, float temperature,
+                            const std::function<bool(const std::string &)> &on_text);
     void loop();
     std::vector<int> tokenize_chat(const std::vector<Message> &messages);
     llama_model *model_ = nullptr;

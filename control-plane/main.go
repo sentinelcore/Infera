@@ -86,6 +86,7 @@ func main() {
 	mux.HandleFunc("POST /v1/chat/completions", gw.ChatCompletions)
 	mux.HandleFunc("GET /v1/models", gw.Models)
 	mux.HandleFunc("POST /v1/embeddings", gw.Embeddings)
+	mux.HandleFunc("POST /v1/completions", gw.Completions)
 	mux.HandleFunc("POST /v1/audio/transcriptions", gw.Transcriptions)
 	mux.HandleFunc("POST /v1/batch", gw.BatchSubmit)
 	mux.HandleFunc("GET /v1/batch", gw.BatchList)

@@ -56,7 +56,7 @@ func (h *hedgeRace) claimed() bool {
 
 // hedgeable: interactive chat only (not batch, embeddings, canaries or re-runs).
 func (g *Gateway) hedgeable(req chatRequest, candidates int) bool {
-	return g.cfg.HedgeAfter > 0 && candidates >= 2 && !req.InferaBatch && req.jobType == "" && req.expect == "" && !req.rerun && !req.queued
+	return g.cfg.HedgeAfter > 0 && candidates >= 2 && !req.InferaBatch && (req.jobType == "" || req.jobType == "completion") && req.expect == "" && !req.rerun && !req.queued
 }
 
 type hedgeResult struct {

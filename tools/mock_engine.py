@@ -37,6 +37,14 @@ class H(BaseHTTPRequestHandler):
                 self.wfile.write((json.dumps({"status": "pulling", "completed": done * 10**6, "total": 100 * 10**6}) + "\n").encode()); self.wfile.flush()
             self.wfile.write(b'{"status":"success"}\n')
             return
+        if self.path.endswith("/v1/completions"):  # text completion / fill-in-the-middle
+            words = ["return", "a", "+", "b"] if req.get("suffix") else ["Hello", "from", "a", "completion."]
+            self.send_response(200); self.send_header("Content-Type", "text/event-stream"); self.end_headers()
+            for w in words:
+                self.wfile.write(f"data: {json.dumps({'choices': [{'index': 0, 'text': w + ' '}]})}\n\n".encode()); self.wfile.flush(); time.sleep(DELAY)
+            u = {"choices": [], "usage": {"prompt_tokens": 12, "completion_tokens": len(words)}}
+            self.wfile.write(f"data: {json.dumps(u)}\n\ndata: [DONE]\n\n".encode())
+            return
         if self.path.endswith("/embeddings"):
             inputs = req.get("input")
             inputs = inputs if isinstance(inputs, list) else [inputs]

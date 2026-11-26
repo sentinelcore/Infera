@@ -68,6 +68,25 @@ JNIEXPORT jintArray JNICALL Java_network_infera_node_LlamaEngine_nativeGenerate(
     return out;
 }
 
+JNIEXPORT jintArray JNICALL Java_network_infera_node_LlamaEngine_nativeGenerateText(JNIEnv *env, jclass, jlong h, jstring text,
+                                                                                     jint max_tokens, jfloat temp, jobject sink) {
+    auto *e = reinterpret_cast<Engine *>(h);
+    jclass cls = env->GetObjectClass(sink);
+    jmethodID on_text = env->GetMethodID(cls, "onText", "([B)Z");
+    auto res = e->generate_text(jstr(env, text), max_tokens, temp, [&](const std::string &piece) {
+        jbyteArray arr = env->NewByteArray((jsize)piece.size());
+        env->SetByteArrayRegion(arr, 0, (jsize)piece.size(), reinterpret_cast<const jbyte *>(piece.data()));
+        jboolean go = env->CallBooleanMethod(sink, on_text, arr);
+        env->DeleteLocalRef(arr);
+        if (env->ExceptionCheck()) return false;
+        return (bool)go;
+    });
+    jintArray out = env->NewIntArray(2);
+    jint vals[2] = {res.first, res.second};
+    env->SetIntArrayRegion(out, 0, 2, vals);
+    return out;
+}
+
 JNIEXPORT void JNICALL Java_network_infera_node_LlamaEngine_nativeFree(JNIEnv *, jclass, jlong h) {
     delete reinterpret_cast<Engine *>(h);
 }

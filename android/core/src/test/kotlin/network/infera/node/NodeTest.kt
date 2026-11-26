@@ -129,7 +129,11 @@ class NodeTest {
         assertTrue(r3.contains("Ask not what your country"), r3)
         assertEquals(audio.size, speech.lastAudio, "the phone must receive the exact audio")
 
-        // 4. owner credited
+        // 4. code autocomplete: /v1/completions with a suffix reaches the phone as a completion job
+        val r4 = post("/v1/completions", """{"model":"phone-test","prompt":"def add(a, b):\n    ","suffix":"\n","max_tokens":6}""", cust)
+        assertTrue(r4.contains("text_completion") && r4.contains("Phones"), r4)
+
+        // 5. owner credited
         Thread.sleep(500)
         val owner = Json.parseToJsonElement(Api.http.newCall(Request.Builder().url("$base/api/owner").header("Authorization", "Bearer $own").build()).execute().body!!.string()).jsonObject
         val held = owner["balance"]!!.jsonObject["held"]!!.jsonPrimitive.content.toLong()

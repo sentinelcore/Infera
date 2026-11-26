@@ -28,6 +28,12 @@ interface Engine {
     val modelId: String
     /** Requests the engine can answer at once (batched decoding). */
     val parallel: Int get() = 1
+    /**
+     * Text completion (code autocomplete): [prompt] is the text before the cursor and [suffix]
+     * the text after it (fill in the middle). Default: treat it as a chat message.
+     */
+    fun complete(prompt: String, suffix: String, maxTokens: Int, temperature: Float, onText: (String) -> Boolean): Pair<Int, Int> =
+        generate(listOf("user" to prompt + suffix), maxTokens, temperature, onText)
     /** Streams text; return false from onText to stop. Returns (prompt tokens, completion tokens). */
     fun generate(messages: List<Pair<String, String>>, maxTokens: Int, temperature: Float, onText: (String) -> Boolean): Pair<Int, Int>
 }
@@ -262,6 +268,7 @@ class Node(
 
     private fun runJob(jobId: String, model: String, chan: SealedChannel, n: String, c: String, cancel: AtomicBoolean) {
         val req = Json.parseToJsonElement(String(chan.openDown(n, c))).jsonObject
+        val completion = req["prompt"] != null // /v1/completions job (code autocomplete)
         val msgs = (req["messages"] as? JsonArray ?: JsonArray(emptyList())).map {
             val o = it.jsonObject
             (o["role"]?.jsonPrimitive?.contentOrNull ?: "user") to (o["content"]?.jsonPrimitive?.contentOrNull ?: "")
@@ -273,7 +280,14 @@ class Node(
         var seq = 0
         val started = System.currentTimeMillis()
         val (tin, tout) = try {
-            engine.generate(msgs, maxTokens, temp) { piece ->
+            if (completion) engine.complete(req["prompt"]?.jsonPrimitive?.contentOrNull ?: "", req["suffix"]?.jsonPrimitive?.contentOrNull ?: "", maxTokens, temp) { piece ->
+                if (cancel.get()) return@complete false
+                out.append(piece)
+                seq++
+                val (nonce, ct) = chan.sealUp(piece.toByteArray())
+                send(buildJsonObject { put("t", "tok"); put("job_id", jobId); put("seq", seq); put("n", nonce); put("c", ct) })
+                true
+            } else engine.generate(msgs, maxTokens, temp) { piece ->
                 if (cancel.get()) return@generate false
                 out.append(piece)
                 seq++

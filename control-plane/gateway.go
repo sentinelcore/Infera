@@ -178,8 +178,15 @@ func (g *Gateway) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	g.serve(w, r, acct, req, raw, estIn, estCharge, false)
+}
+
+// serve runs a chat or text-completion request on devices (hedged when worthwhile), then the
+// backup cloud, else 503.
+func (g *Gateway) serve(w http.ResponseWriter, r *http.Request, acct *Account, req chatRequest, raw []byte, estIn int, estCharge int64, text bool) {
 	jobID := "job_" + randomHex(10)
 	sw := newStreamWriter(w, req.Stream, jobID, req.Model)
+	sw.text = text
 
 	tried := 0
 	go g.hub.NotifyMissed(req.Model, float64(estCharge)*g.cfg.OwnerShare/microUSD)
@@ -505,7 +512,11 @@ func (g *Gateway) fallback(w http.ResponseWriter, r *http.Request, acct *Account
 		m["stream_options"] = map[string]any{"include_usage": true}
 	}
 	body, _ := json.Marshal(m)
-	up, _ := http.NewRequestWithContext(r.Context(), "POST", strings.TrimRight(g.cfg.FallbackURL, "/")+"/chat/completions", bytes.NewReader(body))
+	path := "/chat/completions"
+	if req.jobType == "completion" {
+		path = "/completions"
+	}
+	up, _ := http.NewRequestWithContext(r.Context(), "POST", strings.TrimRight(g.cfg.FallbackURL, "/")+path, bytes.NewReader(body))
 	up.Header.Set("Content-Type", "application/json")
 	if g.cfg.FallbackKey != "" {
 		up.Header.Set("Authorization", "Bearer "+g.cfg.FallbackKey)
@@ -574,6 +585,7 @@ type streamWriter struct {
 	buf     strings.Builder
 	rbuf    strings.Builder
 	embed   bool // embeddings response instead of chat
+	text    bool // /v1/completions (text_completion) instead of chat
 	// transcribe: "" for chat, else the response_format of a transcription
 	transcribe string
 }
@@ -607,8 +619,15 @@ func (s *streamWriter) begin() {
 }
 
 func (s *streamWriter) chunk(delta map[string]any, finish any) {
-	b, _ := json.Marshal(map[string]any{"id": s.jobID, "object": "chat.completion.chunk", "created": now(), "model": s.model,
-		"choices": []any{map[string]any{"index": 0, "delta": delta, "finish_reason": finish}}})
+	var b []byte
+	if s.text {
+		t, _ := delta["content"].(string)
+		b, _ = json.Marshal(map[string]any{"id": s.jobID, "object": "text_completion", "created": now(), "model": s.model,
+			"choices": []any{map[string]any{"index": 0, "text": t, "finish_reason": finish}}})
+	} else {
+		b, _ = json.Marshal(map[string]any{"id": s.jobID, "object": "chat.completion.chunk", "created": now(), "model": s.model,
+			"choices": []any{map[string]any{"index": 0, "delta": delta, "finish_reason": finish}}})
+	}
 	fmt.Fprintf(s.w, "data: %s\n\n", b)
 	if f, ok := s.w.(http.Flusher); ok {
 		f.Flush()
@@ -634,7 +653,7 @@ func (s *streamWriter) delta(text string) {
 	if s.stream {
 		first := !s.started
 		s.begin()
-		if first {
+		if first && !s.text {
 			s.chunk(map[string]any{"role": "assistant", "content": ""}, nil)
 		}
 		s.chunk(map[string]any{"content": text}, nil)
@@ -672,6 +691,11 @@ func (s *streamWriter) finish(tin, tout int) {
 	}
 	s.begin()
 	s.w.Header().Set("Content-Type", "application/json")
+	if s.text {
+		json.NewEncoder(s.w).Encode(map[string]any{"id": s.jobID, "object": "text_completion", "created": now(), "model": s.model,
+			"choices": []any{map[string]any{"index": 0, "text": s.buf.String(), "finish_reason": "stop"}}, "usage": usage})
+		return
+	}
 	json.NewEncoder(s.w).Encode(map[string]any{"id": s.jobID, "object": "chat.completion", "created": now(), "model": s.model,
 		"choices": []any{map[string]any{"index": 0, "message": s.message(), "finish_reason": "stop"}},
 		"usage":   usage})

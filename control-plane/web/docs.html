@@ -50,7 +50,7 @@ th{color:var(--muted);font-size:.8rem;text-transform:uppercase;letter-spacing:.0
 <div class="layout">
 <nav class="toc" aria-label="Contents">
   <b>Start</b><a href="#quickstart">Quickstart</a><a href="#auth">Authentication</a><a href="#models">Models &amp; prices</a>
-  <b>Endpoints</b><a href="#chat">Chat completions</a><a href="#embeddings">Embeddings</a><a href="#transcriptions">Transcriptions</a><a href="#batch">Batch API</a><a href="#list-models">List models</a>
+  <b>Endpoints</b><a href="#chat">Chat completions</a><a href="#completions">Completions (code)</a><a href="#embeddings">Embeddings</a><a href="#transcriptions">Transcriptions</a><a href="#batch">Batch API</a><a href="#list-models">List models</a>
   <b>Guides</b><a href="#sdks">SDKs &amp; tools</a><a href="#routing">How requests are served</a><a href="#errors">Errors</a><a href="#limits">Rate limits</a><a href="#privacy">Privacy</a>
 </nav>
 <main>
@@ -107,6 +107,37 @@ console.log(r.choices[0].message.content);</code></pre>
   -d '{"model":"qwen3-4b","stream":true,"max_tokens":200,
        "messages":[{"role":"user","content":"Explain DePIN in one paragraph."}]}'</code></pre>
 <p>Responses carry <code>X-Infera-Job</code> (the job id) and <code>X-Infera-Route</code> (<code>device</code> or <code>fallback</code>).</p>
+
+<h2 id="completions">Completions (code autocomplete)</h2>
+<p><span class="method">POST</span><code>/v1/completions</code>, OpenAI's text-completion format. For code, send the text before the cursor as <code>prompt</code> and the text after it as <code>suffix</code> ("fill in the middle"). Best with the coder models: <code>qwen2.5-coder-1.5b</code>, <code>qwen2.5-coder-3b</code>, <code>qwen2.5-coder-7b</code>, <code>qwen2.5-coder-14b</code>, <code>qwen3-coder-30b-a3b</code>.</p>
+<pre><code>curl https://infera.valanor.network/v1/completions \
+  -H "Authorization: Bearer $INFERA_API_KEY" -H "Content-Type: application/json" \
+  -d '{"model":"qwen2.5-coder-1.5b","prompt":"def add(a, b):\n    ","suffix":"\n\nprint(add(1, 2))","max_tokens":32,"temperature":0}'
+# → {"object":"text_completion","choices":[{"text":"return a + b", ...}], "usage": {...}}</code></pre>
+<p>Fields: <code>model</code>, <code>prompt</code> (string), <code>suffix</code>, <code>max_tokens</code> (default 128), <code>temperature</code>, <code>stop</code>, <code>stream</code>.</p>
+<h3>Editor setup</h3>
+<pre><code># Continue (config.yaml): autocomplete with Infera
+models:
+  - name: Infera autocomplete
+    provider: openai
+    model: qwen2.5-coder-1.5b
+    apiBase: https://infera.valanor.network/v1
+    apiKey: ik_cust_…
+    roles: [autocomplete]
+  - name: Infera chat
+    provider: openai
+    model: qwen2.5-coder-7b
+    apiBase: https://infera.valanor.network/v1
+    apiKey: ik_cust_…
+    roles: [chat, edit]</code></pre>
+<pre><code># Tabby (~/.tabby/config.toml)
+[model.completion.http]
+kind = "openai/completion"
+model_name = "qwen2.5-coder-1.5b"
+api_endpoint = "https://infera.valanor.network/v1"
+api_key = "ik_cust_…"
+prompt_template = "&lt;|fim_prefix|&gt;{prefix}&lt;|fim_suffix|&gt;{suffix}&lt;|fim_middle|&gt;"</code></pre>
+<p class="note">Coding agents that need tool calling and long context (Cline, Aider…) aren't supported yet; use the coder models for chat and autocomplete.</p>
 
 <h2 id="embeddings">Embeddings</h2>
 <p><span class="method">POST</span><code>/v1/embeddings</code>, same as OpenAI. <code>input</code> is a string or an array of strings.</p>

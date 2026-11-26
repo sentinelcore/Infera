@@ -29,6 +29,11 @@ int main(int argc, char **argv) {
     int seen = 0;
     auto r2 = e.generate({{"user", "Again"}}, 16, 0.7f, [&](const std::string &) { return ++seen < 3; });
     printf("stopped after %d pieces (reported %d)\n", seen, r2.second);
+    // Raw text completion (no chat template).
+    int tp = 0;
+    auto rt = e.generate_text("def add(a, b):\n    ", 8, 0.0f, [&](const std::string &) { tp++; return true; });
+    printf("text completion: prompt=%d completion=%d\n", rt.first, rt.second);
+    if (rt.second <= 0 || tp == 0) { puts("text completion failed"); return 1; }
     // Batching: 4 requests at once must all finish, sharing decode steps.
     auto one = [&] {
         auto t = std::chrono::steady_clock::now();

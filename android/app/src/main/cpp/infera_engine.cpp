@@ -153,8 +153,22 @@ std::vector<int> Engine::tokenize_chat(const std::vector<Message> &messages) {
 std::pair<int, int> Engine::generate(const std::vector<Message> &messages, int max_tokens, float temperature,
                                      const std::function<bool(const std::string &)> &on_text) {
     if (!ctx_) return {-1, -1};
+    return run(tokenize_chat(messages), max_tokens, temperature, on_text);
+}
+
+std::pair<int, int> Engine::generate_text(const std::string &text, int max_tokens, float temperature,
+                                          const std::function<bool(const std::string &)> &on_text) {
+    if (!ctx_) return {-1, -1};
+    // Raw text (no chat template); special tokens such as <|fim_prefix|> are parsed.
+    int n = -llama_tokenize(vocab_, text.c_str(), (int)text.size(), nullptr, 0, false, true);
+    std::vector<int> toks(std::max(n, 1));
+    if (llama_tokenize(vocab_, text.c_str(), (int)text.size(), toks.data(), (int)toks.size(), false, true) < 0) return {-1, -1};
+    return run(toks, max_tokens, temperature, on_text);
+}
+
+std::pair<int, int> Engine::run(const std::vector<int> &toks, int max_tokens, float temperature,
+                                const std::function<bool(const std::string &)> &on_text) {
     auto s = std::make_shared<Slot>();
-    auto toks = tokenize_chat(messages);
     if (toks.empty()) return {-1, -1};
     s->prompt.assign(toks.begin(), toks.end());
     const int n_prompt = (int)s->prompt.size();

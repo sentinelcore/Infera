@@ -15,6 +15,13 @@ class LlamaEngine(path: String, override val modelId: String, threads: Int = bes
         return r[0] to r[1]
     }
 
+    /** Code completion. Qwen coder models fill in the middle with their FIM tokens. */
+    override fun complete(prompt: String, suffix: String, maxTokens: Int, temperature: Float, onText: (String) -> Boolean): Pair<Int, Int> {
+        val text = if (suffix.isNotEmpty() && modelId.contains("coder")) "<|fim_prefix|>$prompt<|fim_suffix|>$suffix<|fim_middle|>" else prompt
+        val r = nativeGenerateText(handle, text, maxTokens, temperature, TokenSink { b -> onText(String(b, Charsets.UTF_8)) })
+        return r[0] to r[1]
+    }
+
     val params: Long get() = nativeParams(handle)
 
     fun close() { if (handle != 0L) nativeFree(handle); handle = 0 }
@@ -42,6 +49,7 @@ class LlamaEngine(path: String, override val modelId: String, threads: Int = bes
         }
         @JvmStatic private external fun nativeParams(h: Long): Long
         @JvmStatic private external fun nativeGenerate(h: Long, roles: Array<String>, contents: Array<String>, maxTokens: Int, temp: Float, sink: TokenSink): IntArray
+        @JvmStatic private external fun nativeGenerateText(h: Long, text: String, maxTokens: Int, temp: Float, sink: TokenSink): IntArray
         @JvmStatic private external fun nativeFree(h: Long)
     }
 }

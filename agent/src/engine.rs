@@ -103,7 +103,10 @@ impl Engine {
             o.remove("privacy");
             o.remove("infera_batch");
         }
-        let resp = self.http.post(format!("{}/v1/chat/completions", self.url)).json(&request).send().await?;
+        // Text completion jobs (code autocomplete: "prompt" + optional "suffix") use the engine's
+        // /v1/completions; Ollama builds the model's fill-in-the-middle prompt from the suffix.
+        let path = if request.get("prompt").is_some() { "/v1/completions" } else { "/v1/chat/completions" };
+        let resp = self.http.post(format!("{}{path}", self.url)).json(&request).send().await?;
         if !resp.status().is_success() {
             bail!("engine returned {}", resp.status());
         }
@@ -133,7 +136,8 @@ impl Engine {
                         return Ok(());
                     }
                 }
-                if let Some(t) = delta["content"].as_str() {
+                // Chat streams "delta.content"; text completions stream "text".
+                if let Some(t) = delta["content"].as_str().or_else(|| v["choices"][0]["text"].as_str()) {
                     if !t.is_empty() {
                         pieces += 1;
                         if tx.send(Event::Delta(t.to_string())).await.is_err() {
