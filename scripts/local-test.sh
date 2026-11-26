@@ -107,16 +107,16 @@ if [ -n "${STT:-}" ]; then
   curl -s "localhost:$PORT/v1/audio/transcriptions" -H "Authorization: Bearer $CUST" -F "model=$STT" -F "file=@$WORK/clip.wav" \
     | python3 -c "import sys,json;d=json.load(sys.stdin);assert 'Hello' in d.get('text',''),d;print('   Text:', d['text'])" || { echo "TEST FAILED (transcription)"; exit 1; }
 fi
+STRICT=$([ -n "${TAG:-}" ] && echo 0 || echo 1)  # real small models may answer oddly; the stand-in must be exact
 echo "   Code autocomplete check (/v1/completions with suffix) …"
 curl -s "localhost:$PORT/v1/completions" -H "Authorization: Bearer $CUST" \
   -d "{\"model\":\"$MODEL\",\"prompt\":\"def add(a, b):\\n    \",\"suffix\":\"\\n\\nprint(add(1, 2))\",\"max_tokens\":16}" \
-  | python3 -c "import sys,json;d=json.load(sys.stdin);t=d['choices'][0]['text'];assert d['object']=='text_completion' and t.strip(),d;print('   Completion:', repr(t.strip()))" || { echo "TEST FAILED (completions)"; exit 1; }
+  | python3 -c "import sys,json;d=json.load(sys.stdin);t=d['choices'][0]['text'];assert d['object']=='text_completion' and d['usage']['completion_tokens']>0 and (t.strip() or $STRICT==0),d;print('   Completion:', repr(t.strip()))" || { echo "TEST FAILED (completions)"; exit 1; }
 CSTREAM=$(curl -sN "localhost:$PORT/v1/completions" -H "Authorization: Bearer $CUST" -d "{\"model\":\"$MODEL\",\"prompt\":\"Hi\",\"stream\":true,\"max_tokens\":8}")
 echo "$CSTREAM" | grep -q '"object":"text_completion"' || { echo "TEST FAILED (streamed completions): $CSTREAM"; exit 1; }
 echo "   Tool calling check (coding agents) …"
 TOOLS='"tools":[{"type":"function","function":{"name":"read_file","description":"Read a file from the project","parameters":{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}}}]'
 TBODY="{\"model\":\"$MODEL\",\"max_tokens\":200,$TOOLS,\"messages\":[{\"role\":\"user\",\"content\":\"Use the read_file tool to open main.py.\"}]}"
-STRICT=$([ -n "${TAG:-}" ] && echo 0 || echo 1)
 curl -s "localhost:$PORT/v1/chat/completions" -H "Authorization: Bearer $CUST" -d "$TBODY" | python3 -c "
 import sys,json;d=json.load(sys.stdin);c=d['choices'][0];m=c['message'];tc=m.get('tool_calls') or []
 if tc:
