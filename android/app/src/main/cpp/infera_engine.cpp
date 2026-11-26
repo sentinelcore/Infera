@@ -64,16 +64,13 @@ std::string Engine::load(const std::string &path, int n_ctx, int n_threads, int 
         cp.n_threads = n_threads;
         cp.n_threads_batch = n_threads;
     }
-    // 8-bit attention cache: half the memory of 16-bit, so each request can get a longer
-    // window. Needs flash attention; fall back to the 16-bit cache if unavailable.
-    cp.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_AUTO;
-    cp.type_k = GGML_TYPE_Q8_0;
-    cp.type_v = GGML_TYPE_Q8_0;
+    // 16-bit attention cache. (An 8-bit cache with flash attention halves the memory but was
+    // measured slower on a Snapdragon 8 Elite: 15.5 -> 7.5 tok/s together with the i8mm build.)
+    cp.type_k = GGML_TYPE_F16;
+    cp.type_v = GGML_TYPE_F16;
     ctx_ = llama_init_from_model(model_, cp);
-    if (!ctx_) {
-        cp.type_k = GGML_TYPE_F16;
-        cp.type_v = GGML_TYPE_F16;
-        cp.n_ctx = std::min<uint32_t>(cp.n_ctx, 2048u * n_par_);
+    if (!ctx_ && cp.n_ctx > 2048u * n_par_) {  // not enough memory: shorter windows
+        cp.n_ctx = 2048u * n_par_;
         ctx_ = llama_init_from_model(model_, cp);
     }
     if (!ctx_) return "could not create the inference context";

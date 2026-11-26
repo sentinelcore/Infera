@@ -3,8 +3,7 @@ package network.infera.node
 /** On-device engine: llama.cpp through JNI (src/main/cpp). Loads GGUF models, the same files desktops use. */
 class LlamaEngine(path: String, override val modelId: String, threads: Int = bestThreads(),
                   override val parallel: Int = bestParallel()) : Engine {
-    // Each request gets a 4096-token window (8-bit cache; the engine falls back to 2048 with a
-    // 16-bit cache if 8-bit isn't available).
+    // Each request gets a 4096-token window (2048 if memory is short).
     private var handle: Long = nativeLoad(path, 4096, threads, parallel)
 
     fun interface TokenSink { fun onText(utf8: ByteArray): Boolean }

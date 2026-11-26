@@ -62,6 +62,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = Prefs(this)
+        NativeLib.wantMatrix = prefs.matrixEngine
         current = this
         if (Build.VERSION.SDK_INT >= 33) requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
         root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(24), dp(18), dp(24)) }
@@ -405,6 +406,8 @@ class MainActivity : Activity() {
             }
             say("%.1f tokens/s · class %s · %d threads".format(tps, prefs.klass, LlamaEngine.bestThreads()))
             prefs.benchAt = System.currentTimeMillis(); prefs.threads = LlamaEngine.bestThreads()
+            prefs.benchCharging = (registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
+                ?.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0) ?: 0) != 0
             if (prefs.klass != "unrated") { prefs.enabled = true; NodeService.start(this) }
             ui.post { current?.let { a -> a.tab = "device"; a.benchJustDone = true; a.render() } }
             ui.post { current?.progress?.visibility = View.GONE }
@@ -589,8 +592,9 @@ class MainActivity : Activity() {
             row("Model", "${prefs.modelId} (%.1f B)".format(prefs.paramsB)),
             row("Memory", "%.0f GB RAM".format(phoneRamGb())),
             row("Processor", (if (Build.VERSION.SDK_INT >= 31) Build.SOC_MODEL else Build.HARDWARE) + " · ${prefs.threads.takeIf { it > 0 } ?: LlamaEngine.bestThreads()} fast cores"),
-            row("Engine", if (NativeLib.variant == "i8mm") "Matrix-accelerated (i8mm)" else "Standard (dot-product)"),
-            row("Tested", if (prefs.benchAt > 0) java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(prefs.benchAt)) else "–"),
+            row("Engine", if (NativeLib.variant == "i8mm") "Matrix (i8mm, experimental)" else "Standard (dot-product)"),
+            row("Tested", if (prefs.benchAt > 0) java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(prefs.benchAt)) +
+                (if (prefs.benchCharging) " · charging" else " · on battery") else "–"),
         ))
         root.addView(heading("Jobs this phone can take"))
         val can = if (m1) listOf("Live chat replies" to "Customers waiting on an answer. Paid the most.", "Batch chat" to "Large jobs that can wait; run while you sleep.")
@@ -694,6 +698,13 @@ class MainActivity : Activity() {
             charging, locked,
             text("By default the phone works on battery down to 40% (20% while charging), on Wi-Fi, also while you use it. Turn these on to work only while charging or only while locked.", 12f, color = muted),
             text(limText, 13f), button("Auto-accept limits…", primary = false) { editLimits() }))
+        if (NativeLib.hasI8mm()) {
+            val matrix = Switch(this).apply { text = "Experimental: matrix engine (i8mm)"; setTextColor(fg); isChecked = prefs.matrixEngine
+                setOnCheckedChangeListener { _, on -> prefs.matrixEngine = on } }
+            root.addView(heading("Engine"))
+            root.addView(card(matrix, text("Reads long prompts faster on this chip but may generate answers more slowly. Takes effect after you close and reopen the app; then run the benchmark again to compare. Now running: " +
+                (if (NativeLib.variant == "i8mm") "matrix" else "standard") + ".", 12f, color = muted)))
+        }
         root.addView(heading("Model"))
         root.addView(card(row("Model", prefs.modelId), row("Speed", "%.1f tokens/s".format(prefs.tps)),
             button("Change model", primary = false) { stopNode(); prefs.enabled = false; prefs.modelPath = ""; prefs.klass = ""; setupStatus = ""; render() }))

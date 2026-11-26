@@ -41,6 +41,7 @@ class NodeService : Service() {
     override fun onCreate() {
         super.onCreate()
         prefs = Prefs(this)
+        NativeLib.wantMatrix = prefs.matrixEngine
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel("node", "Infera node", NotificationManager.IMPORTANCE_LOW))
         nm.createNotificationChannel(NotificationChannel("offers", "Job offers", NotificationManager.IMPORTANCE_HIGH))
