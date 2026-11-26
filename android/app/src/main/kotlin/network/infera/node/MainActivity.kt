@@ -284,17 +284,9 @@ class MainActivity : Activity() {
             val u = url.text.toString().trim(); val mid = id.text.toString().trim()
             runSetup { say -> setupModel(u, mid, pb, say = say) }
         }).apply { visibility = View.GONE }
-        val stored = File(filesDir, "models").listFiles()?.filter { it.isFile } ?: emptyList()
-        if (stored.isNotEmpty() && !setupBusy) {
-            val mb = stored.sumOf { it.length() } / 1_000_000
-            root.addView(button("Remove downloaded models (%d MB)".format(mb), primary = false) {
-                if (setupBusy) return@button
-                NodeService.engine?.close(); NodeService.engine = null
-                stored.forEach { it.delete() }
-                prefs.modelPath = ""; prefs.klass = ""
-                setupStatus = "Removed %d MB of models.".format(mb)
-                render()
-            })
+        val mb = storedModels().sumOf { it.length() } / 1_000_000
+        if (mb > 0 && !setupBusy) {
+            root.addView(button("Remove downloaded models (%d MB)".format(mb), primary = false) { removeModels() })
         }
         root.addView(button("Advanced: use my own model file", primary = false) { adv.visibility = View.VISIBLE })
         root.addView(adv)
@@ -664,6 +656,41 @@ class MainActivity : Activity() {
         }
     }
 
+    /** Chat and speech model files (including unfinished downloads). */
+    private fun storedModels(): List<File> = listOf("models", "speech").flatMap { d ->
+        File(filesDir, d).listFiles()?.filter { it.isFile } ?: emptyList()
+    }
+
+    /** Stops the node, waits until it has let go of the models, then deletes them all. */
+    private fun removeModels() {
+        if (setupBusy) return
+        setupBusy = true
+        setupStatus = "Stopping Infera and removing models…"
+        render()
+        prefs.enabled = false
+        stopNode()
+        val app = applicationContext
+        Thread {
+            for (i in 0 until 100) { if (NodeService.node == null) break; Thread.sleep(100) } // up to 10 s
+            if (NodeService.node != null) { // a job is still running: never pull the model from under it
+                setupBusy = false
+                setupStatus = "A job is still running. Infera stops after it finishes; tap Remove again then."
+                ui.post { current?.render() }
+                return@Thread
+            }
+            runCatching { NodeService.engine?.close() }; NodeService.engine = null
+            runCatching { NodeService.speech?.close() }; NodeService.speech = null
+            val files = storedModels()
+            val freed = files.sumOf { it.length() } / 1_000_000
+            val failed = files.count { !it.delete() }
+            prefs.modelPath = ""; prefs.klass = ""; prefs.speechPath = ""; prefs.speechId = ""
+            setupBusy = false
+            setupStatus = if (failed == 0) "Removed all models and freed %d MB.".format(freed)
+                else "Freed some space, but $failed file(s) couldn't be deleted. Close the app and try again."
+            ui.post { current?.render() }
+        }.start()
+    }
+
     private fun stopNode() {
         startService(android.content.Intent(this, NodeService::class.java).setAction(NodeService.ACTION_STOP))
     }
@@ -707,7 +734,13 @@ class MainActivity : Activity() {
         }
         root.addView(heading("Model"))
         root.addView(card(row("Model", prefs.modelId), row("Speed", "%.1f tokens/s".format(prefs.tps)),
-            button("Change model", primary = false) { stopNode(); prefs.enabled = false; prefs.modelPath = ""; prefs.klass = ""; setupStatus = ""; render() }))
+            button("Change model", primary = false) { stopNode(); prefs.enabled = false; prefs.modelPath = ""; prefs.klass = ""; setupStatus = ""; render() },
+            button("Remove downloaded models (%d MB)".format(storedModels().sumOf { it.length() } / 1_000_000), primary = false) {
+                android.app.AlertDialog.Builder(this).setTitle("Remove all models?")
+                    .setMessage("This stops Infera and deletes the downloaded chat and speech models. You'll pick and download a model again to keep earning.")
+                    .setPositiveButton("Remove") { _, _ -> removeModels() }.setNegativeButton("Cancel", null).show()
+            },
+            text(setupStatus, 12f, color = muted)))
         root.addView(heading("Account"))
         root.addView(card(row("Server", prefs.server.removePrefix("https://")), row("Device", prefs.deviceId),
             if (running && n?.status?.runningJob == null) button("Stop the Infera service", primary = false) {
