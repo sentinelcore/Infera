@@ -663,8 +663,9 @@ class MainActivity : Activity() {
 
     /** Stops the node, waits until it has let go of the models, then deletes them all. */
     private fun removeModels() {
-        if (setupBusy) return
+        if (setupBusy) { android.widget.Toast.makeText(this, "Already removing models…", android.widget.Toast.LENGTH_SHORT).show(); return }
         setupBusy = true
+        android.widget.Toast.makeText(this, "Removing models… this takes a few seconds", android.widget.Toast.LENGTH_LONG).show()
         setupStatus = "Stopping Infera and removing models…"
         render()
         prefs.enabled = false
@@ -675,7 +676,7 @@ class MainActivity : Activity() {
             if (NodeService.node != null) { // a job is still running: never pull the model from under it
                 setupBusy = false
                 setupStatus = "A job is still running. Infera stops after it finishes; tap Remove again then."
-                ui.post { current?.render() }
+                ui.post { android.widget.Toast.makeText(app, setupStatus, android.widget.Toast.LENGTH_LONG).show(); current?.render() }
                 return@Thread
             }
             runCatching { NodeService.engine?.close() }; NodeService.engine = null
@@ -687,7 +688,10 @@ class MainActivity : Activity() {
             setupBusy = false
             setupStatus = if (failed == 0) "Removed all models and freed %d MB.".format(freed)
                 else "Freed some space, but $failed file(s) couldn't be deleted. Close the app and try again."
-            ui.post { current?.render() }
+            ui.post {
+                android.widget.Toast.makeText(app, setupStatus, android.widget.Toast.LENGTH_LONG).show()
+                current?.render()
+            }
         }.start()
     }
 

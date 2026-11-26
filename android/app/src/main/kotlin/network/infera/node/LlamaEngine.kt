@@ -3,8 +3,9 @@ package network.infera.node
 /** On-device engine: llama.cpp through JNI (src/main/cpp). Loads GGUF models, the same files desktops use. */
 class LlamaEngine(path: String, override val modelId: String, threads: Int = bestThreads(),
                   override val parallel: Int = bestParallel()) : Engine {
-    // Each request gets a 4096-token window (2048 if memory is short).
-    private var handle: Long = nativeLoad(path, 4096, threads, parallel)
+    // Each request gets its own window: 4096 tokens alone, 2048 when several run at once
+    // (measured: 4096 x 4 cut 4-at-once speed from 30.5 to 24.5 tok/s on a Snapdragon 8 Elite).
+    private var handle: Long = nativeLoad(path, if (parallel > 1) 2048 else 4096, threads, parallel)
 
     fun interface TokenSink { fun onText(utf8: ByteArray): Boolean }
 
