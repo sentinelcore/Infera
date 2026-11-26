@@ -27,6 +27,8 @@ pub enum Event {
     Delta(String),
     /// Reasoning ("thinking") text from models that stream it separately (Qwen3, DeepSeek-R1 …).
     Reasoning(String),
+    /// One tool call, as JSON {"id","type","function":{"name","arguments"}} (coding agents).
+    ToolCall(String),
     Done { tokens_in: u32, tokens_out: u32 },
 }
 
@@ -121,6 +123,8 @@ impl Engine {
         let mut stream = resp.bytes_stream();
         let mut buf = String::new();
         let (mut tin, mut tout, mut pieces) = (0u32, 0u32, 0u32);
+        // Tool calls can arrive in pieces (name first, arguments streamed): gather by index.
+        let mut calls: std::collections::BTreeMap<u64, serde_json::Value> = Default::default();
         while let Some(chunk) = stream.next().await {
             buf.push_str(&String::from_utf8_lossy(&chunk?));
             while let Some(i) = buf.find('\n') {
@@ -137,6 +141,21 @@ impl Engine {
                     tout = u["completion_tokens"].as_u64().unwrap_or(0) as u32;
                 }
                 let delta = &v["choices"][0]["delta"];
+                for (i, tc) in delta["tool_calls"].as_array().into_iter().flatten().enumerate() {
+                    let idx = tc["index"].as_u64().unwrap_or(i as u64);
+                    let c = calls.entry(idx).or_insert_with(|| serde_json::json!({"id": "", "type": "function", "function": {"name": "", "arguments": ""}}));
+                    if let Some(id) = tc["id"].as_str().filter(|s| !s.is_empty()) {
+                        c["id"] = id.into();
+                    }
+                    if let Some(n) = tc["function"]["name"].as_str() {
+                        let name = format!("{}{n}", c["function"]["name"].as_str().unwrap_or(""));
+                        c["function"]["name"] = name.into();
+                    }
+                    let args = &tc["function"]["arguments"];
+                    let piece = match args.as_str() { Some(s) => s.to_string(), None if !args.is_null() => args.to_string(), None => String::new() };
+                    let joined = format!("{}{piece}", c["function"]["arguments"].as_str().unwrap_or(""));
+                    c["function"]["arguments"] = joined.into();
+                }
                 let reasoning = delta["reasoning_content"].as_str().or_else(|| delta["reasoning"].as_str()).unwrap_or("");
                 if !reasoning.is_empty() {
                     pieces += 1;
@@ -153,6 +172,12 @@ impl Engine {
                         }
                     }
                 }
+            }
+        }
+        for (_, c) in calls {
+            pieces += 1;
+            if tx.send(Event::ToolCall(c.to_string())).await.is_err() {
+                return Ok(());
             }
         }
         if tout == 0 {
@@ -285,7 +310,7 @@ pub async fn benchmark(engine: &Engine, cfg: &EngineConfig) -> Result<BenchResul
     let collect = async {
         while let Some(ev) = rx.recv().await {
             match ev {
-                Event::Delta(_) | Event::Reasoning(_) => {
+                Event::Delta(_) | Event::Reasoning(_) | Event::ToolCall(_) => {
                     if first.is_none() {
                         first = Some(Instant::now());
                     }

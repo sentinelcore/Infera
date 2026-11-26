@@ -31,6 +31,7 @@ type Msg struct {
 	Mode   string  `json:"mode,omitempty"` // auto | ask
 	TPS    float64 `json:"tps,omitempty"`
 	Slots  int     `json:"slots,omitempty"` // hello: jobs the device can run at once (batching)
+	Tools  bool    `json:"tools,omitempty"` // hello: the engine supports OpenAI tool calling
 
 	// jobs
 	JobID      string  `json:"job_id,omitempty"`
@@ -47,6 +48,7 @@ type Msg struct {
 	CT         string  `json:"c,omitempty"`
 	Seq        int     `json:"seq,omitempty"`
 	R          bool    `json:"r,omitempty"` // tok: reasoning text rather than answer text
+	K          string  `json:"k,omitempty"` // tok: "tool" = one tool call (JSON) rather than text
 	TokensIn   int     `json:"tokens_in,omitempty"`
 	TokensOut  int     `json:"tokens_out,omitempty"`
 	Receipt    string  `json:"receipt,omitempty"`
@@ -70,6 +72,7 @@ type Node struct {
 	Online   bool
 	TPS      float64
 	Slots    int                    // jobs at once (1 unless the device batches)
+	Tools    bool                   // engine supports tool calling (coding agents)
 	Reason   string                 // why the device is paused, as it reported it
 	missedAt time.Time              // last "job you missed" notice sent
 	quitting bool                   // owner asked to quit (bye: owner_quit) – a running job stopped now is an owner action
@@ -356,6 +359,7 @@ func (h *Hub) handle(n *Node, m Msg) {
 		}
 		n.TPS = m.TPS
 		n.Slots = m.Slots
+		n.Tools = m.Tools
 		if n.Slots < 1 || n.Slots > 8 {
 			n.Slots = 1
 		}

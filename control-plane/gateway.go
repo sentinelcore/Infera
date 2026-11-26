@@ -11,6 +11,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -69,9 +70,16 @@ type chatRequest struct {
 	expect      string            // canary: answer the output must contain
 	jobType     string            // "" (chat) or "embeddings"
 	Temperature *float64          `json:"temperature"`
+	Tools       json.RawMessage   `json:"tools"` // OpenAI tool definitions (coding agents)
 	rerun       bool              // this job is a verification re-run
 	queued      bool              // came through the batch queue
 	race        *hedgeRace        // set when this run is one side of a hedged request
+}
+
+// wantsTools: the request defines tools the model may call.
+func (r chatRequest) wantsTools() bool {
+	t := strings.TrimSpace(string(r.Tools))
+	return t != "" && t != "null" && t != "[]"
 }
 
 func apiError(w http.ResponseWriter, code int, msg string) {
@@ -191,6 +199,9 @@ func (g *Gateway) serve(w http.ResponseWriter, r *http.Request, acct *Account, r
 	tried := 0
 	go g.hub.NotifyMissed(req.Model, float64(estCharge)*g.cfg.OwnerShare/microUSD)
 	cands := g.hub.CandidatesFor(req.Model, req.Privacy, req.InferaBatch, req.typeName())
+	if req.wantsTools() { // only devices whose engine does tool calling (desktops on Ollama)
+		cands = slices.DeleteFunc(cands, func(n *Node) bool { n.mu.Lock(); defer n.mu.Unlock(); return !n.Tools })
+	}
 	if g.hedgeable(req, len(cands)) {
 		res := g.runHedged(r, cands[0], cands[1], acct, req, raw, estIn, sw)
 		if res == runDone || res == runClientGone {
@@ -369,7 +380,9 @@ wait:
 				gotFirst = true
 				pieces++
 				out.Write(plain)
-				if m.R {
+				if m.K == "tool" {
+					sw.toolCall(plain)
+				} else if m.R {
 					sw.reasoning(string(plain))
 				} else {
 					sw.delta(string(plain))
@@ -584,8 +597,9 @@ type streamWriter struct {
 	started bool
 	buf     strings.Builder
 	rbuf    strings.Builder
-	embed   bool // embeddings response instead of chat
-	text    bool // /v1/completions (text_completion) instead of chat
+	tools   []map[string]any // tool calls the model made
+	embed   bool             // embeddings response instead of chat
+	text    bool             // /v1/completions (text_completion) instead of chat
 	// transcribe: "" for chat, else the response_format of a transcription
 	transcribe string
 }
@@ -602,6 +616,7 @@ func (s *streamWriter) reset(jobID string) {
 	s.started = false
 	s.buf.Reset()
 	s.rbuf.Reset()
+	s.tools = nil
 }
 
 func (s *streamWriter) begin() {
@@ -649,6 +664,47 @@ func (s *streamWriter) reasoning(text string) {
 	s.rbuf.WriteString(text)
 }
 
+// toolCall adds one tool call the model made ({"id","type","function":{"name","arguments"}}).
+func (s *streamWriter) toolCall(raw []byte) {
+	var call map[string]any
+	if json.Unmarshal(raw, &call) != nil {
+		return
+	}
+	if id, _ := call["id"].(string); id == "" {
+		call["id"] = "call_" + randomHex(8)
+	}
+	call["type"] = "function"
+	if fn, ok := call["function"].(map[string]any); ok {
+		if a, ok := fn["arguments"].(map[string]any); ok { // some engines send arguments as an object
+			b, _ := json.Marshal(a)
+			fn["arguments"] = string(b)
+		}
+	}
+	idx := len(s.tools)
+	s.tools = append(s.tools, call)
+	if s.stream {
+		first := !s.started
+		s.begin()
+		if first {
+			s.chunk(map[string]any{"role": "assistant", "content": ""}, nil)
+		}
+		c := map[string]any{"index": idx}
+		for k, v := range call {
+			c[k] = v
+		}
+		s.chunk(map[string]any{"tool_calls": []any{c}}, nil)
+		return
+	}
+	s.started = true
+}
+
+func (s *streamWriter) finishReason() string {
+	if len(s.tools) > 0 {
+		return "tool_calls"
+	}
+	return "stop"
+}
+
 func (s *streamWriter) delta(text string) {
 	if s.stream {
 		first := !s.started
@@ -682,7 +738,7 @@ func (s *streamWriter) finish(tin, tout int) {
 	usage := map[string]int{"prompt_tokens": tin, "completion_tokens": tout, "total_tokens": tin + tout}
 	if s.stream {
 		s.begin()
-		s.chunk(map[string]any{}, "stop")
+		s.chunk(map[string]any{}, s.finishReason())
 		fmt.Fprint(s.w, "data: [DONE]\n\n")
 		if f, ok := s.w.(http.Flusher); ok {
 			f.Flush()
@@ -697,14 +753,20 @@ func (s *streamWriter) finish(tin, tout int) {
 		return
 	}
 	json.NewEncoder(s.w).Encode(map[string]any{"id": s.jobID, "object": "chat.completion", "created": now(), "model": s.model,
-		"choices": []any{map[string]any{"index": 0, "message": s.message(), "finish_reason": "stop"}},
+		"choices": []any{map[string]any{"index": 0, "message": s.message(), "finish_reason": s.finishReason()}},
 		"usage":   usage})
 }
 
-func (s *streamWriter) message() map[string]string {
-	m := map[string]string{"role": "assistant", "content": s.buf.String()}
+func (s *streamWriter) message() map[string]any {
+	m := map[string]any{"role": "assistant", "content": s.buf.String()}
 	if s.rbuf.Len() > 0 {
 		m["reasoning_content"] = s.rbuf.String()
+	}
+	if len(s.tools) > 0 {
+		m["tool_calls"] = s.tools
+		if s.buf.Len() == 0 {
+			m["content"] = nil
+		}
 	}
 	return m
 }

@@ -113,6 +113,19 @@ curl -s "localhost:$PORT/v1/completions" -H "Authorization: Bearer $CUST" \
   | python3 -c "import sys,json;d=json.load(sys.stdin);t=d['choices'][0]['text'];assert d['object']=='text_completion' and t.strip(),d;print('   Completion:', repr(t.strip()))" || { echo "TEST FAILED (completions)"; exit 1; }
 CSTREAM=$(curl -sN "localhost:$PORT/v1/completions" -H "Authorization: Bearer $CUST" -d "{\"model\":\"$MODEL\",\"prompt\":\"Hi\",\"stream\":true,\"max_tokens\":8}")
 echo "$CSTREAM" | grep -q '"object":"text_completion"' || { echo "TEST FAILED (streamed completions): $CSTREAM"; exit 1; }
+echo "   Tool calling check (coding agents) …"
+TOOLS='"tools":[{"type":"function","function":{"name":"read_file","description":"Read a file from the project","parameters":{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}}}]'
+TBODY="{\"model\":\"$MODEL\",\"max_tokens\":200,$TOOLS,\"messages\":[{\"role\":\"user\",\"content\":\"Use the read_file tool to open main.py.\"}]}"
+STRICT=$([ -n "${TAG:-}" ] && echo 0 || echo 1)
+curl -s "localhost:$PORT/v1/chat/completions" -H "Authorization: Bearer $CUST" -d "$TBODY" | python3 -c "
+import sys,json;d=json.load(sys.stdin);c=d['choices'][0];m=c['message'];tc=m.get('tool_calls') or []
+if tc:
+    f=tc[0]['function'];json.loads(f['arguments']);assert c['finish_reason']=='tool_calls' and tc[0]['id'],d;print('   Tool call:', f['name'], f['arguments'])
+else:
+    assert $STRICT==0 and m.get('content'),d;print('   (model answered in text instead of calling the tool)')
+" || { echo "TEST FAILED (tool calling)"; exit 1; }
+TSTREAM=$(curl -sN "localhost:$PORT/v1/chat/completions" -H "Authorization: Bearer $CUST" -d "${TBODY%\}},\"stream\":true}")
+[ "$STRICT" = 0 ] || echo "$TSTREAM" | grep -q '"tool_calls"' || { echo "TEST FAILED (streamed tool calls): $TSTREAM"; exit 1; }
 echo "   Batch queue check …"
 BODY="{\"requests\":[{\"model\":\"$MODEL\",\"max_tokens\":30,\"messages\":[{\"role\":\"user\",\"content\":\"Name a colour.\"}]},{\"model\":\"$MODEL\",\"max_tokens\":30,\"messages\":[{\"role\":\"user\",\"content\":\"Name a fruit.\"}]}"
 [ -n "${EMBED:-}" ] && BODY="$BODY,{\"model\":\"$EMBED\",\"input\":\"batched text\"}"

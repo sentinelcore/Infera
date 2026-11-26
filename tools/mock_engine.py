@@ -52,7 +52,17 @@ class H(BaseHTTPRequestHandler):
             body = json.dumps({"object": "list", "data": data, "usage": {"prompt_tokens": sum(len(str(t).split()) for t in inputs), "total_tokens": 0}}).encode()
             self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(body)
             return
-        prompt = " ".join(str(m.get("content", "")) for m in req.get("messages", []))
+        msgs = req.get("messages", [])
+        if req.get("tools") and not any(m.get("role") == "tool" for m in msgs):  # imitate a tool call, streamed in two pieces
+            name = req["tools"][0]["function"]["name"]
+            self.send_response(200); self.send_header("Content-Type", "text/event-stream"); self.end_headers()
+            for tc in ({"index": 0, "id": "call_mock1", "type": "function", "function": {"name": name, "arguments": '{"path": '}},
+                       {"index": 0, "function": {"arguments": '"main.py"}'}}):
+                self.wfile.write(f"data: {json.dumps({'choices': [{'index': 0, 'delta': {'tool_calls': [tc]}}]})}\n\n".encode()); self.wfile.flush()
+            u = {"choices": [], "usage": {"prompt_tokens": 30, "completion_tokens": 9}}
+            self.wfile.write(f"data: {json.dumps(u)}\n\ndata: [DONE]\n\n".encode())
+            return
+        prompt = " ".join(str(m.get("content", "")) for m in msgs)
         words = ANSWER
         for k, v in KNOWN.items():
             if k in prompt:

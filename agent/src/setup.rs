@@ -114,6 +114,19 @@ pub async fn run(code: String, server: String, no_service: bool, want: String) -
     c.engine.gguf.clear();
     c.engine.model_id = chat.id.clone();
     c.engine.engine_model = chat.ollama_tag.clone();
+    // Coding agents (Cline, Aider …) need long context: on big machines, serve coder models
+    // with a 32K window (fewer jobs at once, since each needs its own 32K cache).
+    if chat.id.contains("coder") && ((apple && ram >= 32.0) || vram >= 16.0) {
+        let long = format!("{}-32k", chat.ollama_tag.replace(':', "-"));
+        let ok = http.post(format!("{OLLAMA}/api/create"))
+            .json(&serde_json::json!({"model": long, "from": chat.ollama_tag, "parameters": {"num_ctx": 32768}, "stream": false}))
+            .send().await.map(|r| r.status().is_success()).unwrap_or(false);
+        if ok {
+            c.engine.engine_model = long;
+            c.engine.parallel = 2;
+            println!("    Long context for coding agents: 32K tokens");
+        }
+    }
     c.engine.params_b = chat.params_b;
     c.engine.embed_model = embed.as_ref().map(|e| e.id.clone()).unwrap_or_default();
     c.engine.embed_engine_model = embed.as_ref().map(|e| e.ollama_tag.clone()).unwrap_or_default();

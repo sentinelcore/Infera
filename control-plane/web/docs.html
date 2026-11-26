@@ -50,7 +50,7 @@ th{color:var(--muted);font-size:.8rem;text-transform:uppercase;letter-spacing:.0
 <div class="layout">
 <nav class="toc" aria-label="Contents">
   <b>Start</b><a href="#quickstart">Quickstart</a><a href="#auth">Authentication</a><a href="#models">Models &amp; prices</a>
-  <b>Endpoints</b><a href="#chat">Chat completions</a><a href="#completions">Completions (code)</a><a href="#embeddings">Embeddings</a><a href="#transcriptions">Transcriptions</a><a href="#batch">Batch API</a><a href="#list-models">List models</a>
+  <b>Endpoints</b><a href="#chat">Chat completions</a><a href="#completions">Completions (code)</a><a href="#tools">Tool calling</a><a href="#embeddings">Embeddings</a><a href="#transcriptions">Transcriptions</a><a href="#batch">Batch API</a><a href="#list-models">List models</a>
   <b>Guides</b><a href="#sdks">SDKs &amp; tools</a><a href="#routing">How requests are served</a><a href="#errors">Errors</a><a href="#limits">Rate limits</a><a href="#privacy">Privacy</a>
 </nav>
 <main>
@@ -137,7 +137,16 @@ model_name = "qwen2.5-coder-1.5b"
 api_endpoint = "https://infera.valanor.network/v1"
 api_key = "ik_cust_…"
 prompt_template = "&lt;|fim_prefix|&gt;{prefix}&lt;|fim_suffix|&gt;{suffix}&lt;|fim_middle|&gt;"</code></pre>
-<p class="note">Coding agents that need tool calling and long context (Cline, Aider…) aren't supported yet; use the coder models for chat and autocomplete.</p>
+
+<h2 id="tools">Tool calling (coding agents)</h2>
+<p>Chat completions accept OpenAI <code>tools</code>. When the model calls a tool, the response has <code>message.tool_calls</code> and <code>finish_reason: "tool_calls"</code> (streamed as <code>delta.tool_calls</code>). Send the result back as a <code>role: "tool"</code> message with the matching <code>tool_call_id</code>. Requests with tools go to computers (not phones); coder models on large machines serve a 32K-token context.</p>
+<pre><code>curl https://infera.valanor.network/v1/chat/completions \
+  -H "Authorization: Bearer ik_cust_…" -H "Content-Type: application/json" \
+  -d '{"model": "qwen2.5-coder-7b",
+       "messages": [{"role": "user", "content": "Open main.py"}],
+       "tools": [{"type": "function", "function": {"name": "read_file",
+         "parameters": {"type": "object", "properties": {"path": {"type": "string"}}}}}]}'</code></pre>
+<p>Cline / Roo Code: provider <b>OpenAI Compatible</b>, base URL <code>https://infera.valanor.network/v1</code>, your API key, model <code>qwen2.5-coder-14b</code>. Aider: <code>aider --openai-api-base https://infera.valanor.network/v1 --openai-api-key ik_cust_… --model openai/qwen2.5-coder-14b</code>.</p>
 
 <h2 id="embeddings">Embeddings</h2>
 <p><span class="method">POST</span><code>/v1/embeddings</code>, same as OpenAI. <code>input</code> is a string or an array of strings.</p>

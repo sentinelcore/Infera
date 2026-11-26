@@ -302,6 +302,7 @@ async fn session(ctx: Arc<Ctx>) -> Result<()> {
         "platform": format!("{} {}", std::env::consts::OS, std::env::consts::ARCH),
         "bench": bench, "class": bench.class, "privacy": "sandboxed", "models": served_models(&ctx.cfg),
         "mode": mode, "tps": bench.tokens_per_s, "slots": ctx.cfg.engine.slots(),
+        "tools": ctx.cfg.engine.llama_server.is_empty(), // Ollama / LM Studio do tool calling
     }));
     push_state(&ctx.state);
 
@@ -527,6 +528,13 @@ async fn run_job(ctx: &Arc<Ctx>, job_id: &str, model: &str, sandbox: SandboxKey,
                     seq += 1;
                     let (nonce, ct) = chan.seal_up(t.as_bytes());
                     send(&ctx.state, json!({"t": "tok", "job_id": job_id, "seq": seq, "n": nonce, "c": ct, "r": true}));
+                }
+                Some(Event::ToolCall(t)) => {
+                    // A tool call (coding agents): sealed and hashed like text, flagged "k":"tool".
+                    out.push_str(&t);
+                    seq += 1;
+                    let (nonce, ct) = chan.seal_up(t.as_bytes());
+                    send(&ctx.state, json!({"t": "tok", "job_id": job_id, "seq": seq, "n": nonce, "c": ct, "k": "tool"}));
                 }
                 Some(Event::Done { tokens_in, tokens_out }) => {
                     let hash = hex::encode(Sha256::digest(out.as_bytes()));
