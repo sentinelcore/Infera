@@ -115,7 +115,7 @@ New jobs start only after 5 minutes without keyboard or mouse use (change `idle_
 1. Download the APK: GitHub → Actions → **android** workflow → latest run → artifact **infera-android-debug** (unzip it). Install it on the phone (allow installs from your browser or file manager).
 2. Open Infera, enter the server address and a pairing code from the dashboard.
 3. Paste a direct link to a small GGUF model (1–3B, e.g. a Qwen3-1.7B or Qwen3.5-2B Q4_K_M file), the shared model name (e.g. `qwen3-1.7b`) and its size, then tap **Download and benchmark**. Phones reaching 8+ tokens/s with 8 GB RAM are class M1; 3+ tokens/s is M2.
-4. Tap **Start earning**. Jobs run only while charging, on Wi-Fi, above 50% battery and not warm; with "Ask before every job" on, each offer arrives as a notification with Accept and Decline.
+4. Tap **Start earning**. Jobs run on Wi-Fi with at least 40% battery (20% while charging), including while you use the phone, and pause when it gets warm; Settings can limit them to charging or a locked screen; with "Ask before every job" on, each offer arrives as a notification with Accept and Decline.
 
 ## 3. Developers: call the API
 

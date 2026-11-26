@@ -61,6 +61,7 @@ class NodeService : Service() {
                 "android ${Build.VERSION.RELEASE} ${Build.SUPPORTED_ABIS.firstOrNull() ?: ""} ${Build.MODEL}", { rules.check() }, ::onStatus)
             nd.setMode(prefs.mode)
             nd.limits = prefs.limits
+            nd.onMissed = { reason, pay -> missedJob(reason, pay) }
             if (prefs.speechPath.isNotEmpty() && java.io.File(prefs.speechPath).exists()) {
                 runCatching { speech ?: WhisperEngine(prefs.speechPath, prefs.speechId, cacheDir).also { speech = it } }
                     .onSuccess { nd.speech = it }
@@ -70,6 +71,25 @@ class NodeService : Service() {
         } catch (e: Throwable) {
             update(ongoing("Couldn't start: ${e.message}"))
         }
+    }
+
+    /** A job was available but this phone couldn't take it: tell the owner what to fix. */
+    private fun missedJob(reason: String, pay: Double) {
+        val fix = when {
+            reason.startsWith("battery") -> "your battery is below 40%. Plug in to take jobs (20% is enough while charging)."
+            reason.contains("Wi-Fi") -> "you're not on Wi-Fi. Connect to Wi-Fi to take jobs."
+            reason.contains("charging") -> "it isn't charging (your setting). Plug in to take jobs."
+            reason.contains("warm") -> "the phone is warm. Jobs resume when it cools down."
+            else -> "$reason."
+        }
+        val n = Notification.Builder(this, "offers")
+            .setSmallIcon(android.R.drawable.stat_notify_more)
+            .setContentTitle("New job available" + if (pay > 0) " (~$%.4f)".format(pay) else "")
+            .setContentText("You couldn't take it: $fix")
+            .setStyle(Notification.BigTextStyle().bigText("You couldn't take it: $fix"))
+            .setAutoCancel(true)
+            .build()
+        getSystemService(NotificationManager::class.java).notify(7, n)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

@@ -17,7 +17,10 @@ class Prefs(ctx: Context) {
     var klass: String get() = p.getString("class", "") ?: ""; set(v) = p.edit().putString("class", v).apply()
     var mode: String get() = p.getString("mode", "auto") ?: "auto"; set(v) = p.edit().putString("mode", v).apply()
     var enabled: Boolean get() = p.getBoolean("enabled", false); set(v) = p.edit().putBoolean("enabled", v).apply()
-    var workWithScreenOn: Boolean get() = p.getBoolean("screen_on_ok", false); set(v) = p.edit().putBoolean("screen_on_ok", v).apply()
+    /** Owner's choice: take jobs only while charging (default: battery is fine above 40%). */
+    var onlyCharging: Boolean get() = p.getBoolean("only_charging", false); set(v) = p.edit().putBoolean("only_charging", v).apply()
+    /** Owner's choice: take jobs only while the phone is locked (default: also while in use). */
+    var onlyLocked: Boolean get() = p.getBoolean("only_locked", false); set(v) = p.edit().putBoolean("only_locked", v).apply()
 
     var minPayUsd: Float get() = p.getFloat("min_pay", 0f); set(v) = p.edit().putFloat("min_pay", v).apply()
     var minPerHourUsd: Float get() = p.getFloat("min_per_hour", 0f); set(v) = p.edit().putFloat("min_per_hour", v).apply()

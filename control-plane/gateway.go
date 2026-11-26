@@ -182,6 +182,7 @@ func (g *Gateway) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 	sw := newStreamWriter(w, req.Stream, jobID, req.Model)
 
 	tried := 0
+	go g.hub.NotifyMissed(req.Model, float64(estCharge)*g.cfg.OwnerShare/microUSD)
 	cands := g.hub.CandidatesFor(req.Model, req.Privacy, req.InferaBatch, req.typeName())
 	if g.hedgeable(req, len(cands)) {
 		res := g.runHedged(r, cands[0], cands[1], acct, req, raw, estIn, sw)

@@ -70,6 +70,8 @@ type Node struct {
 	Online   bool
 	TPS      float64
 	Slots    int                    // jobs at once (1 unless the device batches)
+	Reason   string                 // why the device is paused, as it reported it
+	missedAt time.Time              // last "job you missed" notice sent
 	quitting bool                   // owner asked to quit (bye: owner_quit) – a running job stopped now is an owner action
 	declines map[string]*declineLog // job type -> recent owner declines (G9: learn what an owner doesn't want)
 
@@ -363,6 +365,7 @@ func (h *Hub) handle(n *Node, m Msg) {
 		n.mu.Lock()
 		if m.Status != "" {
 			n.Status = m.Status
+			n.Reason = m.Reason
 		}
 		if m.Online != nil {
 			n.Online = *m.Online
@@ -437,4 +440,27 @@ func (a *API) AdminNodes(w http.ResponseWriter, r *http.Request) {
 		out = append(out, v)
 	}
 	writeJSON(w, map[string]any{"nodes": out})
+}
+
+// NotifyMissed tells paused devices that serve this model about a job they couldn't take
+// because of something the owner can fix (battery, Wi-Fi, charging), at most every 30 min.
+func (h *Hub) NotifyMissed(model string, estPay float64) {
+	h.mu.Lock()
+	nodes := make([]*Node, 0, len(h.nodes))
+	for _, n := range h.nodes {
+		nodes = append(nodes, n)
+	}
+	h.mu.Unlock()
+	for _, n := range nodes {
+		n.mu.Lock()
+		fixable := strings.HasPrefix(n.Reason, "battery") || strings.Contains(n.Reason, "Wi-Fi") || strings.Contains(n.Reason, "charging")
+		send := n.Online && n.Status == "paused" && fixable && contains(n.Models, model) && time.Since(n.missedAt) > 30*time.Minute
+		if send {
+			n.missedAt = time.Now()
+		}
+		n.mu.Unlock()
+		if send {
+			n.Send(Msg{T: "missed", Model: model, EstPay: estPay})
+		}
+	}
 }

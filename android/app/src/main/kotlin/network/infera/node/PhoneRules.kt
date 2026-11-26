@@ -13,39 +13,43 @@ import android.os.PowerManager
 class PhoneRules(private val ctx: Context, private val prefs: Prefs) {
     data class Check(val label: String, val ok: Boolean, val detail: String)
 
-    /** Every condition for taking jobs, for the app's checklist. */
+    /**
+     * Every condition for taking jobs, for the app's checklist. By default phones work on
+     * battery (at least 40%, or 20% while charging) and while the screen is on; owners can
+     * require charging or a locked screen in Settings.
+     */
     fun checks(): List<Check> {
         val batt = ctx.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         val plugged = (batt?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0) != 0
         val level = batt?.let { it.getIntExtra(BatteryManager.EXTRA_LEVEL, 0) * 100 / it.getIntExtra(BatteryManager.EXTRA_SCALE, 100).coerceAtLeast(1) } ?: 0
+        val minLevel = if (plugged) 20 else 40
         val cm = ctx.getSystemService(ConnectivityManager::class.java)
         val caps = cm.getNetworkCapabilities(cm.activeNetwork)
         val wifi = caps != null && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
         val pm = ctx.getSystemService(PowerManager::class.java)
         val cool = coolEnough(pm)
-        val screenOk = !pm.isInteractive || prefs.workWithScreenOn
-        return listOf(
-            Check("Charging", plugged, if (plugged) "Plugged in" else "Plug in your charger"),
-            Check("Battery above 50%", level >= 50, "$level%"),
-            Check("On Wi-Fi", wifi, if (wifi) "Connected" else "Jobs never use mobile data"),
-            Check("Phone is cool", cool, if (cool) "Normal temperature" else "Resting until it cools down"),
-            Check("Screen off", screenOk, if (prefs.workWithScreenOn) "Charge Mode: works with the screen on" else if (screenOk) "Screen is off" else "Jobs start when you lock the phone"),
-        )
+        val list = mutableListOf<Check>()
+        if (prefs.onlyCharging) list += Check("Charging", plugged, if (plugged) "Plugged in" else "You chose: only while charging")
+        list += Check("Battery at least $minLevel%", level >= minLevel,
+            "$level%" + if (plugged) " · charging" else " · on battery (20% is enough while charging)")
+        list += Check("On Wi-Fi", wifi, if (wifi) "Connected" else "Jobs never use mobile data")
+        list += Check("Phone is cool", cool, if (cool) "Normal temperature" else "Resting until it cools down")
+        if (prefs.onlyLocked) {
+            val locked = !pm.isInteractive
+            list += Check("Screen off", locked, if (locked) "Screen is off" else "You chose: only while the phone is locked")
+        }
+        return list
     }
 
-    fun check(): String? {
-        val batt = ctx.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-        val plugged = (batt?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0) != 0
-        val level = batt?.let { it.getIntExtra(BatteryManager.EXTRA_LEVEL, 0) * 100 / it.getIntExtra(BatteryManager.EXTRA_SCALE, 100).coerceAtLeast(1) } ?: 0
-        if (!plugged) return "not charging"
-        if (level < 50) return "battery below 50%"
-        val cm = ctx.getSystemService(ConnectivityManager::class.java)
-        val caps = cm.getNetworkCapabilities(cm.activeNetwork)
-        if (caps == null || !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)) return "not on Wi-Fi"
-        val pm = ctx.getSystemService(PowerManager::class.java)
-        if (!coolEnough(pm)) return "phone is warm"
-        if (pm.isInteractive && !prefs.workWithScreenOn) return "screen is on"
-        return null
+    /** null when new jobs may start, otherwise the first reason they can't. */
+    fun check(): String? = checks().firstOrNull { !it.ok }?.let { c ->
+        when {
+            c.label == "Charging" -> "not charging"
+            c.label.startsWith("Battery") -> "battery low (${c.detail.substringBefore(' ')})"
+            c.label == "On Wi-Fi" -> "not on Wi-Fi"
+            c.label == "Phone is cool" -> "phone is warm"
+            else -> "screen is on"
+        }
     }
 
     /**

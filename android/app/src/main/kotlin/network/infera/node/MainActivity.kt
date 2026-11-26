@@ -214,7 +214,7 @@ class MainActivity : Activity() {
         val server = field("Server", prefs.server.ifEmpty { DEFAULT_SERVER })
         val code = field("6-digit code from the dashboard", number = true)
         val status = text("")
-        root.addView(text("Earn by letting your phone serve AI jobs while it charges."))
+        root.addView(text("Earn by letting your phone serve AI jobs in the background, on Wi-Fi."))
         root.addView(card(text("Pair this phone", 17f, true),
             text("Easiest: on this phone open the dashboard, tap Get pairing code, then Pair this phone. Or type the code here:", 13f, color = Color.GRAY),
             server, code, status, button("Pair") {
@@ -594,7 +594,7 @@ class MainActivity : Activity() {
         ))
         root.addView(heading("Jobs this phone can take"))
         val can = if (m1) listOf("Live chat replies" to "Customers waiting on an answer. Paid the most.", "Batch chat" to "Large jobs that can wait; run while you sleep.")
-                  else listOf("Batch chat" to "Jobs where nobody is waiting; run overnight on the charger.")
+                  else listOf("Batch chat" to "Jobs where nobody is waiting; they run whenever the phone is free.")
         val speechOn = prefs.speechPath.isNotEmpty() && File(prefs.speechPath).exists()
         val rows = can.map { checkRow(true, it.first, it.second) } +
             checkRow(speechOn, "Transcription (speech to text)", if (speechOn) "On: Whisper is ready. Pays per audio minute, the best earner per hour."
@@ -617,7 +617,7 @@ class MainActivity : Activity() {
         ))
         root.addView(heading("Improve your result"))
         root.addView(card(
-            text("• Keep it plugged in overnight on Wi-Fi: that's when most jobs run.\n• Don't stop accepted jobs: dependability raises your pay and gets you paid sooner.\n• Try a bigger model if this one is fast, or a smaller one if it's slow.", 14f),
+            text("• Stay on Wi-Fi and above 40% battery: that's when jobs run. Plugging in lets it work down to 20%.\n• Don't stop accepted jobs: dependability raises your pay and gets you paid sooner.\n• Try a bigger model if this one is fast, or a smaller one if it's slow.", 14f),
             button("Run the benchmark again", primary = false) { rebenchmark() },
             button("Change model", primary = false) { stopNode(); prefs.enabled = false; prefs.modelPath = ""; prefs.klass = ""; setupStatus = ""; render() },
         ))
@@ -679,8 +679,10 @@ class MainActivity : Activity() {
         val running = prefs.enabled && n != null
         val ask = Switch(this).apply { text = "Ask before every job"; setTextColor(fg); isChecked = prefs.mode == "ask"
             setOnCheckedChangeListener { _, on -> prefs.mode = if (on) "ask" else "auto"; n?.setMode(prefs.mode) } }
-        val screen = Switch(this).apply { text = "Charge Mode: also work with the screen on"; setTextColor(fg); isChecked = prefs.workWithScreenOn
-            setOnCheckedChangeListener { _, on -> prefs.workWithScreenOn = on } }
+        val charging = Switch(this).apply { text = "Only while charging"; setTextColor(fg); isChecked = prefs.onlyCharging
+            setOnCheckedChangeListener { _, on -> prefs.onlyCharging = on } }
+        val locked = Switch(this).apply { text = "Only while the phone is locked"; setTextColor(fg); isChecked = prefs.onlyLocked
+            setOnCheckedChangeListener { _, on -> prefs.onlyLocked = on } }
         val lim = prefs.limits
         val limText = if (lim == AutoLimits()) "Every job is accepted automatically." else listOfNotNull(
             if (lim.minPayUsd > 0) "min $%.4f a job".format(lim.minPayUsd) else null,
@@ -689,7 +691,8 @@ class MainActivity : Activity() {
         ).joinToString(" · ", "Auto-accept only: ") + ". Others come as offers."
         root.addView(heading("Jobs"))
         root.addView(card(ask, text("Off: jobs are accepted automatically. On: each job shows an offer with the pay; you accept or decline.", 12f, color = muted),
-            screen, text("By default jobs run only while the phone is locked, so it never slows you down.", 12f, color = muted),
+            charging, locked,
+            text("By default the phone works on battery down to 40% (20% while charging), on Wi-Fi, also while you use it. Turn these on to work only while charging or only while locked.", 12f, color = muted),
             text(limText, 13f), button("Auto-accept limits…", primary = false) { editLimits() }))
         root.addView(heading("Model"))
         root.addView(card(row("Model", prefs.modelId), row("Speed", "%.1f tokens/s".format(prefs.tps)),

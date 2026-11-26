@@ -161,6 +161,27 @@ class NodeTest {
         println("batching OK: 2 jobs in $took ms")
     }
 
+    @Test fun lowBatteryPhoneIsToldAboutMissedJobs() {
+        if (server == null) { println("INFERA_SERVER_BIN not set; skipping"); return }
+        val own = field(post("/api/signup", """{"email":"lb@p.dev","kind":"owner"}"""), "api_key")
+        val cust = field(post("/api/signup", """{"email":"lbc@p.dev","kind":"customer"}"""), "api_key")
+        val ident = Identity.generate()
+        val pairing = Api.pair(base, field(post("/api/pair-code", "{}", own), "code"), "low-phone", ident, "android 15 arm64")
+        var last = NodeStatus()
+        val missed = java.util.concurrent.CountDownLatch(1)
+        var why = ""
+        val node = Node(pairing, ident, FakeEngine(), Bench(15.0, 1.7, 8.0, "M1"), "android 15 arm64", { "battery low (35%)" }, { last = it })
+        node.onMissed = { r, _ -> why = r; missed.countDown() }
+        node.start()
+        repeat(50) { if (last.connected && last.status == "paused") return@repeat; Thread.sleep(100) }
+        Thread.sleep(2500)
+        val r = post("/v1/chat/completions", """{"model":"phone-test","max_tokens":5,"messages":[{"role":"user","content":"hi"}]}""", cust)
+        assertTrue(r.contains("503") || r.contains("no device"), r)
+        assertTrue(missed.await(5, java.util.concurrent.TimeUnit.SECONDS), "phone should be told it missed a job")
+        assertTrue(why.startsWith("battery"), why)
+        node.stop()
+    }
+
     @Test
     fun autoLimitsTurnOffersIntoCards() {
         val o = Offer("j", "chat", "m", estPayUsd = 0.002, estSeconds = 120.0, ttlSeconds = 30)

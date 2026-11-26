@@ -76,6 +76,7 @@ func (g *Gateway) Transcriptions(w http.ResponseWriter, r *http.Request) {
 	sw := newStreamWriter(w, false, jobID, model)
 	sw.transcribe = format
 	tried := 0
+	go g.hub.NotifyMissed(model, float64(g.jobCost(req, estSec, 0))*g.cfg.OwnerShare/microUSD)
 	for _, n := range g.hub.CandidatesFor(model, privacy, true, "transcription") {
 		if tried >= 5 {
 			break

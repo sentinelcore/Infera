@@ -101,6 +101,8 @@ class Node(
     @Volatile var limits = AutoLimits()
     /** Optional speech engine: when set, this phone also takes transcription jobs. */
     @Volatile var speech: SpeechEngine? = null
+    /** Called when a job was available but this phone couldn't take it (e.g. battery low): (reason, pay USD). */
+    @Volatile var onMissed: ((String, Double) -> Unit)? = null
     @Volatile private var decision: ((Boolean) -> Unit)? = null
     @Volatile private var drainThenOffline = false
     @Volatile private var sentState = ""
@@ -172,6 +174,7 @@ class Node(
         when (t) {
             "config" -> update { it.copy(hub = m) }
             "offer" -> jobs.execute { onOffer(m) }
+            "missed" -> onMissed?.invoke(status.pauseReason, m["est_pay_usd"]?.jsonPrimitive?.doubleOrNull ?: 0.0)
             "payload" -> payloads.remove(jobId)?.invoke(Triple(m.s("epk"), m.s("n"), m.s("c")))
             "cancel" -> { cancels[jobId]?.set(true); payloads.remove(jobId) }
             "offer_expired" -> if (status.offer?.jobId == jobId) { update { it.copy(offer = null) }; decision = null }
@@ -327,10 +330,10 @@ class Node(
 
     private fun pushState(force: Boolean = false) {
         val s = status
-        val key = "${s.status}|${s.online}|${s.mode}"
+        val key = "${s.status}|${s.online}|${s.mode}|${s.pauseReason}"
         if (!force && key == sentState) return
         sentState = key
-        send(buildJsonObject { put("t", "state"); put("status", s.status); put("online", s.online); put("mode", s.mode) })
+        send(buildJsonObject { put("t", "state"); put("status", s.status); put("online", s.online); put("mode", s.mode); put("reason", s.pauseReason) })
     }
 
     private fun send(o: JsonObject) { ws?.send(o.toString()) }
