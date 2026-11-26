@@ -131,6 +131,7 @@ func main() {
 	mux.HandleFunc("POST /api/admin/verify", api.AdminVerify)
 	mux.HandleFunc("GET /api/admin/nodes", api.AdminNodes)
 	mux.HandleFunc("GET /api/admin/usage", api.AdminUsage)
+	mux.HandleFunc("POST /api/admin/reset-key", api.AdminResetKey)
 	mux.HandleFunc("GET /api/admin/appeals", api.AdminAppeals)
 	mux.HandleFunc("POST /api/admin/appeals/resolve", api.AdminAppeals)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
