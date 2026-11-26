@@ -99,7 +99,40 @@ pub async fn run(code: String, server: String, no_service: bool, want: String) -
         _ => None,
     };
 
+    // Speech, video and GPU transcription: NVIDIA PCs get all three (Wan 2.1 needs 8 GB),
+    // Macs get text to speech (they already transcribe with whisper.cpp).
+    let nvidia = vram > 0.0 && !apple;
+    let pick = |kind: &str| catalog.iter().find(|m| m.kind == kind && m.gguf_url.is_empty() && fits(m) && (nvidia || (apple && kind == "speech"))).cloned();
+    let (tts, video, gpu_stt) = (pick("speech"), pick("video"), pick("transcription"));
+    let media = if tts.is_some() || video.is_some() || gpu_stt.is_some() {
+        setup_media(nvidia, vram, tts.as_ref(), video.as_ref(), gpu_stt.as_ref()).await
+    } else {
+        None
+    };
+
     let mut c = crate::config::load()?;
+    c.engine.media_cmd = media.clone().unwrap_or_default();
+    c.engine.media_url.clear();
+    c.engine.tts_model.clear();
+    c.engine.video_model.clear();
+    c.engine.media_stt = false;
+    if media.is_some() {
+        if let Some(m) = &tts {
+            c.engine.tts_model = m.id.clone();
+            println!("    Also serving text to speech: {}", m.label);
+        }
+        if let Some(m) = &video {
+            c.engine.video_model = m.id.clone();
+            println!("    Also serving text to video: {}", m.label);
+        }
+        if let Some(m) = &gpu_stt {
+            c.engine.media_stt = true;
+            c.engine.stt_model = m.id.clone();
+            c.engine.stt_url.clear();
+            c.engine.stt_server.clear();
+            println!("    Also serving transcription on the GPU: {}", m.label);
+        }
+    }
     // Jobs at once: more on machines with lots of memory (each job needs its own cache).
     c.engine.parallel = if (apple && ram >= 32.0) || vram >= 16.0 { 4 } else { 2 };
     if let (Some(m), Some((server, model))) = (&speech, &stt) {
@@ -152,6 +185,73 @@ pub async fn run(code: String, server: String, no_service: bool, want: String) -
         Err(err) => println!("\nCouldn't set up automatic start ({err}).\nStart it yourself with:  infera tray"),
     }
     Ok(())
+}
+
+/// Installs the media server (its own Python with PyTorch, Kokoro, Wan 2.1 via diffusers and
+/// faster-whisper) with `uv`. Returns the command that starts it, or None if anything fails.
+async fn setup_media(nvidia: bool, vram: f64, tts: Option<&Model>, video: Option<&Model>, stt: Option<&Model>) -> Option<Vec<String>> {
+    println!("    Setting up speech and video (one-time download of a few GB; takes several minutes) …");
+    let home = crate::config::dir();
+    let run = |cmd: &mut std::process::Command| cmd.status().map(|s| s.success()).unwrap_or(false);
+    let user_bin = dirs::home_dir().unwrap_or_default().join(".local").join("bin");
+    let uv_path = user_bin.join(if cfg!(windows) { "uv.exe" } else { "uv" });
+    let mut uv = if std::process::Command::new("uv").arg("--version").output().map(|o| o.status.success()).unwrap_or(false) {
+        std::path::PathBuf::from("uv")
+    } else {
+        uv_path.clone()
+    };
+    if !uv.exists() && uv != std::path::Path::new("uv") {
+        let ok = if cfg!(windows) {
+            run(std::process::Command::new("powershell").args(["-ExecutionPolicy", "ByPass", "-NoProfile", "-c", "irm https://astral.sh/uv/install.ps1 | iex"]))
+        } else {
+            run(std::process::Command::new("sh").args(["-c", "curl -LsSf https://astral.sh/uv/install.sh | sh"]))
+        };
+        if !ok || !uv_path.exists() {
+            println!("    Couldn't install uv (Python installer); skipping speech and video.");
+            return None;
+        }
+        uv = uv_path;
+    }
+    let env = home.join("media-env");
+    let py = if cfg!(windows) { env.join("Scripts").join("python.exe") } else { env.join("bin").join("python") };
+    if !py.exists() && !run(std::process::Command::new(&uv).args(["venv", "--python", "3.11"]).arg(&env)) {
+        println!("    Couldn't create the Python environment; skipping speech and video.");
+        return None;
+    }
+    let pip = |args: &[&str]| run(std::process::Command::new(&uv).args(["pip", "install", "--python"]).arg(&py).args(args));
+    if nvidia && !pip(&["torch", "--index-url", "https://download.pytorch.org/whl/cu124"]) {
+        println!("    Couldn't install PyTorch for the GPU; skipping speech and video.");
+        return None;
+    }
+    let mut pkgs = vec!["numpy", "imageio-ffmpeg"];
+    if tts.is_some() {
+        pkgs.extend(["kokoro", "soundfile"]);
+    }
+    if video.is_some() {
+        pkgs.extend(["diffusers", "transformers", "accelerate", "ftfy", "imageio"]);
+    }
+    if stt.is_some() {
+        pkgs.push("faster-whisper");
+    }
+    if !pip(&pkgs) {
+        println!("    Couldn't install the speech and video packages; skipping them.");
+        return None;
+    }
+    let script = home.join("infera_media.py");
+    std::fs::write(&script, include_str!("../media/infera_media.py")).ok()?;
+    let mut cmd = vec![py.display().to_string(), script.display().to_string(),
+        "--device".into(), if nvidia { "cuda" } else { "cpu" }.into(), "--vram".into(), format!("{vram:.0}")];
+    for (flag, m) in [("--tts-id", tts), ("--video-id", video), ("--stt-id", stt)] {
+        if let Some(m) = m {
+            cmd.extend([flag.to_string(), m.id.clone()]);
+        }
+    }
+    let ok = std::process::Command::new(&cmd[0]).args(&cmd[1..]).arg("--check").output().map(|o| o.status.success()).unwrap_or(false);
+    if !ok {
+        println!("    The speech and video check failed (see: {} {} --check); skipping them.", cmd[0], cmd[1..].join(" "));
+        return None;
+    }
+    Some(cmd)
 }
 
 /// macOS: install whisper.cpp with Homebrew (if missing) and download the Whisper model.

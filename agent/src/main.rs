@@ -81,6 +81,15 @@ enum Cmd {
         /// Transcription model name to send to the speech server, if different
         #[arg(long, default_value = "")]
         stt_engine_model: String,
+        /// Also serve speech and video: a running Infera media server (see `infera setup`)
+        #[arg(long, default_value = "")]
+        media_url: String,
+        /// Text-to-speech model name customers request, e.g. kokoro-82m
+        #[arg(long, default_value = "")]
+        tts_model: String,
+        /// Text-to-video model name customers request, e.g. wan2.1-t2v-1.3b
+        #[arg(long, default_value = "")]
+        video_model: String,
     },
     /// Benchmark this device and show its class
     Bench,
@@ -123,7 +132,7 @@ async fn async_main(cli: Cli) -> Result<()> {
     match cli.cmd {
         Cmd::Setup { code, server, no_service, model } => setup::run(code, server, no_service, model).await,
         Cmd::Pair { code, server, name } => pair(code, server, name).await,
-        Cmd::Engine { url, llama_server, gguf, model, engine_model, params_b, embed_model, embed_engine_model, stt_url, stt_model, stt_engine_model } => {
+        Cmd::Engine { url, llama_server, gguf, model, engine_model, params_b, embed_model, embed_engine_model, stt_url, stt_model, stt_engine_model, media_url, tts_model, video_model } => {
             let mut c = config::load()?;
             c.engine.url = url;
             c.engine.llama_server = llama_server;
@@ -136,6 +145,10 @@ async fn async_main(cli: Cli) -> Result<()> {
             c.engine.stt_url = stt_url;
             c.engine.stt_model = stt_model;
             c.engine.stt_engine_model = stt_engine_model;
+            c.engine.media_url = media_url;
+            c.engine.media_cmd.clear();
+            c.engine.tts_model = tts_model;
+            c.engine.video_model = video_model;
             c.bench = None;
             config::save(&c)?;
             println!("Engine saved. Run `infera bench`, then `infera run`.");

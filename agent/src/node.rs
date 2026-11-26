@@ -350,8 +350,14 @@ fn served_models(cfg: &Config) -> Vec<String> {
     if !cfg.engine.embed_model.is_empty() && !cfg.engine.url.is_empty() {
         m.push(cfg.engine.embed_model.clone());
     }
-    if !cfg.engine.stt_model.is_empty() && (!cfg.engine.stt_url.is_empty() || !cfg.engine.stt_server.is_empty()) {
+    let media = !cfg.engine.media_url.is_empty() || !cfg.engine.media_cmd.is_empty();
+    if !cfg.engine.stt_model.is_empty() && (!cfg.engine.stt_url.is_empty() || !cfg.engine.stt_server.is_empty() || (media && cfg.engine.media_stt)) {
         m.push(cfg.engine.stt_model.clone());
+    }
+    for x in [&cfg.engine.tts_model, &cfg.engine.video_model] {
+        if media && !x.is_empty() {
+            m.push(x.clone());
+        }
     }
     m
 }
@@ -378,6 +384,16 @@ async fn handle_offer(ctx: Arc<Ctx>, m: Value) {
     };
     if status != "idle" {
         send(&ctx.state, json!({"t": "decline", "job_id": job_id, "reason": "governor"}));
+        return;
+    }
+    // Video needs the whole GPU: no video next to other jobs, nothing next to a video.
+    let busy_gpu = {
+        let s = ctx.state.lock().unwrap();
+        let video = &ctx.cfg.engine.video_model;
+        (m["job_type"].as_str() == Some("video") && !s.running.is_empty()) || (!video.is_empty() && s.running.values().any(|(j, _)| &j.model == video))
+    };
+    if busy_gpu {
+        send(&ctx.state, json!({"t": "decline", "job_id": job_id, "reason": "busy"}));
         return;
     }
     let tps = ctx.cfg.bench.as_ref().map(|b| b.tokens_per_s).unwrap_or(10.0).max(1.0);
@@ -439,8 +455,9 @@ async fn handle_offer(ctx: Arc<Ctx>, m: Value) {
     send(&ctx.state, json!({"t": "accept", "job_id": job_id, "sandbox_pub": sandbox.public_b64}));
 
     let result = match tokio::time::timeout(Duration::from_secs(20), prx).await {
-        Ok(Ok((epk, n, c))) if m["job_type"].as_str() == Some("embeddings") => run_embed(&ctx, &job_id, &model, sandbox, &epk, &n, &c, false).await,
-        Ok(Ok((epk, n, c))) if m["job_type"].as_str() == Some("transcription") => run_embed(&ctx, &job_id, &model, sandbox, &epk, &n, &c, true).await,
+        Ok(Ok((epk, n, c))) if matches!(m["job_type"].as_str(), Some("embeddings" | "transcription" | "speech" | "video")) => {
+            run_embed(&ctx, &job_id, &model, sandbox, &epk, &n, &c, m["job_type"].as_str().unwrap_or("")).await
+        }
         Ok(Ok((epk, n, c))) => run_job(&ctx, &job_id, &model, sandbox, &epk, &n, &c, cancel_rx).await,
         _ => Err(anyhow::anyhow!("job payload never arrived")),
     };
@@ -468,15 +485,22 @@ async fn handle_offer(ctx: Arc<Ctx>, m: Value) {
     }
 }
 
-/// Embedding or transcription job: one sealed result, signed like any other job.
-/// For transcriptions, "tokens_in" in the receipt is the audio length in seconds.
+/// Embedding, transcription, speech or video job: one sealed result (sent in pieces of up
+/// to 1 MB so large videos fit the connection's message limit), signed like any other job.
+/// "tokens_in" in the receipt is audio seconds (transcription), input characters (speech)
+/// or video seconds (video).
 #[allow(clippy::too_many_arguments)]
-async fn run_embed(ctx: &Arc<Ctx>, job_id: &str, model: &str, sandbox: SandboxKey, epk: &str, n: &str, c: &str, speech: bool) -> Result<()> {
+async fn run_embed(ctx: &Arc<Ctx>, job_id: &str, model: &str, sandbox: SandboxKey, epk: &str, n: &str, c: &str, job_type: &str) -> Result<()> {
     let chan = sandbox.open(job_id, epk)?;
     let request: Value = serde_json::from_slice(&chan.open_down(n, c)?)?;
-    let kind = if speech { "Transcription" } else { "Embeddings" };
+    let kind = match job_type { "transcription" => "Transcription", "speech" => "Speech", "video" => "Video", _ => "Embeddings" };
     ctx.state.lock().unwrap().log(format!("Running {} job {job_id} ({model}) in the sealed sandbox", kind.to_lowercase()));
-    let res = if speech { ctx.engine.transcribe(request).await } else { ctx.engine.embed(request).await };
+    let res = match job_type {
+        "transcription" => ctx.engine.transcribe(request).await,
+        "speech" => ctx.engine.speak(request).await,
+        "video" => ctx.engine.make_video(request).await,
+        _ => ctx.engine.embed(request).await,
+    };
     let (result, tin) = match res {
         Ok(r) => r,
         Err(e) => {
@@ -485,13 +509,16 @@ async fn run_embed(ctx: &Arc<Ctx>, job_id: &str, model: &str, sandbox: SandboxKe
         }
     };
     let out = result.to_string();
-    let (nonce, ct) = chan.seal_up(out.as_bytes());
-    send(&ctx.state, json!({"t": "tok", "job_id": job_id, "seq": 1, "n": nonce, "c": ct}));
+    for (i, piece) in out.as_bytes().chunks(1 << 20).enumerate() {
+        let (nonce, ct) = chan.seal_up(piece);
+        send(&ctx.state, json!({"t": "tok", "job_id": job_id, "seq": i + 1, "n": nonce, "c": ct}));
+    }
     let hash = hex::encode(Sha256::digest(out.as_bytes()));
     let receipt = format!("{job_id}|{model}|{hash}|{tin}|0|{}", unix());
     let sig = B64.encode(ctx.key.sign(receipt.as_bytes()).to_bytes());
     send(&ctx.state, json!({"t": "done", "job_id": job_id, "tokens_in": tin, "tokens_out": 0, "receipt": receipt, "sig": sig}));
-    ctx.state.lock().unwrap().log(format!("{kind} job {job_id} done ({tin} {})", if speech { "s of audio" } else { "tokens" }));
+    let unit = match job_type { "transcription" => "s of audio", "speech" => "characters", "video" => "s of video", _ => "tokens" };
+    ctx.state.lock().unwrap().log(format!("{kind} job {job_id} done ({tin} {unit})"));
     Ok(())
 }
 

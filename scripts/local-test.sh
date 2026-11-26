@@ -55,12 +55,16 @@ MODEL=mock-1b
 if [ "${1:-}" != "--mock" ] && curl -sf localhost:11434/api/tags >/dev/null 2>&1; then
   TAG=$(curl -s localhost:11434/api/tags | python3 -c "import sys,json;m=json.load(sys.stdin)['models'];c=[x['name'] for x in m if 'embed' not in x['name'] and 'minilm' not in x['name']];print(c[0] if c else '')")
 fi
+# Speech and video: the media server in stand-in mode (the real one needs a GPU and PyTorch).
+python3 "$ROOT/agent/media/infera_media.py" --mock --port 18179 --tts-id kokoro-82m --video-id wan2.1-t2v-1.3b > "$WORK/media.log" 2>&1 &
+echo $! > "$WORK/media.pid"
+MEDIA="--media-url http://127.0.0.1:18179 --tts-model kokoro-82m --video-model wan2.1-t2v-1.3b"
 if [ -n "${TAG:-}" ]; then
   MODEL=$(echo "$TAG" | tr ':' '-')
   echo "   Using Ollama model $TAG as \"$MODEL\""
   ETAG=$(curl -s localhost:11434/api/tags | python3 -c "import sys,json;m=[x['name'] for x in json.load(sys.stdin)['models'] if 'embed' in x['name'] or 'minilm' in x['name']];print(m[0] if m else '')")
   EMBED=""; [ -n "$ETAG" ] && EMBED=$(echo "$ETAG" | tr ':' '-')
-  "$NODE" engine --url http://127.0.0.1:11434 --model "$MODEL" --engine-model "$TAG" --params-b "${INFERA_PARAMS_B:-2}" --embed-model "$EMBED" --embed-engine-model "$ETAG" >/dev/null
+  "$NODE" engine --url http://127.0.0.1:11434 --model "$MODEL" --engine-model "$TAG" --params-b "${INFERA_PARAMS_B:-2}" --embed-model "$EMBED" --embed-engine-model "$ETAG" $MEDIA >/dev/null
 else
   echo "   Using the stand-in engine (fake answers). Install Ollama and pull a model to test a real one."
   python3 "$ROOT/tools/mock_engine.py" 18090 0.03 > "$WORK/mock.log" 2>&1 &
@@ -68,7 +72,7 @@ else
   sleep 0.5
   EMBED=mock-embed
   STT=mock-whisper
-  "$NODE" engine --url http://127.0.0.1:18090 --model "$MODEL" --params-b 1 --embed-model "$EMBED" --stt-url http://127.0.0.1:18090 --stt-model "$STT" >/dev/null
+  "$NODE" engine --url http://127.0.0.1:18090 --model "$MODEL" --params-b 1 --embed-model "$EMBED" --stt-url http://127.0.0.1:18090 --stt-model "$STT" $MEDIA >/dev/null
 fi
 # Local testing: don't wait for 5 minutes of keyboard idle.
 python3 - "$INFERA_HOME/config.toml" <<'PY'
@@ -126,6 +130,22 @@ else:
 " || { echo "TEST FAILED (tool calling)"; exit 1; }
 TSTREAM=$(curl -sN "localhost:$PORT/v1/chat/completions" -H "Authorization: Bearer $CUST" -d "${TBODY%\}},\"stream\":true}")
 [ "$STRICT" = 0 ] || echo "$TSTREAM" | grep -q '"tool_calls"' || { echo "TEST FAILED (streamed tool calls): $TSTREAM"; exit 1; }
+echo "   Text to speech check (/v1/audio/speech) …"
+SP=$(curl -s -o "$WORK/speech.out" -w "%{http_code} %{content_type}" "localhost:$PORT/v1/audio/speech" -H "Authorization: Bearer $CUST" \
+  -d '{"model":"kokoro-82m","input":"Hello from Infera, running on a computer near you.","voice":"alloy","response_format":"wav"}')
+[ "${SP%% *}" = 200 ] && head -c 4 "$WORK/speech.out" | grep -q RIFF || { echo "TEST FAILED (speech): $SP $(head -c 300 "$WORK/speech.out")"; exit 1; }
+echo "   Audio: $(wc -c < "$WORK/speech.out") bytes (${SP#* })"
+echo "   Text to video check (/v1/videos) …"
+VID=$(curl -s "localhost:$PORT/v1/videos" -H "Authorization: Bearer $CUST" -d '{"model":"wan2.1-t2v-1.3b","prompt":"A red kite over a green hill","seconds":"2"}' \
+  | python3 -c "import sys,json;d=json.load(sys.stdin);assert d['object']=='video' and d['status'] in ('queued','in_progress'),d;print(d['id'])") || { echo "TEST FAILED (video create)"; exit 1; }
+for _ in $(seq 1 30); do
+  VS=$(curl -s "localhost:$PORT/v1/videos/$VID" -H "Authorization: Bearer $CUST" | python3 -c "import sys,json;print(json.load(sys.stdin)['status'])")
+  [ "$VS" = completed ] || [ "$VS" = failed ] && break; sleep 1
+done
+[ "$VS" = completed ] || { echo "TEST FAILED (video status $VS)"; curl -s "localhost:$PORT/v1/videos/$VID" -H "Authorization: Bearer $CUST"; exit 1; }
+curl -s "localhost:$PORT/v1/videos/$VID/content" -H "Authorization: Bearer $CUST" -o "$WORK/video.mp4"
+grep -q ftyp "$WORK/video.mp4" || { echo "TEST FAILED (video content)"; exit 1; }
+echo "   Video: $VID completed, $(wc -c < "$WORK/video.mp4") bytes"
 echo "   Batch queue check …"
 BODY="{\"requests\":[{\"model\":\"$MODEL\",\"max_tokens\":30,\"messages\":[{\"role\":\"user\",\"content\":\"Name a colour.\"}]},{\"model\":\"$MODEL\",\"max_tokens\":30,\"messages\":[{\"role\":\"user\",\"content\":\"Name a fruit.\"}]}"
 [ -n "${EMBED:-}" ] && BODY="$BODY,{\"model\":\"$EMBED\",\"input\":\"batched text\"}"

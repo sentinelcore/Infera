@@ -177,6 +177,9 @@ func OpenStore(path string) (*Store, error) {
 		}
 		st.MigrateWallet()
 		st.MigratePerf()
+		if err := st.MigrateVideos(); err != nil {
+			return nil, err
+		}
 		if err := st.MigrateAppeals(); err != nil {
 			return nil, err
 		}
@@ -202,6 +205,9 @@ func OpenStore(path string) (*Store, error) {
 	}
 	st.MigrateWallet()
 	st.MigratePerf()
+	if err := st.MigrateVideos(); err != nil {
+		return nil, err
+	}
 	if err := st.MigrateAppeals(); err != nil {
 		return nil, err
 	}

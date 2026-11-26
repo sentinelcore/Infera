@@ -1,5 +1,5 @@
 # Infera node installer for Windows (PowerShell):
-#   irm https://raw.githubusercontent.com/sentinelcore/Infera/main/install.ps1 | iex
+#   irm https://infera.valanor.network/install.ps1 | iex
 $ErrorActionPreference = "Stop"
 $repo = if ($env:INFERA_REPO) { $env:INFERA_REPO } else { "sentinelcore/Infera" }
 $dest = Join-Path $env:USERPROFILE ".infera\bin"
@@ -12,4 +12,4 @@ Remove-Item $zip
 $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
 if ($userPath -notlike "*$dest*") { [Environment]::SetEnvironmentVariable("Path", "$userPath;$dest", "User") }
 Write-Host "Installed to $dest\infera.exe (open a new terminal to use 'infera')"
-Write-Host "Next: infera pair <code> --server <dashboard url>, then infera engine ..., then infera run"
+Write-Host "Next: install Ollama (https://ollama.com/download/windows), open a new terminal, then: infera setup CODE"

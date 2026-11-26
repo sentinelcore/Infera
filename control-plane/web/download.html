@@ -35,7 +35,9 @@ code,pre{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.82rem}pre
   <div class="card" id="windows">
     <h2>Windows</h2>
     <a class="btn" href="https://github.com/sentinelcore/Infera/releases/download/test-build/infera-windows-x64.zip">Download for Windows</a>
-    <ol class="muted"><li>Unzip, open a terminal in that folder.</li><li>Install Ollama, then <code>.\infera.exe setup CODE</code></li></ol>
+    <p class="muted">Or in PowerShell:</p>
+    <pre>irm <span class="origin"></span>/install.ps1 | iex</pre>
+    <ol class="muted"><li>Install <a href="https://ollama.com/download/windows">Ollama</a>.</li><li>Open a new terminal: <code>infera setup CODE</code>. NVIDIA GPUs with 8 GB+ also get text to speech, text to video and fast transcription (a few GB download).</li></ol>
     <p class="note">First run: Windows shows a blue box. Click <b>More info → Run anyway</b> (the build isn't code-signed yet).</p>
   </div>
   <div class="card" id="mac">

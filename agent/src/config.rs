@@ -71,6 +71,20 @@ pub struct EngineConfig {
     pub stt_server: String,
     #[serde(default)]
     pub stt_gguf: String,
+    /// Media server (text to speech, text to video, GPU speech to text): a command Infera
+    /// starts itself (it adds `--port`), or the URL of one already running.
+    #[serde(default)]
+    pub media_cmd: Vec<String>,
+    #[serde(default)]
+    pub media_url: String,
+    /// Catalog names served through the media server (empty = not served).
+    #[serde(default)]
+    pub tts_model: String,
+    #[serde(default)]
+    pub video_model: String,
+    /// Transcription also runs on the media server (faster-whisper on the GPU).
+    #[serde(default)]
+    pub media_stt: bool,
     /// Size in billions of parameters, used for the device class.
     #[serde(default)]
     pub params_b: f64,

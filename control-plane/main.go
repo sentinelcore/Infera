@@ -43,6 +43,8 @@ func main() {
 		DefaultPrice:  Price{In: envFloat("INFERA_PRICE_IN", 0.10), Out: envFloat("INFERA_PRICE_OUT", 0.30)},
 		EmbedPrice:    envFloat("INFERA_PRICE_EMBED", 0.02),
 		AudioPrice:    envFloat("INFERA_PRICE_AUDIO_MIN", 0.003),
+		SpeechPrice:   envFloat("INFERA_PRICE_TTS_M", 1.0),
+		VideoPrice:    envFloat("INFERA_PRICE_VIDEO_SEC", 0.04),
 		BatchDiscount: envFloat("INFERA_BATCH_DISCOUNT", 0.5),
 		FallbackURL:   os.Getenv("INFERA_FALLBACK_URL"),
 		FallbackKey:   os.Getenv("INFERA_FALLBACK_KEY"),
@@ -88,6 +90,10 @@ func main() {
 	mux.HandleFunc("POST /v1/embeddings", gw.Embeddings)
 	mux.HandleFunc("POST /v1/completions", gw.Completions)
 	mux.HandleFunc("POST /v1/audio/transcriptions", gw.Transcriptions)
+	mux.HandleFunc("POST /v1/audio/speech", gw.Speech)
+	mux.HandleFunc("POST /v1/videos", gw.CreateVideo)
+	mux.HandleFunc("GET /v1/videos/{id}", gw.GetVideo)
+	mux.HandleFunc("GET /v1/videos/{id}/content", gw.VideoContent)
 	mux.HandleFunc("POST /v1/batch", gw.BatchSubmit)
 	mux.HandleFunc("GET /v1/batch", gw.BatchList)
 	mux.HandleFunc("GET /v1/batch/{id}", gw.BatchGet)
@@ -117,6 +123,11 @@ func main() {
 	mux.HandleFunc("GET /install.sh", func(w http.ResponseWriter, r *http.Request) {
 		b, _ := webFS.ReadFile("web/install.sh")
 		w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
+		w.Write(b)
+	})
+	mux.HandleFunc("GET /install.ps1", func(w http.ResponseWriter, r *http.Request) {
+		b, _ := webFS.ReadFile("web/install.ps1")
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Write(b)
 	})
 	mux.HandleFunc("GET /download", func(w http.ResponseWriter, r *http.Request) {

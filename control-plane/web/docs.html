@@ -50,7 +50,7 @@ th{color:var(--muted);font-size:.8rem;text-transform:uppercase;letter-spacing:.0
 <div class="layout">
 <nav class="toc" aria-label="Contents">
   <b>Start</b><a href="#quickstart">Quickstart</a><a href="#auth">Authentication</a><a href="#models">Models &amp; prices</a>
-  <b>Endpoints</b><a href="#chat">Chat completions</a><a href="#completions">Completions (code)</a><a href="#tools">Tool calling</a><a href="#embeddings">Embeddings</a><a href="#transcriptions">Transcriptions</a><a href="#batch">Batch API</a><a href="#list-models">List models</a>
+  <b>Endpoints</b><a href="#chat">Chat completions</a><a href="#completions">Completions (code)</a><a href="#tools">Tool calling</a><a href="#embeddings">Embeddings</a><a href="#transcriptions">Transcriptions</a><a href="#speech">Text to speech</a><a href="#videos">Text to video</a><a href="#batch">Batch API</a><a href="#list-models">List models</a>
   <b>Guides</b><a href="#sdks">SDKs &amp; tools</a><a href="#routing">How requests are served</a><a href="#errors">Errors</a><a href="#limits">Rate limits</a><a href="#privacy">Privacy</a>
 </nav>
 <main>
@@ -170,6 +170,18 @@ prompt_template = "&lt;|fim_prefix|&gt;{prefix}&lt;|fim_suffix|&gt;{suffix}&lt;|
 with open("meeting.mp3", "rb") as f:
     t = client.audio.transcriptions.create(model="whisper-base", file=f)
 print(t.text)</code></pre>
+
+<h2 id="speech">Text to speech</h2>
+<p><code>POST /v1/audio/speech</code> with <code>model</code> (<code>kokoro-82m</code>), <code>input</code> (up to 4,096 characters), <code>voice</code> (OpenAI names like <code>alloy</code>, <code>nova</code>, <code>onyx</code>, or Kokoro voices like <code>af_heart</code>), <code>response_format</code> (mp3, wav, opus, flac, aac, pcm) and <code>speed</code>. The answer is the audio file. Billed per 1M input characters.</p>
+<pre><code>curl https://infera.valanor.network/v1/audio/speech -H "Authorization: Bearer ik_cust_…" \
+  -d '{"model":"kokoro-82m","input":"Hello from Infera.","voice":"alloy"}' -o hello.mp3</code></pre>
+
+<h2 id="videos">Text to video</h2>
+<p>Asynchronous, like OpenAI's video API. <code>POST /v1/videos</code> with <code>model</code> (<code>wan2.1-t2v-1.3b</code>), <code>prompt</code>, <code>seconds</code> (1–5) and <code>size</code> (<code>832x480</code> or <code>480x832</code>) returns a video object. Poll <code>GET /v1/videos/{id}</code> until <code>status</code> is <code>completed</code> (a few minutes), then download the MP4 from <code>GET /v1/videos/{id}/content</code>. Videos are kept 24 hours. Billed per second of video.</p>
+<pre><code>curl https://infera.valanor.network/v1/videos -H "Authorization: Bearer ik_cust_…" \
+  -d '{"model":"wan2.1-t2v-1.3b","prompt":"A red kite over a green hill at sunset","seconds":"5"}'
+curl https://infera.valanor.network/v1/videos/video_… -H "Authorization: Bearer ik_cust_…"
+curl https://infera.valanor.network/v1/videos/video_…/content -H "Authorization: Bearer ik_cust_…" -o kite.mp4</code></pre>
 
 <h2 id="batch">Batch API</h2>
 <p>For work that can wait up to 24 hours, at a discount (<span id="batch-off">50%</span> off). Jobs run whenever a suitable device is free, phones included.</p>

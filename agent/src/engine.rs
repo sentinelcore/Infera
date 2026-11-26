@@ -17,8 +17,11 @@ pub struct Engine {
     /// Speech-to-text endpoint base URL and engine model name (empty = not served).
     pub stt_url: String,
     pub stt_model: String,
+    /// Media server base URL (speech and video; empty = not served).
+    pub media_url: String,
     child: Option<Child>,
     stt_child: Option<Child>,
+    media_child: Option<Child>,
     http: reqwest::Client,
 }
 
@@ -56,9 +59,31 @@ impl Engine {
                 Err(e) => eprintln!("transcription off: could not start {}: {e}", cfg.stt_server),
             }
         }
+        // Media server: speech, video and (on GPUs) transcription.
+        let (mut media_url, mut media_child) = (cfg.media_url.trim_end_matches('/').to_string(), None);
+        if media_url.is_empty() && !cfg.media_cmd.is_empty() {
+            let port = 18179;
+            match Command::new(&cfg.media_cmd[0])
+                .args(&cfg.media_cmd[1..])
+                .args(["--port", &port.to_string()])
+                .stdout(Stdio::null())
+                .stderr(std::fs::File::create(crate::config::dir().join("media.log")).map(Stdio::from).unwrap_or(Stdio::null()))
+                .kill_on_drop(true)
+                .spawn()
+            {
+                Ok(c) => {
+                    media_child = Some(c);
+                    media_url = format!("http://127.0.0.1:{port}");
+                }
+                Err(e) => eprintln!("speech and video off: could not start the media server: {e}"),
+            }
+        }
+        if cfg.media_stt && stt_url.is_empty() && !media_url.is_empty() {
+            stt_url = media_url.clone();
+        }
         let stt_model = if cfg.stt_engine_model.is_empty() { cfg.stt_model.clone() } else { cfg.stt_engine_model.clone() };
         if !cfg.url.is_empty() {
-            let e = Engine { url: cfg.url.trim_end_matches('/').to_string(), model, embed_model, stt_url, stt_model, child: None, stt_child, http };
+            let e = Engine { url: cfg.url.trim_end_matches('/').to_string(), model, embed_model, stt_url, stt_model, media_url, child: None, stt_child, media_child, http };
             e.wait_ready(Duration::from_secs(10)).await?;
             return Ok(e);
         }
@@ -78,7 +103,7 @@ impl Engine {
             .stderr(Stdio::null())
             .kill_on_drop(true);
         let child = cmd.spawn().map_err(|e| anyhow!("could not start llama-server at {}: {e}", cfg.llama_server))?;
-        let e = Engine { url: format!("http://127.0.0.1:{port}"), model, embed_model, stt_url, stt_model, child: Some(child), stt_child, http };
+        let e = Engine { url: format!("http://127.0.0.1:{port}"), model, embed_model, stt_url, stt_model, media_url, child: Some(child), stt_child, media_child, http };
         e.wait_ready(Duration::from_secs(180)).await?;
         Ok(e)
     }
@@ -241,7 +266,45 @@ impl Engine {
         Ok((out, secs))
     }
 
+    /// Text to speech. `request`: {"input","voice","response_format","speed"}.
+    /// Returns ({"audio_b64","format"}, input characters).
+    pub async fn speak(&self, request: serde_json::Value) -> Result<(serde_json::Value, u32)> {
+        use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+        if self.media_url.is_empty() {
+            bail!("this device doesn't serve speech");
+        }
+        let chars = request["input"].as_str().unwrap_or("").chars().count().max(1) as u32;
+        let resp = self.http.post(format!("{}/v1/audio/speech", self.media_url)).json(&request)
+            .timeout(Duration::from_secs(300)).send().await?;
+        if !resp.status().is_success() {
+            bail!("media server returned {} for speech", resp.status());
+        }
+        let format = resp.headers().get("content-type").and_then(|v| v.to_str().ok()).and_then(|v| v.strip_prefix("audio/")).unwrap_or("mp3").to_string();
+        let audio = resp.bytes().await?;
+        Ok((serde_json::json!({"audio_b64": B64.encode(&audio), "format": format}), chars))
+    }
+
+    /// Text to video. `request`: {"prompt","seconds","size","negative_prompt","seed"}.
+    /// Returns ({"video_b64","seconds","size"}, seconds of video).
+    pub async fn make_video(&self, request: serde_json::Value) -> Result<(serde_json::Value, u32)> {
+        use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+        if self.media_url.is_empty() {
+            bail!("this device doesn't serve video");
+        }
+        let secs = request["seconds"].as_u64().unwrap_or(5).clamp(1, 5) as u32;
+        let resp = self.http.post(format!("{}/v1/videos/generate", self.media_url)).json(&request)
+            .timeout(Duration::from_secs(25 * 60)).send().await?;
+        if !resp.status().is_success() {
+            bail!("media server returned {} for video", resp.status());
+        }
+        let mp4 = resp.bytes().await?;
+        Ok((serde_json::json!({"video_b64": B64.encode(&mp4), "seconds": secs, "size": request["size"]}), secs))
+    }
+
     pub async fn stop(&mut self) {
+        if let Some(c) = self.media_child.as_mut() {
+            let _ = c.kill().await;
+        }
         if let Some(c) = self.child.as_mut() {
             let _ = c.kill().await;
         }

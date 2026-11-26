@@ -31,6 +31,8 @@ type Config struct {
 	FallbackModel string
 	EmbedPrice    float64 // USD per 1M input tokens for embeddings
 	AudioPrice    float64 // USD per audio minute for transcriptions
+	SpeechPrice   float64 // USD per 1M input characters for text to speech
+	VideoPrice    float64 // USD per second of generated video
 	BatchDiscount float64 // fraction off for queued batch jobs
 	FirstToken    time.Duration
 	HedgeAfter    time.Duration // 0 = no hedged requests
@@ -121,6 +123,14 @@ func (g *Gateway) Models(w http.ResponseWriter, r *http.Request) {
 			m["input_modalities"], m["output_modalities"] = []string{"audio"}, []string{"text"}
 			m["pricing"] = map[string]string{"prompt": "0", "completion": "0", "audio_minute": strconv.FormatFloat(g.cfg.AudioPrice, 'f', -1, 64)}
 			m["endpoint"] = "/v1/audio/transcriptions"
+		case "speech":
+			m["input_modalities"], m["output_modalities"] = []string{"text"}, []string{"audio"}
+			m["pricing"] = map[string]string{"prompt": "0", "completion": "0", "per_million_characters": strconv.FormatFloat(g.cfg.SpeechPrice, 'f', -1, 64)}
+			m["endpoint"] = "/v1/audio/speech"
+		case "video":
+			m["input_modalities"], m["output_modalities"] = []string{"text"}, []string{"video"}
+			m["pricing"] = map[string]string{"prompt": "0", "completion": "0", "per_second": strconv.FormatFloat(g.cfg.VideoPrice, 'f', -1, 64)}
+			m["endpoint"] = "/v1/videos"
 		case "embeddings":
 			m["input_modalities"], m["output_modalities"] = []string{"text"}, []string{"embeddings"}
 			m["pricing"] = map[string]string{"prompt": per(g.cfg.EmbedPrice), "completion": "0"}
@@ -328,9 +338,10 @@ wait:
 
 	// 3. Stream sealed output back to the customer.
 	var out strings.Builder
-	deadline := time.NewTimer(g.cfg.JobDeadline)
+	firstWait, jobDeadline := g.jobTimeout(req)
+	deadline := time.NewTimer(jobDeadline)
 	defer deadline.Stop()
-	idle := time.NewTimer(g.cfg.FirstToken)
+	idle := time.NewTimer(firstWait)
 	defer idle.Stop()
 	gotFirst := false
 	pieces := 0
@@ -347,14 +358,14 @@ wait:
 		case <-idle.C:
 			n.Send(Msg{T: "cancel", JobID: jobID})
 			if !gotFirst {
-				g.abort(dev, jobID, CauseNotDelivered, estPay, fmt.Sprintf("no first token within %s", g.cfg.FirstToken))
+				g.abort(dev, jobID, CauseNotDelivered, estPay, fmt.Sprintf("no first token within %s", firstWait))
 				return runAbortedBeforeOutput
 			}
 			g.abort(dev, jobID, CauseNotDelivered, estPay, "output stalled for 60 s")
 			return runAbortedAfterOutput
 		case <-deadline.C:
 			n.Send(Msg{T: "cancel", JobID: jobID})
-			g.abort(dev, jobID, CauseNotDelivered, estPay, fmt.Sprintf("job not finished within %s", g.cfg.JobDeadline))
+			g.abort(dev, jobID, CauseNotDelivered, estPay, fmt.Sprintf("job not finished within %s", jobDeadline))
 			if gotFirst {
 				return runAbortedAfterOutput
 			}
@@ -489,6 +500,8 @@ func (g *Gateway) jobCost(req chatRequest, tin, tout int) int64 {
 	var c int64
 	if req.jobType == "transcription" { // tin = audio seconds
 		c = int64(math.Ceil(float64(tin) / 60 * g.cfg.AudioPrice * microUSD))
+	} else if req.jobType == "speech" || req.jobType == "video" {
+		c = g.mediaCost(req.jobType, tin)
 	} else if req.jobType == "embeddings" {
 		c = int64(math.Ceil(float64(tin) / 1e6 * g.cfg.EmbedPrice * microUSD))
 	} else {
@@ -602,6 +615,7 @@ type streamWriter struct {
 	text    bool             // /v1/completions (text_completion) instead of chat
 	// transcribe: "" for chat, else the response_format of a transcription
 	transcribe string
+	media      string // "speech" or "video": the device's result is one JSON document
 }
 
 func newStreamWriter(w http.ResponseWriter, stream bool, jobID, model string) *streamWriter {
@@ -723,6 +737,13 @@ func (s *streamWriter) finish(tin, tout int) {
 	if s.transcribe != "" {
 		s.writeTranscription(tin)
 		return
+	}
+	if s.media == "speech" {
+		s.writeSpeech()
+		return
+	}
+	if s.media != "" {
+		return // video: the background job reads s.buf
 	}
 	if s.embed {
 		var res struct {

@@ -14,7 +14,7 @@ import (
 type CatalogModel struct {
 	ID        string  `json:"id"`                        // name customers request, e.g. qwen3-1.7b
 	Label     string  `json:"label"`                     // shown in pickers
-	Kind      string  `json:"kind"`                      // chat | embeddings
+	Kind      string  `json:"kind"`                      // chat | embeddings | transcription | speech | video
 	ParamsB   float64 `json:"params_b"`                  // size, for device classes
 	GGUFURL   string  `json:"gguf_url"`                  // phones (llama.cpp)
 	GGUFMB    int     `json:"gguf_mb"`                   // download size
@@ -65,6 +65,12 @@ var defaultCatalog = []CatalogModel{
 		OllamaTag: "qwen3-coder:30b", DeskRAM: 32, DeskVRAM: 24},
 	{ID: "whisper-base", Label: "Whisper Base · speech to text (99 languages)", Kind: "transcription", ParamsB: 0.074, HFID: "openai/whisper-base", Quant: "int8",
 		GGUFURL: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin", GGUFMB: 60, PhoneRAM: 3, DeskRAM: 4},
+	{ID: "whisper-large-v3-turbo", Label: "Whisper Large v3 Turbo · speech to text, GPUs with 6 GB+", Kind: "transcription", ParamsB: 0.81, HFID: "openai/whisper-large-v3-turbo", Quant: "fp16",
+		DeskRAM: 8, DeskVRAM: 6},
+	{ID: "kokoro-82m", Label: "Kokoro 82M · text to speech (natural English voices)", Kind: "speech", ParamsB: 0.082, HFID: "hexgrad/Kokoro-82M", Quant: "fp32",
+		DeskRAM: 8, DeskVRAM: 4},
+	{ID: "wan2.1-t2v-1.3b", Label: "Wan 2.1 1.3B · text to video (480p, up to 5 s), NVIDIA GPUs with 8 GB+", Kind: "video", ParamsB: 1.3, HFID: "Wan-AI/Wan2.1-T2V-1.3B-Diffusers", Quant: "bf16",
+		DeskRAM: 16, DeskVRAM: 8},
 	{ID: "nomic-embed-text", Label: "Nomic Embed · embeddings", Kind: "embeddings", ParamsB: 0.14, HFID: "nomic-ai/nomic-embed-text-v1.5", Ctx: 2048, Quant: "fp16",
 		OllamaTag: "nomic-embed-text", DeskRAM: 8},
 }
@@ -84,7 +90,7 @@ func (a *API) Catalog(w http.ResponseWriter, r *http.Request) {
 	// Live prices and owner share, so apps can show honest earning estimates.
 	writeJSON(w, map[string]any{"models": catalog(), "pricing": map[string]any{
 		"in_per_m": a.cfg.DefaultPrice.In, "out_per_m": a.cfg.DefaultPrice.Out, "per_model": a.cfg.Prices,
-		"embed_per_m": a.cfg.EmbedPrice, "audio_per_min": a.cfg.AudioPrice, "owner_share": a.cfg.OwnerShare,
+		"embed_per_m": a.cfg.EmbedPrice, "audio_per_min": a.cfg.AudioPrice, "speech_per_m_chars": a.cfg.SpeechPrice, "video_per_s": a.cfg.VideoPrice, "owner_share": a.cfg.OwnerShare,
 		"batch_discount": a.cfg.BatchDiscount,
 	}})
 }
