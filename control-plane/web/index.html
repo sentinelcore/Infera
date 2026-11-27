@@ -123,19 +123,34 @@ td.num { font-variant-numeric: tabular-nums; font-family: var(--mono); }
         <div class="card">
           <h3>New contributor</h3>
           <label for="o-email">Email</label><input id="o-email" type="email" autocomplete="email">
+          <label for="o-pass">Choose a password (8+ characters)</label><input id="o-pass" type="password" autocomplete="new-password">
           <label for="o-invite">Beta invite code</label><input id="o-invite">
           <button class="primary" id="o-signup">Create account</button>
         </div>
         <div class="card">
-          <h3>Already have a key</h3>
-          <label for="o-key">Contributor key (starts with ik_own_)</label><input id="o-key" autocomplete="off">
-          <button class="primary" id="o-signin">Sign in</button>
+          <h3>Sign in</h3>
+          <label for="o-lemail">Email</label><input id="o-lemail" type="email" autocomplete="email">
+          <label for="o-lpass">Password</label><input id="o-lpass" type="password" autocomplete="current-password">
+          <button class="primary" id="o-login">Sign in</button>
+          <details style="margin-top:12px"><summary class="muted">Made your account before passwords? Sign in with your key</summary>
+            <label for="o-key">Contributor key (starts with ik_own_)</label><input id="o-key" autocomplete="off">
+            <button class="ghost" id="o-signin">Sign in with key</button>
+            <p class="muted">You'll be asked to set a password once. Lost your key? Email hello@valanor.network.</p>
+          </details>
         </div>
       </div>
     </div>
     <div id="owner-app" hidden>
       <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap">
         <h2>Your earnings</h2><button class="ghost" id="o-signout">Sign out</button>
+      </div>
+      <div class="card" id="o-setpw" hidden style="margin-bottom:14px">
+        <h3>Set a password</h3>
+        <p class="muted">Then sign in on any device with your email and password; no key needed.</p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">
+          <div style="flex:1;min-width:180px"><label for="o-newpass">New password (8+ characters)</label><input id="o-newpass" type="password" autocomplete="new-password"></div>
+          <button class="primary" id="o-savepw">Save password</button>
+        </div>
       </div>
       <div class="stats">
         <div class="stat"><div class="k">Available</div><div class="v money" id="b-avail">$0.00</div></div>
@@ -206,21 +221,37 @@ td.num { font-variant-numeric: tabular-nums; font-family: var(--mono); }
       <p class="lede">Point any OpenAI client at Infera. Jobs run on community devices in a sealed sandbox; set <code>"privacy"</code> to choose the minimum privacy level. Beta accounts start with free credits.</p>
       <div class="grid">
         <div class="card">
-          <h3>Get an API key</h3>
+          <h3>Create a developer account</h3>
           <label for="c-email">Email</label><input id="c-email" type="email" autocomplete="email">
+          <label for="c-pass">Choose a password (8+ characters)</label><input id="c-pass" type="password" autocomplete="new-password">
           <label for="c-invite">Beta invite code</label><input id="c-invite">
-          <button class="primary" id="c-signup">Create key</button>
+          <button class="primary" id="c-signup">Create account</button>
         </div>
         <div class="card">
-          <h3>Already have a key</h3>
-          <label for="c-key">API key (starts with ik_cust_)</label><input id="c-key" autocomplete="off">
-          <button class="primary" id="c-signin">Sign in</button>
+          <h3>Sign in</h3>
+          <label for="c-lemail">Email</label><input id="c-lemail" type="email" autocomplete="email">
+          <label for="c-lpass">Password</label><input id="c-lpass" type="password" autocomplete="current-password">
+          <button class="primary" id="c-login">Sign in</button>
+          <details style="margin-top:12px"><summary class="muted">Made your account before passwords? Sign in with your API key</summary>
+            <label for="c-key">API key (starts with ik_cust_)</label><input id="c-key" autocomplete="off">
+            <button class="ghost" id="c-signin">Sign in with key</button>
+          </details>
         </div>
       </div>
     </div>
     <div id="cust-app" hidden>
       <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap">
         <h2>Credits: <span class="money" id="c-credits">$0.00</span></h2><button class="ghost" id="c-signout">Sign out</button>
+      </div>
+      <div class="card" id="c-keycard" style="margin-bottom:14px">
+        <h3>Your API key</h3>
+        <p class="muted">Use it in your code as the OpenAI API key, with base URL <code><span class="origin"></span>/v1</code>. Keys are shown only once; make a new one any time (the old one stops working).</p>
+        <pre id="c-keyout" hidden></pre>
+        <button class="ghost" id="c-newkey">Create a new API key</button>
+        <div id="c-setpw" hidden style="margin-top:12px">
+          <label for="c-newpass">Set a password to sign in without a key (8+ characters)</label>
+          <div style="display:flex;gap:10px;flex-wrap:wrap"><input id="c-newpass" type="password" autocomplete="new-password" style="flex:1;min-width:180px"><button class="primary" id="c-savepw">Save password</button></div>
+        </div>
       </div>
       <div class="card" id="buy-card" hidden style="margin-bottom:14px">
         <h3>Add credits</h3>
@@ -358,16 +389,31 @@ net(); setInterval(net, 15000);
 
 // ---------- contributor ----------
 const APPEALABLE = ["owner_action", "not_delivered", "device_failure", "wrong_result", "suspension", "removed"];
+document.querySelectorAll(".origin").forEach(e => e.textContent = location.origin);
 let ownerKey = store.get("infera-owner");
 $("o-signup").onclick = async () => {
   try {
-    const r = await call("/api/signup", { method: "POST", body: JSON.stringify({ email: $("o-email").value, kind: "owner", invite: $("o-invite").value }) });
-    ownerKey = r.api_key; store.set("infera-owner", ownerKey);
-    alertKey(r.api_key); showOwner();
+    const r = await call("/api/signup", { method: "POST", body: JSON.stringify({ email: $("o-email").value, kind: "owner", invite: $("o-invite").value, password: $("o-pass").value }) });
+    ownerKey = r.session || r.api_key; store.set("infera-owner", ownerKey);
+    toast("Account created. Next time, sign in with your email and password."); showOwner();
   } catch (e) { toast(e.message); }
 };
+$("o-login").onclick = async () => {
+  try {
+    const r = await call("/api/login", { method: "POST", body: JSON.stringify({ email: $("o-lemail").value, password: $("o-lpass").value, kind: "owner" }) });
+    ownerKey = r.session; store.set("infera-owner", ownerKey); showOwner();
+  } catch (e) { toast(e.message); }
+};
+$("o-lpass").onkeydown = (e) => { if (e.key === "Enter") $("o-login").click(); };
+$("o-savepw").onclick = async () => {
+  try { await call("/api/account/password", { method: "POST", key: ownerKey, body: JSON.stringify({ password: $("o-newpass").value }) }); $("o-setpw").hidden = true; toast("Password saved. Sign in anywhere with your email and password."); }
+  catch (e) { toast(e.message); }
+};
+async function checkPassword(key, cardId) {
+  try { const a = await call("/api/account", { key }); $(cardId).hidden = a.has_password; } catch (e) {}
+}
 $("o-signin").onclick = () => { ownerKey = $("o-key").value.trim(); store.set("infera-owner", ownerKey); showOwner(); };
-$("o-signout").onclick = () => { ownerKey = ""; store.set("infera-owner", ""); $("owner-app").hidden = true; $("owner-signin").hidden = false; };
+$("o-signout").onclick = () => { if (ownerKey.startsWith("ik_ses_")) call("/api/logout", { method: "POST", key: ownerKey }).catch(() => {}); ownerKey = ""; store.set("infera-owner", ""); $("owner-app").hidden = true; $("owner-signin").hidden = false; };
 function alertKey(k) { toast("Your key is saved in this browser. Copy it somewhere safe: " + k); }
 
 async function showOwner() {
@@ -375,6 +421,7 @@ async function showOwner() {
   try {
     const d = await call("/api/owner", { key: ownerKey });
     $("owner-signin").hidden = true; $("owner-app").hidden = false;
+    checkPassword(ownerKey, "o-setpw");
     $("b-avail").textContent = usd(d.balance.available);
     $("b-held").textContent = usd(d.balance.held);
     $("b-today").textContent = usd(d.today.earned_today) + " · " + d.today.jobs_today + " jobs";
@@ -445,17 +492,38 @@ setInterval(() => { if (ownerKey && !$("owner-app").hidden) showOwner(); }, 1000
 let custKey = store.get("infera-cust");
 $("c-signup").onclick = async () => {
   try {
-    const r = await call("/api/signup", { method: "POST", body: JSON.stringify({ email: $("c-email").value, kind: "customer", invite: $("c-invite").value }) });
-    custKey = r.api_key; store.set("infera-cust", custKey); alertKey(r.api_key); showCust();
+    const r = await call("/api/signup", { method: "POST", body: JSON.stringify({ email: $("c-email").value, kind: "customer", invite: $("c-invite").value, password: $("c-pass").value }) });
+    custKey = r.session || r.api_key; store.set("infera-cust", custKey); await showCust();
+    $("c-keyout").hidden = false; $("c-keyout").textContent = r.api_key + "\n\nCopy it now: it's shown only once.";
   } catch (e) { toast(e.message); }
 };
 $("c-signin").onclick = () => { custKey = $("c-key").value.trim(); store.set("infera-cust", custKey); showCust(); };
-$("c-signout").onclick = () => { custKey = ""; store.set("infera-cust", ""); $("cust-app").hidden = true; $("cust-signin").hidden = false; };
+$("c-login").onclick = async () => {
+  try {
+    const r = await call("/api/login", { method: "POST", body: JSON.stringify({ email: $("c-lemail").value, password: $("c-lpass").value, kind: "customer" }) });
+    custKey = r.session; store.set("infera-cust", custKey); showCust();
+  } catch (e) { toast(e.message); }
+};
+$("c-lpass").onkeydown = (e) => { if (e.key === "Enter") $("c-login").click(); };
+$("c-newkey").onclick = async () => {
+  if (!confirm("Make a new API key? The current key stops working right away.")) return;
+  try {
+    const r = await call("/api/account/new-key", { method: "POST", key: custKey });
+    $("c-keyout").hidden = false; $("c-keyout").textContent = r.api_key + "\n\nCopy it now: it's shown only once. The old key no longer works.";
+    if (custKey.startsWith("ik_cust_")) { custKey = r.api_key; store.set("infera-cust", custKey); }
+  } catch (e) { toast(e.message); }
+};
+$("c-savepw").onclick = async () => {
+  try { await call("/api/account/password", { method: "POST", key: custKey, body: JSON.stringify({ password: $("c-newpass").value }) }); $("c-setpw").hidden = true; toast("Password saved."); }
+  catch (e) { toast(e.message); }
+};
+$("c-signout").onclick = () => { if (custKey.startsWith("ik_ses_")) call("/api/logout", { method: "POST", key: custKey }).catch(() => {}); custKey = ""; store.set("infera-cust", ""); $("c-keyout").hidden = true; $("cust-app").hidden = true; $("cust-signin").hidden = false; };
 async function showCust() {
   if (!custKey) return;
   try {
     const d = await call("/api/customer", { key: custKey });
     $("cust-signin").hidden = true; $("cust-app").hidden = false;
+    checkPassword(custKey, "c-setpw");
     $("c-credits").textContent = usd(d.credits);
     $("cled-rows").innerHTML = (d.ledger || []).map(e => `<tr><td>${when(e.created_at)}</td><td>${esc(e.kind)}</td><td class="num ${e.amount < 0 ? "neg" : ""}">${usd(e.amount)}</td><td>${esc(e.note)}</td></tr>`).join("");
     const m = await call("/v1/models");

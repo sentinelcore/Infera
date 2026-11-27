@@ -180,6 +180,9 @@ func OpenStore(path string) (*Store, error) {
 		if err := st.MigrateVideos(); err != nil {
 			return nil, err
 		}
+		if err := st.MigrateAuth(); err != nil {
+			return nil, err
+		}
 		if err := st.MigrateAppeals(); err != nil {
 			return nil, err
 		}
@@ -206,6 +209,9 @@ func OpenStore(path string) (*Store, error) {
 	st.MigrateWallet()
 	st.MigratePerf()
 	if err := st.MigrateVideos(); err != nil {
+		return nil, err
+	}
+	if err := st.MigrateAuth(); err != nil {
 		return nil, err
 	}
 	if err := st.MigrateAppeals(); err != nil {
@@ -259,6 +265,9 @@ func (s *Store) CreateAccount(email, kind string, credits int64) (*Account, stri
 }
 
 func (s *Store) AccountByKey(key string) (*Account, error) {
+	if strings.HasPrefix(key, "ik_ses_") { // dashboard session from email + password sign-in
+		return s.sessionAccount(key)
+	}
 	a := &Account{}
 	err := s.queryRow(`SELECT id,email,kind,credits,payout_network,payout_address,payout_address_set_at,created_at FROM accounts WHERE key_hash=?`, hashSecret(key)).
 		Scan(&a.ID, &a.Email, &a.Kind, &a.Credits, &a.PayoutNetwork, &a.PayoutAddress, &a.PayoutAddressSetAt, &a.CreatedAt)

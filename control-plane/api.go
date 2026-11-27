@@ -30,13 +30,17 @@ func readJSON(r *http.Request, v any) error {
 
 // POST /api/signup {email, kind: owner|customer, invite}
 func (a *API) Signup(w http.ResponseWriter, r *http.Request) {
-	var in struct{ Email, Kind, Invite string }
+	var in struct{ Email, Kind, Invite, Password string }
 	if readJSON(r, &in) != nil || !strings.Contains(in.Email, "@") {
 		apiError(w, 400, "enter a valid email")
 		return
 	}
 	if a.inviteCode != "" && in.Invite != a.inviteCode {
 		apiError(w, 403, "beta invite code is wrong; ask the Infera team for one")
+		return
+	}
+	if in.Password != "" && !validPassword(in.Password) {
+		apiError(w, 400, "use a password of at least 8 characters")
 		return
 	}
 	credits := int64(0)
@@ -48,8 +52,17 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) {
 		apiError(w, 400, err.Error())
 		return
 	}
-	writeJSON(w, map[string]any{"account_id": acct.ID, "kind": acct.Kind, "api_key": key,
-		"note": "Save this key now. It is shown only once."})
+	out := map[string]any{"account_id": acct.ID, "kind": acct.Kind, "api_key": key,
+		"note": "Save this key now. It is shown only once."}
+	if in.Password != "" {
+		if a.st.SetPassword(acct.ID, in.Password) == nil {
+			if tok, err := a.st.NewSession(acct.ID); err == nil {
+				out["session"] = tok
+				out["note"] = "Signed in. Next time, sign in with your email and password."
+			}
+		}
+	}
+	writeJSON(w, out)
 }
 
 func (a *API) auth(w http.ResponseWriter, r *http.Request, kind string) *Account {
