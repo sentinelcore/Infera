@@ -359,6 +359,11 @@ fn served_models(cfg: &Config) -> Vec<String> {
             m.push(x.clone());
         }
     }
+    if media {
+        // Video Studio: draw code-rendered shots and edit finished videos (CPU is enough).
+        m.push("infera-render".into());
+        m.push("infera-compose".into());
+    }
     m
 }
 
@@ -390,7 +395,8 @@ async fn handle_offer(ctx: Arc<Ctx>, m: Value) {
     let busy_gpu = {
         let s = ctx.state.lock().unwrap();
         let video = &ctx.cfg.engine.video_model;
-        (m["job_type"].as_str() == Some("video") && !s.running.is_empty()) || (!video.is_empty() && s.running.values().any(|(j, _)| &j.model == video))
+        let is_video = m["job_type"].as_str() == Some("video") || (m["job_type"].as_str() == Some("studio") && &model == video);
+        (is_video && !s.running.is_empty()) || (!video.is_empty() && s.running.values().any(|(j, _)| &j.model == video))
     };
     if busy_gpu {
         send(&ctx.state, json!({"t": "decline", "job_id": job_id, "reason": "busy"}));
@@ -455,7 +461,7 @@ async fn handle_offer(ctx: Arc<Ctx>, m: Value) {
     send(&ctx.state, json!({"t": "accept", "job_id": job_id, "sandbox_pub": sandbox.public_b64}));
 
     let result = match tokio::time::timeout(Duration::from_secs(20), prx).await {
-        Ok(Ok((epk, n, c))) if matches!(m["job_type"].as_str(), Some("embeddings" | "transcription" | "speech" | "video")) => {
+        Ok(Ok((epk, n, c))) if matches!(m["job_type"].as_str(), Some("embeddings" | "transcription" | "speech" | "video" | "studio")) => {
             run_embed(&ctx, &job_id, &model, sandbox, &epk, &n, &c, m["job_type"].as_str().unwrap_or("")).await
         }
         Ok(Ok((epk, n, c))) => run_job(&ctx, &job_id, &model, sandbox, &epk, &n, &c, cancel_rx).await,
@@ -493,12 +499,13 @@ async fn handle_offer(ctx: Arc<Ctx>, m: Value) {
 async fn run_embed(ctx: &Arc<Ctx>, job_id: &str, model: &str, sandbox: SandboxKey, epk: &str, n: &str, c: &str, job_type: &str) -> Result<()> {
     let chan = sandbox.open(job_id, epk)?;
     let request: Value = serde_json::from_slice(&chan.open_down(n, c)?)?;
-    let kind = match job_type { "transcription" => "Transcription", "speech" => "Speech", "video" => "Video", _ => "Embeddings" };
+    let kind = match job_type { "transcription" => "Transcription", "speech" => "Speech", "video" => "Video", "studio" => "Studio", _ => "Embeddings" };
     ctx.state.lock().unwrap().log(format!("Running {} job {job_id} ({model}) in the sealed sandbox", kind.to_lowercase()));
     let res = match job_type {
         "transcription" => ctx.engine.transcribe(request).await,
         "speech" => ctx.engine.speak(request).await,
         "video" => ctx.engine.make_video(request).await,
+        "studio" => ctx.engine.studio(request).await,
         _ => ctx.engine.embed(request).await,
     };
     let (result, tin) = match res {
@@ -517,7 +524,7 @@ async fn run_embed(ctx: &Arc<Ctx>, job_id: &str, model: &str, sandbox: SandboxKe
     let receipt = format!("{job_id}|{model}|{hash}|{tin}|0|{}", unix());
     let sig = B64.encode(ctx.key.sign(receipt.as_bytes()).to_bytes());
     send(&ctx.state, json!({"t": "done", "job_id": job_id, "tokens_in": tin, "tokens_out": 0, "receipt": receipt, "sig": sig}));
-    let unit = match job_type { "transcription" => "s of audio", "speech" => "characters", "video" => "s of video", _ => "tokens" };
+    let unit = match job_type { "transcription" => "s of audio", "speech" => "characters", "video" => "s of video", "studio" => "step", _ => "tokens" };
     ctx.state.lock().unwrap().log(format!("{kind} job {job_id} done ({tin} {unit})"));
     Ok(())
 }

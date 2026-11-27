@@ -33,6 +33,8 @@ type Config struct {
 	AudioPrice    float64 // USD per audio minute for transcriptions
 	SpeechPrice   float64 // USD per 1M input characters for text to speech
 	VideoPrice    float64 // USD per second of generated video
+	RenderPrice   float64 // USD per second of code-rendered video (studio)
+	ComposePrice  float64 // USD per second of edited video (studio)
 	BatchDiscount float64 // fraction off for queued batch jobs
 	FirstToken    time.Duration
 	HedgeAfter    time.Duration // 0 = no hedged requests
@@ -76,6 +78,7 @@ type chatRequest struct {
 	rerun       bool              // this job is a verification re-run
 	queued      bool              // came through the batch queue
 	race        *hedgeRace        // set when this run is one side of a hedged request
+	fixedCost   int64             // studio steps: price set by the server (micro-USD)
 }
 
 // wantsTools: the request defines tools the model may call.
@@ -498,6 +501,9 @@ func (g *Gateway) abort(dev *DeviceRow, jobID, cause string, estPay float64, evi
 // jobCost prices a job: chat by input and output tokens, embeddings by input tokens.
 func (g *Gateway) jobCost(req chatRequest, tin, tout int) int64 {
 	var c int64
+	if req.fixedCost > 0 {
+		return req.fixedCost
+	}
 	if req.jobType == "transcription" { // tin = audio seconds
 		c = int64(math.Ceil(float64(tin) / 60 * g.cfg.AudioPrice * microUSD))
 	} else if req.jobType == "speech" || req.jobType == "video" {

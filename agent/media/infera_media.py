@@ -56,6 +56,62 @@ def encode_audio(pcm, rate, fmt):
     return p.stdout
 
 
+def tts_chunks(text, voice, speed=1.0):
+    """[(sentence, float32 samples at 24 kHz)] for the voice-over and its caption timings."""
+    import studio
+    if ARGS.mock:
+        np = __import__("numpy")
+        out = []
+        for s in studio.sentences(text):
+            n = int(24000 * max(0.8, 0.33 * len(s.split())))
+            out.append((s, (0.15 * np.sin(np.arange(n) / 9)).astype("float32")))
+        return out
+    global _tts
+    if _tts is None:
+        from kokoro import KPipeline
+        _tts = KPipeline(lang_code="a", repo_id="hexgrad/Kokoro-82M", device=ARGS.device if ARGS.device != "mps" else "cpu")
+    voice = VOICES.get(voice or "alloy", voice or "af_heart")
+    out = []
+    for s in studio.sentences(text):
+        parts = [a.numpy() if hasattr(a, "numpy") else a for _, _, a in _tts(s, voice=voice, speed=float(speed or 1))]
+        if parts:
+            out.append((s, __import__("numpy").concatenate(parts)))
+    return out
+
+
+def upload(url, path, extra=None):
+    import hashlib
+    import urllib.request
+    data = open(path, "rb").read()
+    req = urllib.request.Request(url, data=data, method="PUT", headers={"Content-Type": "application/octet-stream"})
+    with urllib.request.urlopen(req, timeout=600) as r:
+        r.read()
+    out = {"bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+    out.update(extra or {})
+    return out
+
+
+def studio_step(task, req):
+    import studio
+    if task == "render":
+        return studio.render(req, upload)
+    if task == "compose":
+        return studio.compose(req, upload)
+    with tempfile.TemporaryDirectory() as d:
+        if task == "speech":
+            path = os.path.join(d, "voice.wav")
+            dur, caps = studio.speech_wav(tts_chunks(req.get("text", ""), req.get("voice"), req.get("speed") or 1), path)
+            return upload(req["output_url"], path, {"duration": dur, "chunks": caps})
+        if task == "clip":
+            path = os.path.join(d, "clip.mp4")
+            if ARGS.mock:
+                studio.mock_clip(req, path)
+            else:
+                open(path, "wb").write(video(req))
+            return upload(req["output_url"], path, {"seconds": int(req.get("seconds") or 5)})
+    raise ValueError("unknown studio task " + task)
+
+
 def speech(req):
     text, fmt = req.get("input", ""), req.get("response_format") or "mp3"
     if ARGS.mock:  # a short tone, as WAV
@@ -142,12 +198,24 @@ class H(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path.startswith("/v1/models") or self.path == "/health":
-            models = [m for m in (ARGS.tts_id, ARGS.video_id, ARGS.stt_id) if m]
+            models = [m for m in (ARGS.tts_id, ARGS.video_id, ARGS.stt_id) if m] + ["infera-render", "infera-compose"]
             return self.reply(200, {"object": "list", "data": [{"id": m, "object": "model"} for m in models]})
         self.reply(404, {"error": "not found"})
 
     def do_POST(self):
         body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+        if self.path.startswith("/v1/studio/"):
+            task = self.path.rsplit("/", 1)[-1]
+            try:
+                if task in ("clip", "speech"):  # GPU / model work: one at a time
+                    if (task == "clip" and not ARGS.video_id) or (task == "speech" and not ARGS.tts_id):
+                        return self.reply(404, {"error": "this server doesn't serve studio " + task})
+                    with LOCK:
+                        return self.reply(200, studio_step(task, json.loads(body)))
+                return self.reply(200, studio_step(task, json.loads(body)))  # render / compose: CPU
+            except Exception as e:
+                print("studio error:", repr(e), file=sys.stderr, flush=True)
+                return self.reply(500, {"error": str(e)[:500]})
         try:
             with LOCK:
                 if self.path == "/v1/audio/speech" and ARGS.tts_id:
@@ -176,7 +244,9 @@ def main():
     p.add_argument("--mock", action="store_true")
     p.add_argument("--check", action="store_true", help="import everything and exit (used by setup)")
     ARGS = p.parse_args()
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # studio.py sits next to this file
     if ARGS.check:
+        import numpy, PIL, imageio_ffmpeg  # noqa: F401,E401  (studio: render and compose)
         if ARGS.tts_id:
             import kokoro  # noqa: F401
         if ARGS.video_id:

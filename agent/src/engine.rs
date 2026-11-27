@@ -301,6 +301,25 @@ impl Engine {
         Ok((serde_json::json!({"video_b64": B64.encode(&mp4), "seconds": secs, "size": request["size"]}), secs))
     }
 
+    /// Video Studio step (render, compose, clip, speech): the media server downloads its inputs
+    /// and uploads its output to the signed links in `request` itself; returns its small JSON reply.
+    pub async fn studio(&self, request: serde_json::Value) -> Result<(serde_json::Value, u32)> {
+        if self.media_url.is_empty() {
+            bail!("this device doesn't run studio jobs");
+        }
+        let task = request["task"].as_str().unwrap_or("").to_string();
+        if !matches!(task.as_str(), "render" | "compose" | "clip" | "speech") {
+            bail!("unknown studio task {task}");
+        }
+        let resp = self.http.post(format!("{}/v1/studio/{task}", self.media_url)).json(&request)
+            .timeout(Duration::from_secs(28 * 60)).send().await?;
+        if !resp.status().is_success() {
+            bail!("media server returned {} for studio {task}", resp.status());
+        }
+        let v: serde_json::Value = resp.json().await?;
+        Ok((v, 1))
+    }
+
     pub async fn stop(&mut self) {
         if let Some(c) = self.media_child.as_mut() {
             let _ = c.kill().await;

@@ -50,7 +50,7 @@ th{color:var(--muted);font-size:.8rem;text-transform:uppercase;letter-spacing:.0
 <div class="layout">
 <nav class="toc" aria-label="Contents">
   <b>Start</b><a href="#quickstart">Quickstart</a><a href="#auth">Authentication</a><a href="#models">Models &amp; prices</a>
-  <b>Endpoints</b><a href="#chat">Chat completions</a><a href="#completions">Completions (code)</a><a href="#tools">Tool calling</a><a href="#embeddings">Embeddings</a><a href="#transcriptions">Transcriptions</a><a href="#speech">Text to speech</a><a href="#videos">Text to video</a><a href="#batch">Batch API</a><a href="#list-models">List models</a>
+  <b>Endpoints</b><a href="#chat">Chat completions</a><a href="#completions">Completions (code)</a><a href="#tools">Tool calling</a><a href="#embeddings">Embeddings</a><a href="#transcriptions">Transcriptions</a><a href="#speech">Text to speech</a><a href="#videos">Text to video</a><a href="#studio">Video Studio</a><a href="#batch">Batch API</a><a href="#list-models">List models</a>
   <b>Guides</b><a href="#sdks">SDKs &amp; tools</a><a href="#routing">How requests are served</a><a href="#errors">Errors</a><a href="#limits">Rate limits</a><a href="#privacy">Privacy</a>
 </nav>
 <main>
@@ -182,6 +182,17 @@ print(t.text)</code></pre>
   -d '{"model":"wan2.1-t2v-1.3b","prompt":"A red kite over a green hill at sunset","seconds":"5"}'
 curl https://infera.valanor.network/v1/videos/video_… -H "Authorization: Bearer ik_cust_…"
 curl https://infera.valanor.network/v1/videos/video_…/content -H "Authorization: Bearer ik_cust_…" -o kite.mp4</code></pre>
+
+<h2 id="studio">Video Studio</h2>
+<p>One request in, one finished video out: Infera plans the shots, records a voice-over, films AI shots on GPUs, draws title and fact cards in code, adds captions and edits everything together, spread across many devices. Asynchronous: create, poll (or use <code>webhook_url</code>), download.</p>
+<p><code>POST /v1/studio/videos</code> with <code>prompt</code> (the brief), <code>duration</code> (10–60 s), <code>aspect</code> (<code>16:9</code>, <code>9:16</code>, <code>1:1</code>), <code>voice</code> (as in text to speech), <code>voiceover</code> and <code>captions</code> (default true), <code>review</code> (true: stop after planning so your user can approve or edit the plan), <code>webhook_url</code> (https; called when the plan is ready and when the video is done), and optionally your own <code>shots</code> to skip planning.</p>
+<p>A shot is <code>{"type":"ai","seconds":4,"prompt":"…","narration":"…"}</code> (filmed by an AI video model) or <code>{"type":"card","seconds":3,"text":"headline","sub":"smaller line","narration":"…"}</code> (designed graphic). With <code>review</code>, the status becomes <code>awaiting_approval</code> and <code>plan</code> holds the shots; send <code>POST /v1/studio/videos/{id}/approve</code> with <code>{}</code> to accept or <code>{"shots":[…]}</code> to replace them. Statuses: <code>planning</code>, <code>awaiting_approval</code>, <code>voicing</code>, <code>rendering</code>, <code>editing</code>, <code>completed</code>, <code>failed</code>; <code>progress</code> is 0–100 and each shot has its own <code>status</code>. Finished videos are kept 48 hours.</p>
+<pre><code>curl https://infera.valanor.network/v1/studio/videos -H "Authorization: Bearer ik_cust_…" \
+  -d '{"prompt":"30 second ad for a small coffee roaster: fresh beans, morning light, order online","duration":30,"aspect":"9:16","review":true}'
+curl https://infera.valanor.network/v1/studio/videos/studio_… -H "Authorization: Bearer ik_cust_…"          # plan + progress
+curl -X POST https://infera.valanor.network/v1/studio/videos/studio_…/approve -H "Authorization: Bearer ik_cust_…" -d '{}'
+curl https://infera.valanor.network/v1/studio/videos/studio_…/content -H "Authorization: Bearer ik_cust_…" -o ad.mp4</code></pre>
+<p>Billed per step: planning like chat, voice per character, AI shots per second of video, drawn cards and editing per second of output.</p>
 
 <h2 id="batch">Batch API</h2>
 <p>For work that can wait up to 24 hours, at a discount (<span id="batch-off">50%</span> off). Jobs run whenever a suitable device is free, phones included.</p>

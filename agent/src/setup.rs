@@ -104,11 +104,9 @@ pub async fn run(code: String, server: String, no_service: bool, want: String) -
     let nvidia = vram > 0.0 && !apple;
     let pick = |kind: &str| catalog.iter().find(|m| m.kind == kind && m.gguf_url.is_empty() && fits(m) && (nvidia || (apple && kind == "speech"))).cloned();
     let (tts, video, gpu_stt) = (pick("speech"), pick("video"), pick("transcription"));
-    let media = if tts.is_some() || video.is_some() || gpu_stt.is_some() {
-        setup_media(nvidia, vram, tts.as_ref(), video.as_ref(), gpu_stt.as_ref()).await
-    } else {
-        None
-    };
+    // Every computer gets the media server: even without a GPU it renders and edits Video
+    // Studio shots (paid work for CPUs).
+    let media = setup_media(nvidia, vram, tts.as_ref(), video.as_ref(), gpu_stt.as_ref()).await;
 
     let mut c = crate::config::load()?;
     c.engine.media_cmd = media.clone().unwrap_or_default();
@@ -244,7 +242,11 @@ async fn ensure_ollama(http: &reqwest::Client) -> bool {
 /// Installs the media server (its own Python with PyTorch, Kokoro, Wan 2.1 via diffusers and
 /// faster-whisper) with `uv`. Returns the command that starts it, or None if anything fails.
 async fn setup_media(nvidia: bool, vram: f64, tts: Option<&Model>, video: Option<&Model>, stt: Option<&Model>) -> Option<Vec<String>> {
-    println!("    Setting up speech and video (one-time download of a few GB; takes several minutes) …");
+    if tts.is_some() || video.is_some() || stt.is_some() {
+        println!("    Setting up speech and video (one-time download of a few GB; takes several minutes) …");
+    } else {
+        println!("    Setting up Video Studio rendering (small one-time download) …");
+    }
     let home = crate::config::dir();
     let run = |cmd: &mut std::process::Command| cmd.status().map(|s| s.success()).unwrap_or(false);
     let user_bin = dirs::home_dir().unwrap_or_default().join(".local").join("bin");
@@ -273,11 +275,11 @@ async fn setup_media(nvidia: bool, vram: f64, tts: Option<&Model>, video: Option
         return None;
     }
     let pip = |args: &[&str]| run(std::process::Command::new(&uv).args(["pip", "install", "--python"]).arg(&py).args(args));
-    if nvidia && !pip(&["torch", "--index-url", "https://download.pytorch.org/whl/cu124"]) {
+    if nvidia && (video.is_some() || stt.is_some() || tts.is_some()) && !pip(&["torch", "--index-url", "https://download.pytorch.org/whl/cu124"]) {
         println!("    Couldn't install PyTorch for the GPU; skipping speech and video.");
         return None;
     }
-    let mut pkgs = vec!["numpy", "imageio-ffmpeg"];
+    let mut pkgs = vec!["numpy", "imageio-ffmpeg", "pillow>=10.1"];
     if tts.is_some() {
         pkgs.extend(["kokoro", "soundfile"]);
     }
@@ -293,6 +295,7 @@ async fn setup_media(nvidia: bool, vram: f64, tts: Option<&Model>, video: Option
     }
     let script = home.join("infera_media.py");
     std::fs::write(&script, include_str!("../media/infera_media.py")).ok()?;
+    std::fs::write(home.join("studio.py"), include_str!("../media/studio.py")).ok()?;
     let mut cmd = vec![py.display().to_string(), script.display().to_string(),
         "--device".into(), if nvidia { "cuda" } else { "cpu" }.into(), "--vram".into(), format!("{vram:.0}")];
     for (flag, m) in [("--tts-id", tts), ("--video-id", video), ("--stt-id", stt)] {

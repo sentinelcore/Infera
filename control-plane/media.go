@@ -337,9 +337,18 @@ func (g *Gateway) mediaCost(jobType string, units int) int64 {
 	return int64(math.Ceil(float64(units) / 1e6 * g.cfg.SpeechPrice * microUSD))
 }
 
+// mediaFixed: studio render / compose steps, per second of output.
+func (g *Gateway) mediaFixed(task string, seconds float64) int64 {
+	p := g.cfg.RenderPrice
+	if task == "compose" {
+		p = g.cfg.ComposePrice
+	}
+	return int64(math.Ceil(math.Max(seconds, 1) * p * microUSD))
+}
+
 // jobTimeout: video takes minutes before any output arrives.
 func (g *Gateway) jobTimeout(req chatRequest) (first, deadline time.Duration) {
-	if req.jobType == "video" {
+	if req.jobType == "video" || req.jobType == "studio" {
 		return 25 * time.Minute, 30 * time.Minute
 	}
 	return g.cfg.FirstToken, g.cfg.JobDeadline

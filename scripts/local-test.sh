@@ -39,6 +39,7 @@ NODE="$ROOT/agent/target/release/infera"
 echo "3/6 Starting the server on http://localhost:$PORT …"
 rm -f "$WORK"/infera.db*
 INFERA_DB="$WORK/infera.db" INFERA_ADDR=":$PORT" INFERA_ADMIN_TOKEN=local-admin INFERA_INVITE_CODE= \
+  INFERA_PUBLIC_URL="http://localhost:$PORT" INFERA_ARTIFACTS="$WORK/artifacts" \
   INFERA_CANARY_MINUTES=5 "$WORK/infera-server" > "$WORK/server.log" 2>&1 &
 echo $! > "$WORK/server.pid"
 for _ in $(seq 1 30); do curl -sf "localhost:$PORT/healthz" >/dev/null && break; sleep 0.3; done
@@ -56,7 +57,16 @@ if [ "${1:-}" != "--mock" ] && curl -sf localhost:11434/api/tags >/dev/null 2>&1
   TAG=$(curl -s localhost:11434/api/tags | python3 -c "import sys,json;m=json.load(sys.stdin)['models'];c=[x['name'] for x in m if 'embed' not in x['name'] and 'minilm' not in x['name']];print(c[0] if c else '')")
 fi
 # Speech and video: the media server in stand-in mode (the real one needs a GPU and PyTorch).
-python3 "$ROOT/agent/media/infera_media.py" --mock --port 18179 --tts-id kokoro-82m --video-id wan2.1-t2v-1.3b > "$WORK/media.log" 2>&1 &
+# Video Studio rendering needs numpy, Pillow and ffmpeg: a small virtualenv, made once.
+MEDIA_PY="${MEDIA_PY:-}"
+if [ -z "$MEDIA_PY" ]; then
+  if python3 -c "import numpy, PIL, imageio_ffmpeg" 2>/dev/null; then MEDIA_PY=python3
+  else
+    [ -x "$WORK/media-venv/bin/python" ] || { python3 -m venv "$WORK/media-venv" && "$WORK/media-venv/bin/pip" install -q numpy "pillow>=10.1" imageio-ffmpeg; }
+    MEDIA_PY="$WORK/media-venv/bin/python"
+  fi
+fi
+"$MEDIA_PY" "$ROOT/agent/media/infera_media.py" --mock --port 18179 --tts-id kokoro-82m --video-id wan2.1-t2v-1.3b > "$WORK/media.log" 2>&1 &
 echo $! > "$WORK/media.pid"
 MEDIA="--media-url http://127.0.0.1:18179 --tts-model kokoro-82m --video-model wan2.1-t2v-1.3b"
 if [ -n "${TAG:-}" ]; then
@@ -146,6 +156,26 @@ done
 curl -s "localhost:$PORT/v1/videos/$VID/content" -H "Authorization: Bearer $CUST" -o "$WORK/video.mp4"
 grep -q ftyp "$WORK/video.mp4" || { echo "TEST FAILED (video content)"; exit 1; }
 echo "   Video: $VID completed, $(wc -c < "$WORK/video.mp4") bytes"
+echo "   Video Studio check (plan for approval, then a finished video) …"
+SID=$(curl -s "localhost:$PORT/v1/studio/videos" -H "Authorization: Bearer $CUST" \
+  -d '{"prompt":"A 12 second ad for a small coffee roaster: fresh beans, morning light, order online","duration":12,"aspect":"9:16","review":true}' \
+  | python3 -c "import sys,json;d=json.load(sys.stdin);assert d['object']=='studio.video',d;print(d['id'])") || { echo "TEST FAILED (studio create)"; exit 1; }
+for _ in $(seq 1 120); do
+  SS=$(curl -s "localhost:$PORT/v1/studio/videos/$SID" -H "Authorization: Bearer $CUST" | python3 -c "import sys,json;print(json.load(sys.stdin)['status'])")
+  [ "$SS" = awaiting_approval ] || [ "$SS" = failed ] && break; sleep 1
+done
+[ "$SS" = awaiting_approval ] || { echo "TEST FAILED (studio plan: $SS)"; curl -s "localhost:$PORT/v1/studio/videos/$SID" -H "Authorization: Bearer $CUST"; exit 1; }
+curl -s "localhost:$PORT/v1/studio/videos/$SID" -H "Authorization: Bearer $CUST" | python3 -c "
+import sys,json;p=json.load(sys.stdin)['plan'];print('   Plan by', p['director'], '·', len(p['shots']), 'shots:', ', '.join(s['type']+' '+str(s['seconds'])+'s' for s in p['shots']))"
+curl -s "localhost:$PORT/v1/studio/videos/$SID/approve" -H "Authorization: Bearer $CUST" -d '{}' >/dev/null
+for _ in $(seq 1 240); do
+  SS=$(curl -s "localhost:$PORT/v1/studio/videos/$SID" -H "Authorization: Bearer $CUST" | python3 -c "import sys,json;print(json.load(sys.stdin)['status'])")
+  [ "$SS" = completed ] || [ "$SS" = failed ] && break; sleep 1
+done
+[ "$SS" = completed ] || { echo "TEST FAILED (studio video: $SS)"; curl -s "localhost:$PORT/v1/studio/videos/$SID" -H "Authorization: Bearer $CUST"; tail -20 "$WORK/media.log"; exit 1; }
+curl -s "localhost:$PORT/v1/studio/videos/$SID/content" -H "Authorization: Bearer $CUST" -o "$WORK/studio.mp4"
+"$MEDIA_PY" -c "
+import imageio_ffmpeg as f,sys;g=f.read_frames(sys.argv[1]);m=next(g);assert m['size']==(720,1280) and m['duration']>=11 and m.get('audio_codec'),m;print('   Studio video:', m['size'], str(m['duration'])+'s, audio', m['audio_codec'])" "$WORK/studio.mp4" || { echo "TEST FAILED (studio content)"; exit 1; }
 echo "   Batch queue check …"
 BODY="{\"requests\":[{\"model\":\"$MODEL\",\"max_tokens\":30,\"messages\":[{\"role\":\"user\",\"content\":\"Name a colour.\"}]},{\"model\":\"$MODEL\",\"max_tokens\":30,\"messages\":[{\"role\":\"user\",\"content\":\"Name a fruit.\"}]}"
 [ -n "${EMBED:-}" ] && BODY="$BODY,{\"model\":\"$EMBED\",\"input\":\"batched text\"}"

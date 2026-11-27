@@ -183,6 +183,9 @@ func OpenStore(path string) (*Store, error) {
 		if err := st.MigrateAuth(); err != nil {
 			return nil, err
 		}
+		if err := st.MigrateStudio(); err != nil {
+			return nil, err
+		}
 		if err := st.MigrateAppeals(); err != nil {
 			return nil, err
 		}
@@ -212,6 +215,9 @@ func OpenStore(path string) (*Store, error) {
 		return nil, err
 	}
 	if err := st.MigrateAuth(); err != nil {
+		return nil, err
+	}
+	if err := st.MigrateStudio(); err != nil {
 		return nil, err
 	}
 	if err := st.MigrateAppeals(); err != nil {

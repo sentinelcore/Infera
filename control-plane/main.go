@@ -46,6 +46,8 @@ func main() {
 		AudioPrice:    envFloat("INFERA_PRICE_AUDIO_MIN", 0.003),
 		SpeechPrice:   envFloat("INFERA_PRICE_TTS_M", 1.0),
 		VideoPrice:    envFloat("INFERA_PRICE_VIDEO_SEC", 0.04),
+		RenderPrice:   envFloat("INFERA_PRICE_RENDER_SEC", 0.002),
+		ComposePrice:  envFloat("INFERA_PRICE_COMPOSE_SEC", 0.001),
 		BatchDiscount: envFloat("INFERA_BATCH_DISCOUNT", 0.5),
 		FallbackURL:   os.Getenv("INFERA_FALLBACK_URL"),
 		FallbackKey:   os.Getenv("INFERA_FALLBACK_KEY"),
@@ -95,6 +97,14 @@ func main() {
 	mux.HandleFunc("POST /v1/videos", gw.CreateVideo)
 	mux.HandleFunc("GET /v1/videos/{id}", gw.GetVideo)
 	mux.HandleFunc("GET /v1/videos/{id}/content", gw.VideoContent)
+	art := NewArtifacts()
+	studio := &Studio{g: gw, art: art}
+	mux.HandleFunc("PUT /api/artifacts/{id}", art.Put)
+	mux.HandleFunc("GET /api/artifacts/{id}", art.Get)
+	mux.HandleFunc("POST /v1/studio/videos", studio.Create)
+	mux.HandleFunc("GET /v1/studio/videos/{id}", studio.Get)
+	mux.HandleFunc("GET /v1/studio/videos/{id}/content", studio.Content)
+	mux.HandleFunc("POST /v1/studio/videos/{id}/approve", studio.Approve)
 	mux.HandleFunc("POST /v1/batch", gw.BatchSubmit)
 	mux.HandleFunc("GET /v1/batch", gw.BatchList)
 	mux.HandleFunc("GET /v1/batch/{id}", gw.BatchGet)
