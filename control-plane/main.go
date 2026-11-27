@@ -102,6 +102,7 @@ func main() {
 	mux.HandleFunc("PUT /api/artifacts/{id}", art.Put)
 	mux.HandleFunc("GET /api/artifacts/{id}", art.Get)
 	mux.HandleFunc("POST /v1/studio/videos", studio.Create)
+	mux.HandleFunc("GET /v1/studio/videos", studio.List)
 	mux.HandleFunc("GET /v1/studio/videos/{id}", studio.Get)
 	mux.HandleFunc("GET /v1/studio/videos/{id}/content", studio.Content)
 	mux.HandleFunc("POST /v1/studio/videos/{id}/approve", studio.Approve)
@@ -184,6 +185,7 @@ func main() {
 	mux.HandleFunc("GET /app", page("index.html"))
 	mux.HandleFunc("GET /terms", page("terms.html"))
 	mux.HandleFunc("GET /docs", page("docs.html"))
+	mux.HandleFunc("GET /studio", page("studio.html"))
 	mux.HandleFunc("GET /privacy-policy", page("privacy-policy.html"))
 	mux.Handle("GET /", http.FileServer(http.FS(sub)))
 

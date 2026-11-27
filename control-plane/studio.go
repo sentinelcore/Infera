@@ -76,6 +76,7 @@ type studioParams struct {
 	Captions  *bool  `json:"captions"`
 	Webhook   string `json:"webhook_url"`
 	Review    bool   `json:"review"` // stop after planning so the user can approve or edit the plan
+	Script    string `json:"script"` // optional narration script: used word for word, split across shots
 	// Optional: the app's own shot list (skips the director), same shape as plan.shots.
 	Shots   []studioShot `json:"shots"`
 	Palette []string     `json:"palette"`
@@ -100,6 +101,26 @@ type studioPlan struct {
 	Shots    []studioShot `json:"shots"`
 	Director string       `json:"director"` // model that wrote the plan, or "template"
 	Voice    string       `json:"voice_status,omitempty"`
+	Exec     *studioExec  `json:"execution,omitempty"` // how the network will make it (shown before approval)
+}
+
+// studioExec: which devices take which steps, with time and cost estimates.
+type studioExec struct {
+	Steps       []execStep `json:"steps"`
+	EstSeconds  int        `json:"est_seconds"`  // wall-clock, with steps in parallel
+	EstCostUSD  float64    `json:"est_cost_usd"` // upper estimate
+	DevicesUsed int        `json:"devices_used"`
+	Note        string     `json:"note"`
+}
+
+type execStep struct {
+	Step       string   `json:"step"` // voice-over | shot 3 | edit
+	Kind       string   `json:"kind"` // ai | card | voice | edit
+	Model      string   `json:"model"`
+	Devices    []string `json:"devices"` // kinds of devices online for it, e.g. "Windows PC (GPU)"
+	Parts      int      `json:"parts"`   // frame ranges, for cards
+	EstSeconds int      `json:"est_seconds"`
+	EstCostUSD float64  `json:"est_cost_usd"`
 }
 
 type Studio struct {
@@ -213,6 +234,7 @@ func (st *Studio) run(id string, acct *Account, p studioParams) {
 	if plan == nil {
 		plan = st.direct(acct, p)
 	}
+	plan.Exec = st.execution(plan, p)
 	if p.Review {
 		st.savePlan(id, plan, &mu)
 		st.set(id, map[string]any{"status": "awaiting_approval"})
@@ -345,6 +367,131 @@ func (st *Studio) produce(id string, acct *Account, p studioParams, plan *studio
 	st.notify(id, p)
 }
 
+// devicesFor describes the online devices serving model, without naming anyone's device.
+func (st *Studio) devicesFor(model string) []string {
+	st.g.hub.mu.Lock()
+	nodes := make([]*Node, 0, len(st.g.hub.nodes))
+	for _, n := range st.g.hub.nodes {
+		nodes = append(nodes, n)
+	}
+	st.g.hub.mu.Unlock()
+	count := map[string]int{}
+	for _, n := range nodes {
+		n.mu.Lock()
+		ok := n.Online && contains(n.Models, model)
+		id := n.ID
+		n.mu.Unlock()
+		if !ok {
+			continue
+		}
+		kind := "computer"
+		if d, err := st.g.st.Device(id); err == nil {
+			pl := strings.ToLower(d.Platform)
+			switch {
+			case strings.Contains(pl, "android") || strings.Contains(pl, "ios"):
+				kind = "phone"
+			case strings.Contains(pl, "macos") || strings.Contains(pl, "darwin"):
+				kind = "Mac"
+			case strings.Contains(pl, "windows"):
+				kind = "Windows PC"
+			case strings.Contains(pl, "linux"):
+				kind = "Linux PC"
+			}
+			if strings.Contains(strings.ToLower(d.Bench), "nvidia") || strings.Contains(strings.ToLower(d.Bench), "geforce") {
+				kind += " (NVIDIA GPU)"
+			}
+		}
+		count[kind]++
+	}
+	var out []string
+	for k, c := range count {
+		out = append(out, fmt.Sprintf("%d× %s", c, k))
+	}
+	sort.Strings(out)
+	return out
+}
+
+// execution: how the plan will run on the devices online now. Times are rough estimates.
+func (st *Studio) execution(plan *studioPlan, p studioParams) *studioExec {
+	e := &studioExec{Note: "Estimates from typical speeds; actual times depend on which devices are free."}
+	cost := func(c int64) float64 { return math.Round(float64(c)/microUSD*10000) / 10000 }
+	used := map[string]bool{}
+	mark := func(model string) {
+		st.g.hub.mu.Lock()
+		defer st.g.hub.mu.Unlock()
+		for _, n := range st.g.hub.nodes {
+			n.mu.Lock()
+			if n.Online && model != "" && contains(n.Models, model) {
+				used[n.ID] = true
+			}
+			n.mu.Unlock()
+		}
+	}
+	voiceSecs := 0
+	narr := narrationOf(plan)
+	if (p.Voiceover == nil || *p.Voiceover) && narr != "" {
+		model := ""
+		for _, c := range catalog() {
+			if c.Kind == "speech" && st.online(c.ID) {
+				model = c.ID
+				break
+			}
+		}
+		voiceSecs = 5 + len(narr)/40
+		e.Steps = append(e.Steps, execStep{Step: "voice-over", Kind: "voice", Model: model, Devices: st.devicesFor(model), EstSeconds: voiceSecs,
+			EstCostUSD: cost(st.g.mediaCost("speech", len([]rune(narr))))})
+		mark(model)
+	}
+	video := st.videoModel()
+	gpus, renderers := 0, 0
+	for _, d := range st.devicesFor(modelRender) {
+		var n int
+		fmt.Sscanf(d, "%d×", &n)
+		renderers += n
+	}
+	for _, d := range st.devicesFor(video) {
+		var n int
+		fmt.Sscanf(d, "%d×", &n)
+		gpus += n
+	}
+	aiCount, cardMax, total := 0, 0, 0.0
+	for i, s := range plan.Shots {
+		total += s.Seconds
+		if s.Type == "ai" && video != "" {
+			aiCount++
+			secs := int(math.Min(5, math.Max(1, math.Round(s.Seconds))))
+			e.Steps = append(e.Steps, execStep{Step: fmt.Sprintf("shot %d", i+1), Kind: "ai", Model: video, Devices: st.devicesFor(video), Parts: 1,
+				EstSeconds: 150, EstCostUSD: cost(st.g.mediaCost("video", secs))})
+			continue
+		}
+		parts := 1
+		if renderers > 1 {
+			parts = int(math.Min(float64(renderers), math.Ceil(s.Seconds/studioRangeSecs)))
+		}
+		t := int(math.Ceil(s.Seconds*studioFPS*0.09/float64(parts))) + 3
+		cardMax = max(cardMax, t)
+		e.Steps = append(e.Steps, execStep{Step: fmt.Sprintf("shot %d", i+1), Kind: "card", Model: modelRender, Devices: st.devicesFor(modelRender), Parts: parts,
+			EstSeconds: t, EstCostUSD: cost(st.g.mediaFixed("render", s.Seconds))})
+	}
+	editSecs := 10 + int(total*0.5)
+	e.Steps = append(e.Steps, execStep{Step: "edit", Kind: "edit", Model: modelCompose, Devices: st.devicesFor(modelCompose), Parts: 1,
+		EstSeconds: editSecs, EstCostUSD: cost(st.g.mediaFixed("compose", total))})
+	mark(video)
+	mark(modelRender)
+	mark(modelCompose)
+	shotsSecs := cardMax
+	if aiCount > 0 && gpus > 0 {
+		shotsSecs = max(shotsSecs, 150*int(math.Ceil(float64(aiCount)/float64(gpus))))
+	}
+	e.EstSeconds = voiceSecs + shotsSecs + editSecs
+	for _, s := range e.Steps {
+		e.EstCostUSD += s.EstCostUSD
+	}
+	e.EstCostUSD = math.Round(e.EstCostUSD*10000) / 10000
+	e.DevicesUsed = len(used)
+	return e
+}
+
 // POST /v1/studio/videos/{id}/approve {shots?, palette?}: start rendering an approved plan,
 // optionally with the user's edits.
 func (st *Studio) Approve(w http.ResponseWriter, r *http.Request) {
@@ -399,6 +546,7 @@ func (st *Studio) Approve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var mu sync.Mutex
+	plan.Exec = st.execution(plan, p)
 	st.savePlan(id, plan, &mu)
 	go st.produce(id, acct, p, plan)
 	v, _ := st.view(id, acct.ID)
@@ -597,6 +745,29 @@ func (st *Studio) view(id, acctID string) (*studioView, error) {
 	return v, nil
 }
 
+// GET /v1/studio/videos: the account's 20 most recent studio videos.
+func (st *Studio) List(w http.ResponseWriter, r *http.Request) {
+	acct := st.g.customer(w, r)
+	if acct == nil {
+		return
+	}
+	rows, err := st.g.st.query(`SELECT id,status,prompt,created_at FROM studio_videos WHERE account_id=? ORDER BY created_at DESC LIMIT 20`, acct.ID)
+	if err != nil {
+		apiError(w, 500, "could not list videos")
+		return
+	}
+	defer rows.Close()
+	out := []map[string]any{}
+	for rows.Next() {
+		var id, status, prompt string
+		var created int64
+		if rows.Scan(&id, &status, &prompt, &created) == nil {
+			out = append(out, map[string]any{"id": id, "object": "studio.video", "status": status, "prompt": prompt, "created_at": created})
+		}
+	}
+	writeJSON(w, map[string]any{"object": "list", "data": out})
+}
+
 func (st *Studio) Get(w http.ResponseWriter, r *http.Request) {
 	acct := st.g.customer(w, r)
 	if acct == nil {
@@ -644,13 +815,17 @@ Rules:
 - "card" shots are designed graphics: "text" is a short headline (max 6 words), "sub" an optional line (max 10 words). Use cards for the opening title, key facts and the final call to action.
 - Start with a card, end with a card, mostly "ai" shots between.
 - "narration" is what the voice-over says during that shot: one short sentence, natural spoken English.
-Video request: %s /no_think`
+Video request: %s%s /no_think`
 
 // direct asks a chat model on the network for the plan; falls back to a template.
 func (st *Studio) direct(acct *Account, p studioParams) *studioPlan {
 	minShots, maxShots := max(3, p.Duration/5), min(studioMaxShots, max(4, p.Duration/2))
 	if model := st.chatModel(); model != "" {
-		msg, _ := json.Marshal(map[string]string{"role": "user", "content": fmt.Sprintf(directorPrompt, p.Duration, minShots, maxShots, p.Prompt)})
+		script := ""
+		if strings.TrimSpace(p.Script) != "" {
+			script = "\nNarration script (use these words exactly and in order; split them across the shots' \"narration\" fields; pick visuals that match each line):\n" + p.Script
+		}
+		msg, _ := json.Marshal(map[string]string{"role": "user", "content": fmt.Sprintf(directorPrompt, p.Duration, minShots, maxShots, p.Prompt, script)})
 		req := chatRequest{Model: model, Messages: []json.RawMessage{msg}, MaxTokens: 1500, Privacy: "sandboxed", InferaBatch: true}
 		raw, _ := json.Marshal(map[string]any{"model": model, "messages": []json.RawMessage{msg}, "max_tokens": 1500, "temperature": 0.7})
 		for attempt := 0; attempt < 2; attempt++ {
@@ -732,16 +907,26 @@ func parsePlan(text string, duration int) *studioPlan {
 // templatePlan: a sensible video when no chat model is online or its answer didn't parse.
 var briefLead = regexp.MustCompile(`(?i)^\s*(please\s+)?((make|create|generate)\s+)?(me\s+)?((a|an)\s+)?(\d+[- ]?(second|sec|s|minute|min)s?\s+)?(short\s+)?(promo(tional)?\s+|explainer\s+|social\s+)?(ad|advert|video|clip|reel|explainer)\s+(for|about|on|of)\s+`)
 
-func templatePlan(p studioParams) *studioPlan {
-	brief := briefLead.ReplaceAllString(p.Prompt, "")
-	topic, details := brief, ""
+// splitBrief: "30 second ad for a coffee roaster: fresh beans" -> brief without the
+// preamble, topic "A coffee roaster", details "fresh beans".
+func splitBrief(prompt string) (brief, topic, details string) {
+	brief = strings.TrimSpace(briefLead.ReplaceAllString(prompt, ""))
+	topic = brief
 	if i := strings.IndexAny(brief, ":-–"); i > 0 {
-		topic, details = brief[:i], brief[i+1:]
+		topic, details = brief[:i], strings.TrimSpace(brief[i+1:])
 	}
 	topic = strings.TrimSpace(topic)
 	if topic != "" {
 		topic = strings.ToUpper(topic[:1]) + topic[1:]
 	}
+	return
+}
+
+func templatePlan(p studioParams) *studioPlan {
+	if strings.TrimSpace(p.Script) != "" {
+		return scriptPlan(p)
+	}
+	brief, topic, details := splitBrief(p.Prompt)
 	subject := leadWords(brief, 12)
 	n := max(2, p.Duration/5-2)
 	views := []string{"wide establishing shot", "slow push-in, soft light", "detail shot, shallow depth of field", "smooth tracking shot", "aerial view", "golden hour, cinematic"}
@@ -751,6 +936,40 @@ func templatePlan(p studioParams) *studioPlan {
 		plan.Shots = append(plan.Shots, studioShot{Type: "ai", Prompt: subject + ", " + views[i%len(views)], Status: "queued"})
 	}
 	plan.Shots = append(plan.Shots, studioShot{Type: "card", Text: "Learn more", Sub: leadWords(topic, 10), Status: "queued"})
+	fitShots(plan, float64(p.Duration))
+	return plan
+}
+
+// scriptPlan: one shot per script sentence (title card first, call-to-action card last,
+// AI-filmed shots between), when no director model is online.
+func scriptPlan(p studioParams) *studioPlan {
+	var lines []string
+	for _, s := range regexp.MustCompile(`(?s)[^.!?\n]+[.!?]*`).FindAllString(p.Script, -1) {
+		if s = strings.TrimSpace(s); s != "" {
+			lines = append(lines, s)
+		}
+	}
+	_, topic, details := splitBrief(p.Prompt)
+	look := topic
+	if details != "" {
+		look += ", " + details
+	}
+	plan := &studioPlan{Title: leadWords(topic, 6), Palette: cleanPalette(nil), Director: "template (script)"}
+	for i, ln := range lines {
+		if len(plan.Shots) == studioMaxShots {
+			plan.Shots[len(plan.Shots)-1].Narrate += " " + ln
+			continue
+		}
+		if i == 0 || i == len(lines)-1 {
+			plan.Shots = append(plan.Shots, studioShot{Type: "card", Text: leadWords(ln, 6), Narrate: ln, Status: "queued"})
+		} else {
+			plan.Shots = append(plan.Shots, studioShot{Type: "ai", Prompt: leadWords(look, 12) + ", cinematic shot showing: " + ln, Narrate: ln, Status: "queued"})
+		}
+	}
+	if len(plan.Shots) < 2 {
+		p.Script = ""
+		return templatePlan(p)
+	}
 	fitShots(plan, float64(p.Duration))
 	return plan
 }
